@@ -16,7 +16,7 @@ import {
   useSensors,
   closestCenter,
 } from '@dnd-kit/core';
-import { Issue, Task } from '@/lib/types';
+import { Issue, SortMode, Task } from '@/lib/types';
 import { buildTree, filterIncomplete, filterBySearch, countSubtasks } from '@/lib/hierarchy';
 import { lockedSiblings } from '@/lib/lock-state';
 import { IssueRow } from '@/components/issues/issue-row';
@@ -147,22 +147,28 @@ function MergePrompt({
 }: {
   request: MergeRequest | null;
   onClose: () => void;
-  onConfirm: (name: string) => Promise<void>;
+  onConfirm: (name: string, sortMode: SortMode) => Promise<void>;
 }) {
   const [name, setName] = useState('');
+  const [mode, setMode] = useState<SortMode>('checklist');
   const [busy, setBusy] = useState(false);
 
   if (!request) return null;
+
+  const reset = () => {
+    setName('');
+    setMode('checklist');
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || busy) return;
     setBusy(true);
     try {
-      await onConfirm(name.trim());
+      await onConfirm(name.trim(), mode);
     } finally {
       setBusy(false);
-      setName('');
+      reset();
     }
   };
 
@@ -171,7 +177,7 @@ function MergePrompt({
       open={!!request}
       onOpenChange={(v) => {
         if (!v) {
-          setName('');
+          reset();
           onClose();
         }
       }}
@@ -192,6 +198,25 @@ function MergePrompt({
             onChange={(e) => setName(e.target.value)}
             placeholder="ISSUE 이름"
           />
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">정렬 모드</span>
+            <Button
+              type="button"
+              size="sm"
+              variant={mode === 'checklist' ? 'default' : 'outline'}
+              onClick={() => setMode('checklist')}
+            >
+              체크리스트
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={mode === 'sequential' ? 'default' : 'outline'}
+              onClick={() => setMode('sequential')}
+            >
+              순차
+            </Button>
+          </div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
               취소
@@ -306,13 +331,13 @@ export function InboxTree({
     }
   };
 
-  const handleMerge = async (name: string) => {
+  const handleMerge = async (name: string, sortMode: SortMode) => {
     if (!mergeRequest) return;
     try {
       const issue = await apiFetch<Issue>('/api/issues', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, sort_mode: sortMode }),
         suppressToast: true,
       });
       await Promise.all([
