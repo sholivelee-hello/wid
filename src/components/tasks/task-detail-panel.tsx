@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useReducer } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,14 +11,15 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Task, TimeLog } from '@/lib/types';
+import { Issue, Task, TimeLog } from '@/lib/types';
 import { DEFAULT_STATUSES, PRIORITIES } from '@/lib/constants';
 import { useHiddenStatuses } from '@/lib/hidden-statuses';
 import { useDefaultStatusRenames } from '@/lib/status-renames';
 import { formatDate, minutesToHoursMinutes, cn, getNotionPageUrl } from '@/lib/utils';
 import { apiFetch } from '@/lib/api';
 import { TimerButton } from './timer-button';
-import { Trash2, ExternalLink, ChevronDown, Clock, Save, X } from 'lucide-react';
+import { IssuePicker } from '@/components/issues/issue-picker';
+import { Trash2, ExternalLink, ChevronDown, Clock, Save, X, FolderPlus } from 'lucide-react';
 
 interface TaskDetailPanelProps {
   taskId: string | null;
@@ -30,10 +31,12 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPa
   const [task, setTask] = useState<Task | null>(null);
   const [timelogs, setTimelogs] = useState<TimeLog[]>([]);
   const [customStatuses, setCustomStatuses] = useState<string[]>([]);
+  const [issues, setIssues] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmDeleteLogId, setConfirmDeleteLogId] = useState<string | null>(null);
   const [showExtras, setShowExtras] = useState(false);
+  const [issuePickerOpen, setIssuePickerOpen] = useState(false);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -49,14 +52,16 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPa
     if (!taskId) return;
     setLoading(true);
     try {
-      const [taskData, logsData, statusData] = await Promise.all([
+      const [taskData, logsData, statusData, issueData] = await Promise.all([
         apiFetch<Task>(`/api/tasks/${taskId}`, { suppressToast: true }),
         apiFetch<TimeLog[]>(`/api/tasks/${taskId}/timelogs`, { suppressToast: true }),
         apiFetch<{ name: string }[]>('/api/custom-statuses', { suppressToast: true }),
+        apiFetch<Issue[]>('/api/issues', { suppressToast: true }),
       ]);
       setTask(taskData);
       setTimelogs(logsData);
       setCustomStatuses(statusData.map(s => s.name));
+      setIssues(issueData);
       setTitle(taskData.title);
       setDescription(taskData.description ?? '');
       setStatus(taskData.status);
@@ -71,6 +76,49 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPa
       setLoading(false);
     }
   }, [taskId, onClose]);
+
+  const currentIssue = task?.issue_id
+    ? issues.find(i => i.id === task.issue_id) ?? null
+    : null;
+
+  const attachToIssue = async (issueId: string) => {
+    if (!taskId) return;
+    try {
+      const updated = await apiFetch<Task>(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ issue_id: issueId, parent_task_id: null }),
+      });
+      setTask(updated);
+      onTaskUpdated?.();
+    } catch {}
+  };
+
+  const createAndAttach = async (name: string) => {
+    if (!taskId) return;
+    try {
+      const issue = await apiFetch<Issue>('/api/issues', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      setIssues(prev => [...prev, issue]);
+      await attachToIssue(issue.id);
+    } catch {}
+  };
+
+  const unlinkFromIssue = async () => {
+    if (!taskId) return;
+    try {
+      const updated = await apiFetch<Task>(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ issue_id: null }),
+      });
+      setTask(updated);
+      onTaskUpdated?.();
+    } catch {}
+  };
 
   useEffect(() => {
     if (taskId) fetchTask();
@@ -194,6 +242,56 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPa
                   )}
                   <span>생성: {formatDate(task.created_at, 'yyyy-MM-dd HH:mm')}</span>
                 </div>
+              </div>
+
+              {/* ISSUE */}
+              <div>
+                <Label className="text-xs text-muted-foreground">ISSUE</Label>
+                {task.parent_task_id ? (
+                  <div className="mt-1 text-xs text-muted-foreground px-2 py-1.5">
+                    sub-TASK는 부모 TASK를 통해 ISSUE에 연결됩니다.
+                  </div>
+                ) : currentIssue ? (
+                  <div className="mt-1 flex items-center gap-2 px-2 py-1.5 rounded-md bg-accent/30 border border-border/40">
+                    <span
+                      className="h-2.5 w-2.5 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: currentIssue.color }}
+                      aria-hidden
+                    />
+                    <span className="text-sm flex-1 truncate">{currentIssue.name}</span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 px-2 text-xs"
+                      onClick={() => setIssuePickerOpen(true)}
+                    >
+                      변경
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                      onClick={unlinkFromIssue}
+                    >
+                      <X className="h-3 w-3 mr-0.5" />
+                      분리
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="mt-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setIssuePickerOpen(true)}
+                    >
+                      <FolderPlus className="h-3.5 w-3.5 mr-1.5" />
+                      ISSUE 연결
+                    </Button>
+                  </div>
+                )}
               </div>
 
               {/* Status + Priority */}
@@ -374,6 +472,14 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPa
           } catch {}
           setConfirmDeleteLogId(null);
         }}
+      />
+
+      <IssuePicker
+        open={issuePickerOpen}
+        onClose={() => setIssuePickerOpen(false)}
+        currentIssueId={task?.issue_id ?? null}
+        onPick={attachToIssue}
+        onCreate={createAndAttach}
       />
     </>
   );
