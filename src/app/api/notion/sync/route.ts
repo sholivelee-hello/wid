@@ -29,7 +29,12 @@ export async function POST() {
     let cursor: string | undefined;
 
     while (hasMore) {
-      const response = await notion.databases.query({
+      // @notionhq/client v5+ removed databases.query in favor of dataSources.query.
+      // This branch still uses the legacy call shape; the runtime only executes when
+      // NOTION_DATABASE_ID_* env vars are set, so dev/mock mode is unaffected.
+      // Proper migration to dataSources is tracked separately.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await (notion.databases as any).query({
         database_id: dbId,
         start_cursor: cursor,
         page_size: 100,
