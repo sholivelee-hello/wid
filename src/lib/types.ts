@@ -5,7 +5,6 @@ export type SortMode = 'checklist' | 'sequential';
 export interface Issue {
   id: string;
   name: string;
-  color: string;                  // hex like '#94a3b8'
   deadline: string | null;        // ISO date string (YYYY-MM-DD)
   sort_mode: SortMode;
   position: number;

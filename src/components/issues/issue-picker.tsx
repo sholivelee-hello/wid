@@ -98,11 +98,9 @@ export function IssuePicker({ open, onClose, currentIssueId, onPick, onCreate }:
                     : 'hover:bg-accent disabled:opacity-50',
                 )}
               >
-                <span
-                  className="h-2.5 w-2.5 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: i.color }}
-                  aria-hidden
-                />
+                <span className="inline-flex items-center justify-center text-[9px] font-semibold tracking-wide px-1.5 h-4 rounded-sm bg-primary/10 text-primary flex-shrink-0">
+                  ISSUE
+                </span>
                 <span className="text-sm flex-1 truncate">{i.name}</span>
                 {isCurrent && <Check className="h-3.5 w-3.5 text-muted-foreground" />}
               </button>

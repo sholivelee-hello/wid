@@ -36,6 +36,11 @@ interface TaskCardProps {
   onComplete?: (taskId: string) => void;
   onDelete?: (taskId: string) => void;
   onSelect?: (taskId: string) => void;
+  /** Optional hierarchy label rendered as a small badge before the title. */
+  hierarchyLabel?: 'TASK' | 'sub-TASK';
+  /** When provided, clicking the card body invokes this instead of opening the detail panel.
+   *  The title text becomes the path to the detail panel. */
+  onCardClick?: () => void;
 }
 
 function Dot() {
@@ -48,7 +53,14 @@ export function TaskCard({
   onComplete,
   onDelete,
   onSelect,
+  hierarchyLabel,
+  onCardClick,
 }: TaskCardProps) {
+  const openDetail = () => {
+    if (onSelect) onSelect(task.id);
+    else window.location.href = `/tasks/${task.id}`;
+  };
+  const handleCardActivate = onCardClick ?? openDetail;
   const allStatuses = useAllStatuses();
   const defaultRenames = useDefaultStatusRenames();
 
@@ -100,15 +112,9 @@ export function TaskCard({
         task.priority === '긴급' && 'border-l-[3px] border-l-red-500',
         task.priority === '높음' && 'border-l-[3px] border-l-amber-500',
       )}
-      onClick={() => {
-        if (onSelect) onSelect(task.id);
-        else window.location.href = `/tasks/${task.id}`;
-      }}
+      onClick={handleCardActivate}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') {
-          if (onSelect) onSelect(task.id);
-          else window.location.href = `/tasks/${task.id}`;
-        }
+        if (e.key === 'Enter') handleCardActivate();
       }}
     >
       <CardContent className="p-4">
@@ -157,12 +163,39 @@ export function TaskCard({
           {/* Title + metadata */}
           <div className="flex-1 min-w-0 space-y-1.5">
             <div className="flex items-center gap-2">
-              <span className={cn(
-                'font-medium text-sm leading-snug truncate',
-                isCompleted && 'line-through text-muted-foreground'
-              )}>
-                {task.title}
-              </span>
+              {hierarchyLabel && (
+                <span
+                  className={cn(
+                    'inline-flex items-center justify-center text-[9px] font-semibold tracking-wide px-1.5 h-4 rounded-sm flex-shrink-0',
+                    hierarchyLabel === 'TASK'
+                      ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                      : 'bg-sky-500/10 text-sky-700 dark:text-sky-400',
+                  )}
+                  aria-hidden
+                >
+                  {hierarchyLabel}
+                </span>
+              )}
+              {onCardClick ? (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); openDetail(); }}
+                  className={cn(
+                    'font-medium text-sm leading-snug truncate text-left hover:underline underline-offset-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded',
+                    isCompleted && 'line-through text-muted-foreground',
+                  )}
+                  title="상세 보기"
+                >
+                  {task.title}
+                </button>
+              ) : (
+                <span className={cn(
+                  'font-medium text-sm leading-snug truncate',
+                  isCompleted && 'line-through text-muted-foreground'
+                )}>
+                  {task.title}
+                </span>
+              )}
               {isNew && (
                 <span
                   className="inline-flex h-1.5 w-1.5 rounded-full bg-primary animate-pulse flex-shrink-0"

@@ -38,29 +38,33 @@ export function IssueRow({
   const { collapsed, toggle } = useCollapsed('issue', issue.id, false, forceOpen);
 
   return (
-    <div className="rounded-xl border border-border/60 bg-card/40">
-      <div className="flex items-center gap-2 px-3 py-2.5">
-        <button
-          type="button"
-          onClick={toggle}
-          aria-expanded={!collapsed}
-          aria-label={collapsed ? 'ISSUE 펼치기' : 'ISSUE 접기'}
-          className="p-1 -m-1 rounded hover:bg-accent/50 transition-colors"
-        >
-          <ChevronDown
-            className={cn(
-              'h-4 w-4 text-muted-foreground transition-transform',
-              collapsed && '-rotate-90',
-            )}
-          />
-        </button>
-        <span
-          className="h-2.5 w-2.5 rounded-full flex-shrink-0"
-          style={{ backgroundColor: issue.color }}
-          aria-hidden
+    <div className="rounded-xl border border-border/60 bg-card/40 transition-colors">
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={toggle}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            toggle();
+          }
+        }}
+        aria-expanded={!collapsed}
+        aria-label={collapsed ? 'ISSUE 펼치기' : 'ISSUE 접기'}
+        className="flex items-center gap-2 px-3 py-2.5 rounded-xl hover:bg-accent/30 transition-colors cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <ChevronDown
+          className={cn(
+            'h-4 w-4 text-muted-foreground transition-transform duration-200',
+            collapsed && '-rotate-90',
+          )}
         />
+        <span className="inline-flex items-center justify-center text-[10px] font-semibold tracking-wide px-1.5 h-5 rounded-sm bg-primary/10 text-primary flex-shrink-0">
+          ISSUE
+        </span>
         <Link
           href={`/issues/${issue.id}`}
+          onClick={(e) => e.stopPropagation()}
           className="font-semibold text-sm truncate hover:underline underline-offset-2"
           style={{ fontFamily: 'var(--font-heading)' }}
         >
@@ -113,29 +117,40 @@ export function IssueRow({
           TASK {doneCount}/{taskCount}
           {subCount > 0 ? ` · sub ${subCount}` : ''}
         </span>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-accent"
-            aria-label="ISSUE 메뉴"
-          >
-            <MoreHorizontal className="h-4 w-4" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={onEdit}>
-              <Pencil className="h-4 w-4 mr-2" />
-              편집
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={onDelete}
-              className="text-destructive focus:text-destructive"
+        <div onClick={(e) => e.stopPropagation()}>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-accent"
+              aria-label="ISSUE 메뉴"
             >
-              <Trash2 className="h-4 w-4 mr-2" />
-              삭제
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <MoreHorizontal className="h-4 w-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={onEdit}>
+                <Pencil className="h-4 w-4 mr-2" />
+                편집
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={onDelete}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                삭제
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
-      {!collapsed && <div className="px-3 pb-3 space-y-2">{children}</div>}
+      <div
+        className={cn(
+          'grid transition-[grid-template-rows] duration-200 ease-out',
+          collapsed ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]',
+        )}
+      >
+        <div className="overflow-hidden">
+          <div className="px-3 pb-3 pt-1 space-y-2">{children}</div>
+        </div>
+      </div>
     </div>
   );
 }

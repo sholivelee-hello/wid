@@ -21,7 +21,6 @@ export async function POST(req: NextRequest) {
   const next: Issue = {
     id: crypto.randomUUID(),
     name: body.name,
-    color: body.color ?? '#94a3b8',
     deadline: body.deadline ?? null,
     sort_mode: (body.sort_mode === 'sequential' ? 'sequential' : 'checklist'),
     position: maxPos + 1,

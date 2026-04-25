@@ -248,11 +248,9 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPa
                   </div>
                 ) : currentIssue ? (
                   <div className="mt-1 flex items-center gap-2 px-2 py-1.5 rounded-md bg-accent/30 border border-border/40">
-                    <span
-                      className="h-2.5 w-2.5 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: currentIssue.color }}
-                      aria-hidden
-                    />
+                    <span className="inline-flex items-center justify-center text-[9px] font-semibold tracking-wide px-1.5 h-4 rounded-sm bg-primary/10 text-primary flex-shrink-0">
+                      ISSUE
+                    </span>
                     <span className="text-sm flex-1 truncate">{currentIssue.name}</span>
                     <Button
                       type="button"

@@ -150,11 +150,9 @@ export default function IssueDetailPage({ params }: { params: Promise<{ id: stri
       ) : (
         <div className="space-y-3">
           <div className="flex items-start gap-3">
-            <span
-              className="h-3 w-3 rounded-full mt-2 flex-shrink-0"
-              style={{ backgroundColor: issue.color }}
-              aria-hidden
-            />
+            <span className="inline-flex items-center justify-center text-[10px] font-semibold tracking-wide px-1.5 h-5 rounded-sm bg-primary/10 text-primary mt-1.5 flex-shrink-0">
+              ISSUE
+            </span>
             <h1 className="text-2xl font-semibold leading-tight flex-1 min-w-0" style={{ fontFamily: 'var(--font-heading)' }}>
               {issue.name}
             </h1>

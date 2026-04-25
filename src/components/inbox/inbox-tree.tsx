@@ -10,27 +10,29 @@ import {
   DragEndEvent,
   DragStartEvent,
   PointerSensor,
-  useDraggable,
   useDroppable,
   useSensor,
   useSensors,
   closestCenter,
 } from '@dnd-kit/core';
-import { Issue, SortMode, Task } from '@/lib/types';
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { Issue, Task } from '@/lib/types';
 import { buildTree, filterIncomplete, filterBySearch, countSubtasks } from '@/lib/hierarchy';
 import { lockedSiblings } from '@/lib/lock-state';
 import { IssueRow } from '@/components/issues/issue-row';
-import { TaskBranch, TaskBranchHandlers } from '@/components/tasks/task-branch';
-import { apiFetch } from '@/lib/api';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
+  TaskBranch,
+  TaskBranchHandlers,
+  SortableTaskItem,
+  taskSortId,
+} from '@/components/tasks/task-branch';
+import { apiFetch } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -43,33 +45,61 @@ interface Props {
   onDeleteIssue: (issue: Issue) => void;
   onToggleSortMode: (issue: Issue) => void;
   onMutate: () => void;
+  setIssues: React.Dispatch<React.SetStateAction<Issue[]>>;
+  setTasks: React.Dispatch<React.SetStateAction<Task[]>>;
 }
 
-interface MergeRequest {
-  aId: string;
-  bId: string;
-  aTitle: string;
-  bTitle: string;
+const ISSUE_SORT_PREFIX = 'iss:';
+const ISSUE_DROP_PREFIX = 'dropiss:';
+const TASK_SORT_PREFIX = 'tsk:';
+const issueSortId = (id: string) => `${ISSUE_SORT_PREFIX}${id}`;
+const issueDropId = (id: string) => `${ISSUE_DROP_PREFIX}${id}`;
+
+type ParsedId =
+  | { kind: 'issue'; id: string }
+  | { kind: 'task'; id: string }
+  | { kind: 'issueDrop'; id: string }
+  | { kind: 'unlinked' }
+  | { kind: 'unknown' };
+
+function parseDndId(raw: string): ParsedId {
+  if (raw === 'unlinked') return { kind: 'unlinked' };
+  if (raw.startsWith(ISSUE_SORT_PREFIX)) return { kind: 'issue', id: raw.slice(ISSUE_SORT_PREFIX.length) };
+  if (raw.startsWith(ISSUE_DROP_PREFIX)) return { kind: 'issueDrop', id: raw.slice(ISSUE_DROP_PREFIX.length) };
+  if (raw.startsWith(TASK_SORT_PREFIX)) return { kind: 'task', id: raw.slice(TASK_SORT_PREFIX.length) };
+  return { kind: 'unknown' };
 }
 
-function DroppableIssue({
+function SortableIssueItem({
   id,
+  dropEnabled,
   children,
-  enabled,
 }: {
   id: string;
+  dropEnabled: boolean;
   children: React.ReactNode;
-  enabled: boolean;
 }) {
-  const droppable = useDroppable({ id, disabled: !enabled });
-  const dropRef = droppable.setNodeRef;
-  const isOver = droppable.isOver;
+  const sortable = useSortable({ id: issueSortId(id) });
+  const droppable = useDroppable({ id: issueDropId(id), disabled: !dropEnabled });
+  const setRef = (node: HTMLElement | null) => {
+    sortable.setNodeRef(node);
+    droppable.setNodeRef(node);
+  };
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(sortable.transform),
+    transition: sortable.transition,
+    opacity: sortable.isDragging ? 0.4 : 1,
+    touchAction: 'none',
+  };
   return (
     <div
-      ref={dropRef}
+      ref={setRef}
+      style={style}
+      {...sortable.attributes}
+      {...sortable.listeners}
       className={cn(
         'rounded-xl transition-shadow',
-        enabled && isOver && 'ring-2 ring-primary ring-offset-2',
+        dropEnabled && droppable.isOver && 'ring-2 ring-primary ring-offset-2',
       )}
     >
       {children}
@@ -98,139 +128,6 @@ function DroppableUnlinked() {
   );
 }
 
-function DraggableTaskBranch({
-  taskId,
-  mergeTarget,
-  children,
-}: {
-  taskId: string;
-  mergeTarget: boolean;
-  children: React.ReactNode;
-}) {
-  const draggable = useDraggable({ id: taskId });
-  const droppable = useDroppable({ id: `merge:${taskId}`, disabled: !mergeTarget });
-  const dragRef = draggable.setNodeRef;
-  const dropRef = droppable.setNodeRef;
-  const transform = draggable.transform;
-  const isDragging = draggable.isDragging;
-  const isOver = droppable.isOver;
-  return (
-    <div
-      ref={dropRef}
-      className={cn(
-        'rounded-xl transition-colors',
-        mergeTarget && isOver && 'ring-2 ring-amber-400 bg-amber-50/30 dark:bg-amber-900/10',
-      )}
-    >
-      <div
-        ref={dragRef}
-        {...draggable.attributes}
-        {...draggable.listeners}
-        style={{
-          transform: transform
-            ? `translate3d(${transform.x}px, ${transform.y}px, 0)`
-            : undefined,
-          opacity: isDragging ? 0.4 : 1,
-          touchAction: 'none',
-        }}
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function MergePrompt({
-  request,
-  onClose,
-  onConfirm,
-}: {
-  request: MergeRequest | null;
-  onClose: () => void;
-  onConfirm: (name: string, sortMode: SortMode) => Promise<void>;
-}) {
-  const [name, setName] = useState('');
-  const [mode, setMode] = useState<SortMode>('checklist');
-  const [busy, setBusy] = useState(false);
-
-  if (!request) return null;
-
-  const reset = () => {
-    setName('');
-    setMode('checklist');
-  };
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim() || busy) return;
-    setBusy(true);
-    try {
-      await onConfirm(name.trim(), mode);
-    } finally {
-      setBusy(false);
-      reset();
-    }
-  };
-
-  return (
-    <Dialog
-      open={!!request}
-      onOpenChange={(v) => {
-        if (!v) {
-          reset();
-          onClose();
-        }
-      }}
-    >
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>두 TASK를 새 ISSUE로 묶기</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={submit} className="space-y-3">
-          <p className="text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">{request.aTitle}</span> +{' '}
-            <span className="font-medium text-foreground">{request.bTitle}</span>를{' '}
-            묶을 ISSUE 이름을 입력하세요.
-          </p>
-          <Input
-            autoFocus
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="ISSUE 이름"
-          />
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">정렬 모드</span>
-            <Button
-              type="button"
-              size="sm"
-              variant={mode === 'checklist' ? 'default' : 'outline'}
-              onClick={() => setMode('checklist')}
-            >
-              체크리스트
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={mode === 'sequential' ? 'default' : 'outline'}
-              onClick={() => setMode('sequential')}
-            >
-              순차
-            </Button>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
-              취소
-            </Button>
-            <Button type="submit" disabled={!name.trim() || busy}>
-              만들기
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 export function InboxTree({
   issues,
   tasks,
@@ -241,6 +138,8 @@ export function InboxTree({
   onDeleteIssue,
   onToggleSortMode,
   onMutate,
+  setIssues,
+  setTasks,
 }: Props) {
   const { tree, forceOpenIssueIds, forceOpenTaskIds } = useMemo(() => {
     const built = buildTree(issues, tasks);
@@ -254,7 +153,6 @@ export function InboxTree({
   }, [issues, tasks, showCompleted, searchQuery]);
 
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [mergeRequest, setMergeRequest] = useState<MergeRequest | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -272,96 +170,240 @@ export function InboxTree({
 
   const onDragEnd = async (e: DragEndEvent) => {
     setActiveId(null);
-    const draggedId = String(e.active.id);
-    const overId = e.over ? String(e.over.id) : null;
-    if (!overId) return;
-    const dragged = tasksById.get(draggedId);
-    if (!dragged) return;
+    const overRaw = e.over ? String(e.over.id) : null;
+    const activeRaw = String(e.active.id);
+    if (!overRaw || activeRaw === overRaw) return;
 
-    if (overId.startsWith('issue:')) {
-      const targetIssueId = overId.slice('issue:'.length);
-      if (dragged.issue_id === targetIssueId && !dragged.parent_task_id) return;
-      try {
-        await apiFetch(`/api/tasks/${draggedId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            issue_id: targetIssueId,
-            parent_task_id: null,
-          }),
-          suppressToast: true,
-        });
-        onMutate();
-      } catch {}
+    const a = parseDndId(activeRaw);
+    const o = parseDndId(overRaw);
+
+    // === ISSUE drag ===
+    if (a.kind === 'issue') {
+      if (o.kind === 'issue' && o.id !== a.id) {
+        reorderIssues(a.id, o.id);
+      }
       return;
     }
 
-    if (overId === 'unlinked') {
-      if (dragged.issue_id === null && dragged.parent_task_id === null) return;
-      try {
-        await apiFetch(`/api/tasks/${draggedId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            issue_id: null,
-            parent_task_id: null,
-          }),
-          suppressToast: true,
-        });
-        onMutate();
-      } catch {}
-      return;
-    }
+    // === TASK drag ===
+    if (a.kind === 'task') {
+      const dragged = tasksById.get(a.id);
+      if (!dragged) return;
 
-    if (overId.startsWith('merge:')) {
-      const otherId = overId.slice('merge:'.length);
-      if (otherId === draggedId) return;
-      const other = tasksById.get(otherId);
-      if (!other) return;
-      // Merge only when both are independent (no issue, no parent)
-      if (dragged.issue_id || dragged.parent_task_id) return;
-      if (other.issue_id || other.parent_task_id) return;
-      setMergeRequest({
-        aId: draggedId,
-        bId: otherId,
-        aTitle: dragged.title,
-        bTitle: other.title,
-      });
-      return;
+      // Drop on issue header → reparent to that issue (last position)
+      if (o.kind === 'issueDrop') {
+        if (dragged.issue_id === o.id && !dragged.parent_task_id) return;
+        reparentTaskToIssueLast(dragged, o.id);
+        return;
+      }
+
+      // Drop on unlinked → strip parents
+      if (o.kind === 'unlinked') {
+        if (dragged.issue_id === null && dragged.parent_task_id === null) return;
+        unlinkTask(dragged);
+        return;
+      }
+
+      // Drop on another sortable task → reorder (same parent) or reparent + insert
+      if (o.kind === 'task' && o.id !== a.id) {
+        const target = tasksById.get(o.id);
+        if (!target) return;
+        const sameParent =
+          dragged.issue_id === target.issue_id &&
+          dragged.parent_task_id === target.parent_task_id;
+        if (sameParent) {
+          reorderTasksWithinParent(dragged, target);
+        } else {
+          reparentTaskAtTarget(dragged, target);
+        }
+        return;
+      }
     }
   };
 
-  const handleMerge = async (name: string, sortMode: SortMode) => {
-    if (!mergeRequest) return;
-    try {
-      const issue = await apiFetch<Issue>('/api/issues', {
-        method: 'POST',
+  // === Mutations ===
+
+  function reorderIssues(activeId: string, overId: string) {
+    setIssues(prev => {
+      const visible = prev
+        .filter(i => !i.is_deleted)
+        .sort((a, b) => a.position - b.position);
+      const oldIndex = visible.findIndex(i => i.id === activeId);
+      const newIndex = visible.findIndex(i => i.id === overId);
+      if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return prev;
+      const reordered = arrayMove(visible, oldIndex, newIndex);
+      const positionMap = new Map<string, number>();
+      reordered.forEach((iss, idx) => positionMap.set(iss.id, idx));
+      const next = prev.map(i =>
+        positionMap.has(i.id) ? { ...i, position: positionMap.get(i.id)! } : i,
+      );
+      Promise.all(
+        reordered.map((iss, idx) =>
+          apiFetch(`/api/issues/${iss.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ position: idx }),
+            suppressToast: true,
+          }),
+        ),
+      ).catch(() => onMutate());
+      return next;
+    });
+  }
+
+  function reorderTasksWithinParent(dragged: Task, target: Task) {
+    setTasks(prev => {
+      const siblings = prev
+        .filter(
+          t =>
+            !t.is_deleted &&
+            t.issue_id === dragged.issue_id &&
+            t.parent_task_id === dragged.parent_task_id,
+        )
+        .sort((a, b) => a.position - b.position);
+      const oldIndex = siblings.findIndex(t => t.id === dragged.id);
+      const newIndex = siblings.findIndex(t => t.id === target.id);
+      if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return prev;
+      const reordered = arrayMove(siblings, oldIndex, newIndex);
+      const positionMap = new Map<string, number>();
+      reordered.forEach((t, idx) => positionMap.set(t.id, idx));
+      const next = prev.map(t =>
+        positionMap.has(t.id) ? { ...t, position: positionMap.get(t.id)! } : t,
+      );
+      Promise.all(
+        reordered.map((t, idx) =>
+          apiFetch(`/api/tasks/${t.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ position: idx }),
+            suppressToast: true,
+          }),
+        ),
+      ).catch(() => onMutate());
+      return next;
+    });
+  }
+
+  function reparentTaskToIssueLast(dragged: Task, issueId: string) {
+    setTasks(prev => {
+      // Compute next position = max + 1 in the destination issue's top-level tasks
+      const targetSiblings = prev.filter(
+        t =>
+          !t.is_deleted &&
+          t.issue_id === issueId &&
+          t.parent_task_id === null &&
+          t.id !== dragged.id,
+      );
+      const nextPos = targetSiblings.reduce((m, t) => Math.max(m, t.position), -1) + 1;
+      const next = prev.map(t =>
+        t.id === dragged.id
+          ? { ...t, issue_id: issueId, parent_task_id: null, position: nextPos }
+          : t,
+      );
+      apiFetch(`/api/tasks/${dragged.id}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, sort_mode: sortMode }),
+        body: JSON.stringify({ issue_id: issueId, parent_task_id: null, position: nextPos }),
         suppressToast: true,
+      }).catch(() => onMutate());
+      return next;
+    });
+  }
+
+  function unlinkTask(dragged: Task) {
+    setTasks(prev => {
+      const indepSiblings = prev.filter(
+        t =>
+          !t.is_deleted &&
+          t.issue_id === null &&
+          t.parent_task_id === null &&
+          t.id !== dragged.id,
+      );
+      const nextPos = indepSiblings.reduce((m, t) => Math.max(m, t.position), -1) + 1;
+      const next = prev.map(t =>
+        t.id === dragged.id
+          ? { ...t, issue_id: null, parent_task_id: null, position: nextPos }
+          : t,
+      );
+      apiFetch(`/api/tasks/${dragged.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ issue_id: null, parent_task_id: null, position: nextPos }),
+        suppressToast: true,
+      }).catch(() => onMutate());
+      return next;
+    });
+  }
+
+  function reparentTaskAtTarget(dragged: Task, target: Task) {
+    setTasks(prev => {
+      const newIssueId = target.issue_id;
+      const newParentId = target.parent_task_id;
+      const targetSiblings = prev
+        .filter(
+          t =>
+            !t.is_deleted &&
+            t.issue_id === newIssueId &&
+            t.parent_task_id === newParentId &&
+            t.id !== dragged.id,
+        )
+        .sort((a, b) => a.position - b.position);
+      const insertIdx = Math.max(0, targetSiblings.findIndex(t => t.id === target.id));
+      const newOrder = [...targetSiblings];
+      newOrder.splice(insertIdx, 0, dragged);
+      const positionMap = new Map<string, number>();
+      newOrder.forEach((t, idx) => positionMap.set(t.id, idx));
+      const next = prev.map(t => {
+        if (t.id === dragged.id) {
+          return {
+            ...t,
+            issue_id: newIssueId,
+            parent_task_id: newParentId,
+            position: positionMap.get(t.id) ?? 0,
+          };
+        }
+        if (positionMap.has(t.id)) {
+          return { ...t, position: positionMap.get(t.id)! };
+        }
+        return t;
       });
-      await Promise.all([
-        apiFetch(`/api/tasks/${mergeRequest.aId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ issue_id: issue.id, parent_task_id: null }),
-          suppressToast: true,
+
+      // Send the reparent for the dragged task first, then update others' positions.
+      apiFetch(`/api/tasks/${dragged.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          issue_id: newIssueId,
+          parent_task_id: newParentId,
+          position: positionMap.get(dragged.id),
         }),
-        apiFetch(`/api/tasks/${mergeRequest.bId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ issue_id: issue.id, parent_task_id: null }),
-          suppressToast: true,
-        }),
-      ]);
-      onMutate();
-    } catch {}
-    setMergeRequest(null);
-  };
+        suppressToast: true,
+      })
+        .then(() =>
+          Promise.all(
+            newOrder
+              .filter(t => t.id !== dragged.id)
+              .map(t =>
+                apiFetch(`/api/tasks/${t.id}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ position: positionMap.get(t.id) }),
+                  suppressToast: true,
+                }),
+              ),
+          ),
+        )
+        .catch(() => onMutate());
+      return next;
+    });
+  }
 
   if (tree.issues.length === 0 && tree.independents.length === 0) {
     return null;
   }
+
+  const issueSortableIds = tree.issues.map(({ issue }) => issueSortId(issue.id));
+  const draggingTask = !!activeId && parseDndId(activeId).kind === 'task';
 
   return (
     <DndContext
@@ -371,76 +413,73 @@ export function InboxTree({
       onDragEnd={onDragEnd}
     >
       <div className="space-y-3">
-        {tree.issues.map(({ issue, tasks: nodes }) => {
-          const total = nodes.length;
-          const done = nodes.filter(n => n.task.status === '완료').length;
-          const subCount = countSubtasks(nodes);
-          const locked = lockedSiblings(nodes, issue.sort_mode);
-          // Reparent enabled when dragging — but also active drop check excludes
-          // dropping back onto its own issue (handled in onDragEnd).
-          const reparentEnabled = !!activeId;
-          return (
-            <DroppableIssue
-              key={issue.id}
-              id={`issue:${issue.id}`}
-              enabled={reparentEnabled}
-            >
-              <IssueRow
-                issue={issue}
-                taskCount={total}
-                doneCount={done}
-                subCount={subCount}
-                onEdit={() => onEditIssue(issue)}
-                onDelete={() => onDeleteIssue(issue)}
-                onToggleSortMode={onToggleSortMode}
-                forceOpen={forceOpenIssueIds.has(issue.id)}
+        <SortableContext items={issueSortableIds} strategy={verticalListSortingStrategy}>
+          {tree.issues.map(({ issue, tasks: nodes }) => {
+            const total = nodes.length;
+            const done = nodes.filter(n => n.task.status === '완료').length;
+            const subCount = countSubtasks(nodes);
+            const locked = lockedSiblings(nodes, issue.sort_mode);
+            const taskItemIds = nodes.map(n => taskSortId(n.task.id));
+            return (
+              <SortableIssueItem
+                key={issue.id}
+                id={issue.id}
+                dropEnabled={draggingTask}
               >
-                {nodes.map(n => (
-                  <DraggableTaskBranch
-                    key={n.task.id}
-                    taskId={n.task.id}
-                    mergeTarget={false}
-                  >
-                    <TaskBranch
-                      node={n}
-                      depth={0}
-                      lockedIds={locked}
-                      forceOpenIds={forceOpenTaskIds}
-                      {...taskHandlers}
-                    />
-                  </DraggableTaskBranch>
-                ))}
-              </IssueRow>
-            </DroppableIssue>
-          );
-        })}
-        {tree.independents.length > 0 && (
-          <div className="space-y-2">
-            {tree.independents.map(n => (
-              <DraggableTaskBranch
-                key={n.task.id}
-                taskId={n.task.id}
-                mergeTarget
-              >
-                <TaskBranch
-                  node={n}
-                  depth={0}
-                  lockedIds={new Set<string>()}
-                  forceOpenIds={forceOpenTaskIds}
-                  {...taskHandlers}
-                />
-              </DraggableTaskBranch>
-            ))}
-          </div>
-        )}
-        {activeId && <DroppableUnlinked />}
-      </div>
+                <IssueRow
+                  issue={issue}
+                  taskCount={total}
+                  doneCount={done}
+                  subCount={subCount}
+                  onEdit={() => onEditIssue(issue)}
+                  onDelete={() => onDeleteIssue(issue)}
+                  onToggleSortMode={onToggleSortMode}
+                  forceOpen={forceOpenIssueIds.has(issue.id)}
+                >
+                  <SortableContext items={taskItemIds} strategy={verticalListSortingStrategy}>
+                    {nodes.map(n => (
+                      <SortableTaskItem key={n.task.id} id={n.task.id}>
+                        <TaskBranch
+                          node={n}
+                          depth={0}
+                          lockedIds={locked}
+                          forceOpenIds={forceOpenTaskIds}
+                          enableSortable
+                          {...taskHandlers}
+                        />
+                      </SortableTaskItem>
+                    ))}
+                  </SortableContext>
+                </IssueRow>
+              </SortableIssueItem>
+            );
+          })}
+        </SortableContext>
 
-      <MergePrompt
-        request={mergeRequest}
-        onClose={() => setMergeRequest(null)}
-        onConfirm={handleMerge}
-      />
+        {tree.independents.length > 0 && (
+          <SortableContext
+            items={tree.independents.map(n => taskSortId(n.task.id))}
+            strategy={verticalListSortingStrategy}
+          >
+            <div className="space-y-2">
+              {tree.independents.map(n => (
+                <SortableTaskItem key={n.task.id} id={n.task.id}>
+                  <TaskBranch
+                    node={n}
+                    depth={0}
+                    lockedIds={new Set<string>()}
+                    forceOpenIds={forceOpenTaskIds}
+                    enableSortable
+                    {...taskHandlers}
+                  />
+                </SortableTaskItem>
+              ))}
+            </div>
+          </SortableContext>
+        )}
+
+        {draggingTask && <DroppableUnlinked />}
+      </div>
     </DndContext>
   );
 }

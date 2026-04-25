@@ -5,12 +5,6 @@ import { Issue, SortMode } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { apiFetch } from '@/lib/api';
-import { cn } from '@/lib/utils';
-
-const PALETTE = [
-  '#3b82f6', '#f59e0b', '#10b981', '#ef4444',
-  '#8b5cf6', '#ec4899', '#14b8a6', '#94a3b8',
-];
 
 interface Props {
   initial?: Issue;
@@ -20,7 +14,6 @@ interface Props {
 
 export function IssueForm({ initial, onSave, onCancel }: Props) {
   const [name, setName] = useState(initial?.name ?? '');
-  const [color, setColor] = useState(initial?.color ?? PALETTE[0]);
   const [deadline, setDeadline] = useState(initial?.deadline ?? '');
   const [mode, setMode] = useState<SortMode>(initial?.sort_mode ?? 'checklist');
   const [busy, setBusy] = useState(false);
@@ -32,7 +25,6 @@ export function IssueForm({ initial, onSave, onCancel }: Props) {
     try {
       const payload = {
         name: name.trim(),
-        color,
         deadline: deadline || null,
         sort_mode: mode,
       };
@@ -64,22 +56,6 @@ export function IssueForm({ initial, onSave, onCancel }: Props) {
         onChange={e => setName(e.target.value)}
         placeholder="ISSUE 이름"
       />
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs text-muted-foreground">색상</span>
-        {PALETTE.map(c => (
-          <button
-            key={c}
-            type="button"
-            onClick={() => setColor(c)}
-            className={cn(
-              'h-5 w-5 rounded-full ring-offset-2 transition',
-              c === color && 'ring-2 ring-foreground',
-            )}
-            style={{ backgroundColor: c }}
-            aria-label={`색상 ${c}`}
-          />
-        ))}
-      </div>
       <div className="flex items-center gap-2">
         <span className="text-xs text-muted-foreground">마감일</span>
         <Input

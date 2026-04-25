@@ -5,20 +5,6 @@ import { Client } from '@notionhq/client';
 
 const ASSIGNEE_FILTER = '이신희';
 
-const ISSUE_PALETTE = [
-  '#3b82f6', '#f59e0b', '#10b981', '#ef4444',
-  '#8b5cf6', '#ec4899', '#14b8a6', '#94a3b8',
-];
-
-function pickColor(notionIssueId: string): string {
-  let hash = 0;
-  for (let i = 0; i < notionIssueId.length; i++) {
-    hash = ((hash << 5) - hash) + notionIssueId.charCodeAt(i);
-    hash |= 0;
-  }
-  return ISSUE_PALETTE[Math.abs(hash) % ISSUE_PALETTE.length];
-}
-
 interface IssueRow {
   id: string;
   notion_issue_id: string;
@@ -63,7 +49,6 @@ async function ensureIssue(
     .from('issues')
     .insert({
       name: title || '(제목 없음)',
-      color: pickColor(notionIssueId),
       sort_mode: 'checklist',
       position: nextPosition,
       notion_issue_id: notionIssueId,

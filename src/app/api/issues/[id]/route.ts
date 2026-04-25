@@ -18,7 +18,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const issues = __issuesRef();
   const idx = issues.findIndex(i => i.id === id);
   if (idx === -1) return NextResponse.json({ error: 'not found' }, { status: 404 });
-  const allowed: (keyof Issue)[] = ['name', 'color', 'deadline', 'sort_mode', 'position', 'notion_issue_id'];
+  const allowed: (keyof Issue)[] = ['name', 'deadline', 'sort_mode', 'position', 'notion_issue_id'];
   for (const key of allowed) {
     if (key in patch) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

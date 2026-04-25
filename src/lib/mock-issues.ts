@@ -7,7 +7,6 @@ export const MOCK_ISSUES: Issue[] = [
   {
     id: id(1),
     name: '회원가입 플로우 개편',
-    color: '#3b82f6',
     deadline: null,
     sort_mode: 'sequential',
     position: 0,
@@ -18,7 +17,6 @@ export const MOCK_ISSUES: Issue[] = [
   {
     id: id(2),
     name: '결제 모듈 리뷰',
-    color: '#f59e0b',
     deadline: null,
     sort_mode: 'checklist',
     position: 1,

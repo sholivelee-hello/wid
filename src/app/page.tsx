@@ -370,6 +370,8 @@ export default function InboxPage() {
             onDeleteIssue={(i) => setDeletingIssue(i)}
             onToggleSortMode={handleToggleSortMode}
             onMutate={fetchTasks}
+            setIssues={setIssues}
+            setTasks={setTasks}
           />
         )}
       </div>
