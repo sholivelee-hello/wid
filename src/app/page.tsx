@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { Task } from '@/lib/types';
+import { Issue, Task } from '@/lib/types';
 import { TaskCard } from '@/components/tasks/task-card';
 import { TaskFilters } from '@/components/tasks/task-filters';
 import { TaskListSkeleton } from '@/components/loading/page-skeleton';
@@ -13,9 +13,10 @@ import { Separator } from '@/components/ui/separator';
 import { apiFetch } from '@/lib/api';
 import { TaskDetailPanel } from '@/components/tasks/task-detail-panel';
 import { useAllStatuses } from '@/lib/use-all-statuses';
-import { useDefaultStatusRenames } from '@/lib/status-renames';
 import { cn } from '@/lib/utils';
 import { Inbox, ChevronDown, Plus, Pencil, Trash2 } from 'lucide-react';
+import { InboxTree } from '@/components/inbox/inbox-tree';
+import { buildTree, filterIncomplete } from '@/lib/hierarchy';
 import {
   loadViews, saveViews, loadInboxFilter, saveInboxFilter,
   type CustomTaskView,
@@ -24,6 +25,7 @@ import { ViewEditForm } from '@/components/tasks/view-edit-form';
 
 export default function InboxPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [issues, setIssues] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(true);
   const [priority, setPriority] = useState('all');
   const [source, setSource] = useState('all');
@@ -32,6 +34,10 @@ export default function InboxPage() {
   const [sortBy, setSortBy] = useState<'priority' | 'deadline' | 'created_at'>('priority');
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [showCompleted, setShowCompleted] = useState(false);
+  // Phase 4 will wire these to actual edit/delete dialogs.
+  const [, setEditingIssue] = useState<Issue | null>(null);
+  const [, setDeletingIssue] = useState<Issue | null>(null);
   const searchTimerRef = useRef<NodeJS.Timeout>(undefined);
 
   const [statusFilter, setStatusFilter] = useState<string[]>(() => loadInboxFilter());
@@ -43,7 +49,6 @@ export default function InboxPage() {
   const [deleteViewId, setDeleteViewId] = useState<string | null>(null);
 
   const allStatusOptions = useAllStatuses();
-  const defaultRenames = useDefaultStatusRenames();
 
   const handleSearchChange = (value: string) => {
     setSearch(value);
@@ -80,8 +85,12 @@ export default function InboxPage() {
       const params = new URLSearchParams();
       if (priority !== 'all') params.set('priority', priority);
       if (source !== 'all') params.set('source', source);
-      const data = await apiFetch<Task[]>(`/api/tasks?${params}`);
-      setTasks(data);
+      const [taskData, issueData] = await Promise.all([
+        apiFetch<Task[]>(`/api/tasks?${params}`),
+        apiFetch<Issue[]>('/api/issues'),
+      ]);
+      setTasks(taskData);
+      setIssues(issueData);
     } catch {
     } finally {
       setLoading(false);
@@ -174,22 +183,14 @@ export default function InboxPage() {
     return list;
   }, [debouncedSearch]);
 
-  const mainFiltered = useMemo(() => {
-    let list = applyBaseFilter(tasks);
-    if (statusFilter.length > 0) {
-      list = list.filter(t => statusFilter.includes(t.status));
-    }
-    return list.sort((a, b) => {
-      if (sortBy === 'priority') return (priorityOrder[a.priority] ?? 9) - (priorityOrder[b.priority] ?? 9);
-      if (sortBy === 'deadline') {
-        if (!a.deadline && !b.deadline) return 0;
-        if (!a.deadline) return 1;
-        if (!b.deadline) return -1;
-        return a.deadline.localeCompare(b.deadline);
-      }
-      return b.created_at.localeCompare(a.created_at);
-    });
-  }, [tasks, debouncedSearch, statusFilter, sortBy, applyBaseFilter]);
+  const treeVisibleCount = useMemo(() => {
+    const built = buildTree(issues, tasks);
+    const view = showCompleted ? built : filterIncomplete(built);
+    let n = 0;
+    for (const issueNode of view.issues) n += issueNode.tasks.length;
+    n += view.independents.length;
+    return n;
+  }, [issues, tasks, showCompleted]);
 
   const getViewTasks = useCallback((view: CustomTaskView) => {
     let list = applyBaseFilter(tasks);
@@ -285,16 +286,24 @@ export default function InboxPage() {
         )}
       </div>
 
-      {/* Main list */}
+      {/* Main list (ISSUE → TASK → sub-TASK tree) */}
       <div>
-        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3" style={{ fontFamily: 'var(--font-heading)' }}>
-          {statusFilter.length > 0
-            ? statusFilter.map(s => defaultRenames[s] ?? s).join(' · ')
-            : '모든 task'}
-          <span className="text-primary ml-1.5">({mainFiltered.length})</span>
-        </h3>
+        <div className="flex items-center gap-3 mb-3">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider" style={{ fontFamily: 'var(--font-heading)' }}>
+            {showCompleted ? '전체' : '미완료'}
+            <span className="text-primary ml-1.5">({treeVisibleCount})</span>
+          </h3>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-xs text-muted-foreground hover:text-foreground"
+            onClick={() => setShowCompleted(v => !v)}
+          >
+            {showCompleted ? '미완료만 보기' : '완료된 것도 보기'}
+          </Button>
+        </div>
 
-        {mainFiltered.length === 0 ? (
+        {treeVisibleCount === 0 ? (
           <EmptyState
             icon={Inbox}
             title="해당하는 task가 없습니다"
@@ -302,24 +311,14 @@ export default function InboxPage() {
             action={{ label: '새 task 등록', href: '/tasks/new' }}
           />
         ) : (
-          <div className="space-y-2">
-            {mainFiltered.map((task, index) => {
-              const prevTask = index > 0 ? mainFiltered[index - 1] : null;
-              const showDivider = sortBy === 'deadline' && prevTask?.deadline && !task.deadline;
-              return (
-                <div key={task.id}>
-                  {showDivider && (
-                    <div className="flex items-center gap-2 my-2">
-                      <Separator className="flex-1" />
-                      <span className="text-xs text-muted-foreground">마감일 미설정</span>
-                      <Separator className="flex-1" />
-                    </div>
-                  )}
-                  <TaskCard task={task} {...taskHandlers} />
-                </div>
-              );
-            })}
-          </div>
+          <InboxTree
+            issues={issues}
+            tasks={tasks}
+            showCompleted={showCompleted}
+            taskHandlers={taskHandlers}
+            onEditIssue={(i) => setEditingIssue(i)}
+            onDeleteIssue={(i) => setDeletingIssue(i)}
+          />
         )}
       </div>
 
