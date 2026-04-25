@@ -1,0 +1,136 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { isMockMode, MOCK_TASKS } from '@/lib/mock-data';
+
+export async function GET(request: NextRequest) {
+  if (isMockMode()) {
+    const searchParams = request.nextUrl.searchParams;
+    const status = searchParams.get('status');
+    const priority = searchParams.get('priority');
+    const source = searchParams.get('source');
+    const from = searchParams.get('from');
+    const to = searchParams.get('to');
+    const dateField = searchParams.get('dateField');
+    const sort = searchParams.get('sort') ?? 'created_at';
+    const order = searchParams.get('order') ?? 'desc';
+    const showDeleted = searchParams.get('deleted') === 'true';
+
+    let tasks = MOCK_TASKS.filter((t) => t.is_deleted === showDeleted);
+    if (status) tasks = tasks.filter((t) => t.status === status);
+    if (priority) tasks = tasks.filter((t) => t.priority === priority);
+    if (source) tasks = tasks.filter((t) => t.source === source);
+    if (from || to) {
+      tasks = tasks.filter((t) => {
+        const inRange = (iso: string | null | undefined) => {
+          if (!iso) return false;
+          if (from && iso < from) return false;
+          if (to && iso > `${to}T23:59:59.999Z`) return false;
+          return true;
+        };
+        if (dateField === 'either') {
+          return inRange(t.created_at) || inRange(t.completed_at);
+        }
+        return inRange(t.created_at);
+      });
+    }
+
+    tasks.sort((a, b) => {
+      const aVal = String((a as unknown as Record<string, unknown>)[sort] ?? '');
+      const bVal = String((b as unknown as Record<string, unknown>)[sort] ?? '');
+      return order === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+    });
+
+    return NextResponse.json(tasks);
+  }
+
+  const supabase = createServerSupabaseClient();
+  const searchParams = request.nextUrl.searchParams;
+
+  const status = searchParams.get('status');
+  const priority = searchParams.get('priority');
+  const source = searchParams.get('source');
+  const from = searchParams.get('from');
+  const to = searchParams.get('to');
+  const dateField = searchParams.get('dateField');
+  const sort = searchParams.get('sort') ?? 'created_at';
+  const order = searchParams.get('order') ?? 'desc';
+  const showDeleted = searchParams.get('deleted') === 'true';
+
+  let query = supabase
+    .from('tasks')
+    .select('*')
+    .eq('is_deleted', showDeleted);
+
+  if (status) query = query.eq('status', status);
+  if (priority) query = query.eq('priority', priority);
+  if (source) query = query.eq('source', source);
+  if (dateField === 'either' && from && to) {
+    query = query.or(
+      `and(created_at.gte.${from},created_at.lte.${to}T23:59:59.999Z),and(completed_at.gte.${from},completed_at.lte.${to}T23:59:59.999Z)`
+    );
+  } else {
+    if (from) query = query.gte('created_at', from);
+    if (to) query = query.lte('created_at', `${to}T23:59:59.999Z`);
+  }
+
+  query = query.order(sort, { ascending: order === 'asc' });
+
+  const { data, error } = await query;
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data);
+}
+
+export async function POST(request: NextRequest) {
+  if (isMockMode()) {
+    const body = await request.json();
+    const newTask = {
+      id: `mock-${Date.now()}`,
+      title: body.title,
+      description: body.description ?? null,
+      priority: body.priority ?? '보통',
+      status: body.status ?? '대기',
+      source: body.source ?? 'manual',
+      requester: body.requester ?? null,
+      requested_at: body.requested_at ?? null,
+      created_at: new Date().toISOString(),
+      deadline: body.deadline ?? null,
+      started_at: null,
+      completed_at: null,
+      actual_duration: null,
+      is_duration_manual: false,
+      notion_task_id: null,
+      slack_url: body.slack_url ?? null,
+      slack_channel: body.slack_channel ?? null,
+      slack_sender: body.slack_sender ?? null,
+      delegate_to: null,
+      follow_up_note: null,
+      is_deleted: false,
+    };
+    return NextResponse.json(newTask, { status: 201 });
+  }
+
+  const supabase = createServerSupabaseClient();
+  const body = await request.json();
+
+  const { data, error } = await supabase
+    .from('tasks')
+    .insert({
+      title: body.title,
+      description: body.description ?? null,
+      priority: body.priority ?? '보통',
+      status: body.status ?? '대기',
+      source: body.source ?? 'manual',
+      requester: body.requester ?? null,
+      requested_at: body.requested_at ?? null,
+      deadline: body.deadline ?? null,
+      slack_url: body.slack_url ?? null,
+      slack_channel: body.slack_channel ?? null,
+      slack_sender: body.slack_sender ?? null,
+    })
+    .select()
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data, { status: 201 });
+}

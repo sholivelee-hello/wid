@@ -1,0 +1,115 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createServerSupabaseClient } from '@/lib/supabase/server';
+import crypto from 'crypto';
+
+async function verifySlackSignature(request: NextRequest, body: string): Promise<boolean> {
+  const signingSecret = process.env.SLACK_SIGNING_SECRET!;
+  const timestamp = request.headers.get('x-slack-request-timestamp') ?? '';
+  const slackSignature = request.headers.get('x-slack-signature') ?? '';
+
+  if (Math.abs(Date.now() / 1000 - parseInt(timestamp)) > 300) return false;
+
+  const baseString = `v0:${timestamp}:${body}`;
+  const mySignature = 'v0=' + crypto.createHmac('sha256', signingSecret).update(baseString).digest('hex');
+
+  return crypto.timingSafeEqual(Buffer.from(mySignature), Buffer.from(slackSignature));
+}
+
+export async function POST(request: NextRequest) {
+  const body = await request.text();
+
+  const isValid = await verifySlackSignature(request, body);
+  if (!isValid) return NextResponse.json({ error: 'Invalid signature' }, { status: 403 });
+
+  const payload = JSON.parse(body);
+
+  if (payload.type === 'url_verification') {
+    return NextResponse.json({ challenge: payload.challenge });
+  }
+
+  if (payload.type !== 'event_callback') {
+    return NextResponse.json({ ok: true });
+  }
+
+  const event = payload.event;
+  const eventId = payload.event_id;
+
+  const supabase = createServerSupabaseClient();
+  const { data: existing } = await supabase
+    .from('slack_events')
+    .select('event_id')
+    .eq('event_id', eventId)
+    .single();
+
+  if (existing) return NextResponse.json({ ok: true });
+
+  await supabase.from('slack_events').insert({ event_id: eventId });
+
+  if (event.type !== 'reaction_added') return NextResponse.json({ ok: true });
+
+  const triggerEmoji = process.env.SLACK_TRIGGER_EMOJI ?? 'eyes';
+  const completeEmoji = process.env.SLACK_COMPLETE_EMOJI ?? 'white_check_mark';
+
+  // Handle completion emoji
+  if (event.reaction === completeEmoji) {
+    const slackUrl = `https://slack.com/archives/${event.item.channel}/p${event.item.ts.replace('.', '')}`;
+
+    // Find existing task by slack_url
+    const { data: existingTask } = await supabase
+      .from('tasks')
+      .select('id, status')
+      .eq('slack_url', slackUrl)
+      .single();
+
+    if (existingTask && existingTask.status !== '완료') {
+      await supabase
+        .from('tasks')
+        .update({ status: '완료', completed_at: new Date().toISOString() })
+        .eq('id', existingTask.id);
+    }
+
+    return NextResponse.json({ ok: true });
+  }
+
+  // Handle trigger emoji
+  if (event.reaction !== triggerEmoji) return NextResponse.json({ ok: true });
+
+  const botToken = process.env.SLACK_BOT_TOKEN!;
+
+  const msgRes = await fetch(
+    `https://slack.com/api/conversations.history?channel=${event.item.channel}&latest=${event.item.ts}&limit=1&inclusive=true`,
+    { headers: { Authorization: `Bearer ${botToken}` } }
+  );
+  const msgData = await msgRes.json();
+  const message = msgData.messages?.[0];
+
+  if (!message) return NextResponse.json({ ok: true });
+
+  const channelRes = await fetch(
+    `https://slack.com/api/conversations.info?channel=${event.item.channel}`,
+    { headers: { Authorization: `Bearer ${botToken}` } }
+  );
+  const channelData = await channelRes.json();
+  const channelName = channelData.channel?.name ?? event.item.channel;
+
+  const userRes = await fetch(
+    `https://slack.com/api/users.info?user=${message.user}`,
+    { headers: { Authorization: `Bearer ${botToken}` } }
+  );
+  const userData = await userRes.json();
+  const senderName = userData.user?.real_name ?? userData.user?.name ?? message.user;
+
+  const slackUrl = `https://slack.com/archives/${event.item.channel}/p${event.item.ts.replace('.', '')}`;
+
+  await supabase.from('tasks').insert({
+    title: message.text?.slice(0, 200) || '(슬랙 메시지)',
+    source: 'slack',
+    slack_url: slackUrl,
+    slack_channel: channelName,
+    slack_sender: senderName,
+    requester: senderName,
+    requested_at: new Date(parseFloat(message.ts) * 1000).toISOString(),
+  });
+
+  return NextResponse.json({ ok: true });
+}
