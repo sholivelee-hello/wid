@@ -3,31 +3,22 @@
 import { useMemo } from 'react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import type { Task, TimeLog } from '@/lib/types';
+import type { Task } from '@/lib/types';
 import type { GCalEvent } from '@/lib/mock-gcal';
 import { useCalendarViewState } from '@/lib/calendar-view-state';
 import type { CalendarSubscription } from '@/lib/mock-calendars';
-import { Clock, CalendarDays, CheckCircle2 } from 'lucide-react';
+import { CalendarDays, CheckCircle2 } from 'lucide-react';
 
 interface DayDetailPanelProps {
   date: Date | null;
   tasks: Task[];
   events: GCalEvent[];
-  timeLogs: TimeLog[];
   subscriptions: CalendarSubscription[];
   onTaskClick: (taskId: string) => void;
 }
 
-function minutesToLabel(min: number): string {
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  if (h === 0) return `${m}분`;
-  if (m === 0) return `${h}시간`;
-  return `${h}시간 ${m}분`;
-}
-
 export function DayDetailPanel({
-  date, tasks, events, timeLogs, subscriptions, onTaskClick,
+  date, tasks, events, subscriptions, onTaskClick,
 }: DayDetailPanelProps) {
   const viewState = useCalendarViewState(subscriptions);
 
@@ -56,26 +47,7 @@ export function DayDetailPanel({
     [tasks, dateStr]
   );
 
-  const dayWorked = useMemo(() => {
-    const logsByTask = new Map<string, number>();
-    for (const log of timeLogs) {
-      if (!log.started_at.startsWith(dateStr)) continue;
-      if (!log.ended_at) continue;
-      const mins = Math.round(
-        (new Date(log.ended_at).getTime() - new Date(log.started_at).getTime()) / 60000
-      );
-      logsByTask.set(log.task_id, (logsByTask.get(log.task_id) ?? 0) + mins);
-    }
-    return [...logsByTask.entries()]
-      .map(([taskId, mins]) => ({
-        task: tasks.find(t => t.id === taskId),
-        minutes: mins,
-      }))
-      .filter((x): x is { task: Task; minutes: number } => !!x.task)
-      .sort((a, b) => b.minutes - a.minutes);
-  }, [timeLogs, tasks, dateStr]);
-
-  const totalEmpty = dayEvents.length === 0 && dayCompleted.length === 0 && dayWorked.length === 0;
+  const totalEmpty = dayEvents.length === 0 && dayCompleted.length === 0;
 
   return (
     <div className="space-y-5">
@@ -145,28 +117,6 @@ export function DayDetailPanel({
             </section>
           )}
 
-          {dayWorked.length > 0 && (
-            <section>
-              <h4 className="text-xs font-semibold mb-2 flex items-center gap-1.5 text-muted-foreground uppercase tracking-wider">
-                <Clock className="h-3 w-3" /> 작업한 task ({dayWorked.length})
-              </h4>
-              <div className="space-y-1">
-                {dayWorked.map(({ task, minutes }) => (
-                  <button
-                    key={task.id}
-                    type="button"
-                    onClick={() => onTaskClick(task.id)}
-                    className="w-full flex items-center gap-3 text-left px-3 py-2 rounded-md border hover:bg-accent/30 transition-colors"
-                  >
-                    <span className="flex-1 text-sm font-medium truncate">{task.title}</span>
-                    <span className="text-xs text-muted-foreground font-mono tabular-nums">
-                      {minutesToLabel(minutes)}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
         </>
       )}
     </div>

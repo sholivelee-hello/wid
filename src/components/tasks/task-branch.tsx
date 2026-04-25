@@ -8,7 +8,6 @@ import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface TaskBranchHandlers {
-  onTimerChange: () => void;
   onStatusChange: (id: string, status: string) => void;
   onComplete: (id: string) => void;
   onDelete: (id: string) => void;
@@ -27,7 +26,6 @@ export function TaskBranch({
   depth,
   lockedIds,
   forceOpenIds,
-  onTimerChange,
   onStatusChange,
   onComplete,
   onDelete,
@@ -74,7 +72,6 @@ export function TaskBranch({
         <div className={cn('flex-1 min-w-0', locked && 'opacity-60')}>
           <TaskCard
             task={node.task}
-            onTimerChange={onTimerChange}
             onStatusChange={handleStatusChange}
             onComplete={handleComplete}
             onDelete={onDelete}
@@ -101,7 +98,6 @@ export function TaskBranch({
               depth={depth + 1}
               lockedIds={childLocked}
               forceOpenIds={forceOpenIds}
-              onTimerChange={onTimerChange}
               onStatusChange={onStatusChange}
               onComplete={onComplete}
               onDelete={onDelete}

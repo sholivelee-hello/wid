@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { TimerButton } from './timer-button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   DropdownMenu,
@@ -24,7 +23,6 @@ import {
   UserPlus,
   Trash2,
   ExternalLink,
-  Clock,
   User,
   CalendarDays,
   FileText,
@@ -34,19 +32,10 @@ import {
 
 interface TaskCardProps {
   task: Task;
-  onTimerChange?: () => void;
   onStatusChange?: (taskId: string, newStatus: string) => void;
   onComplete?: (taskId: string) => void;
   onDelete?: (taskId: string) => void;
   onSelect?: (taskId: string) => void;
-}
-
-function formatMinutes(mins: number): string {
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  if (h === 0) return `${m}분`;
-  if (m === 0) return `${h}시간`;
-  return `${h}시간 ${m}분`;
 }
 
 function Dot() {
@@ -55,7 +44,6 @@ function Dot() {
 
 export function TaskCard({
   task,
-  onTimerChange,
   onStatusChange,
   onComplete,
   onDelete,
@@ -210,16 +198,6 @@ export function TaskCard({
                 </>
               )}
 
-              {task.actual_duration != null && task.actual_duration > 0 && (
-                <>
-                  <Dot />
-                  <span className="inline-flex items-center gap-1 font-mono tabular-nums">
-                    <Clock className="h-3 w-3" aria-hidden="true" />
-                    {formatMinutes(task.actual_duration)}
-                  </span>
-                </>
-              )}
-
               {task.source === 'notion' && task.notion_task_id && (
                 <>
                   <Dot />
@@ -297,13 +275,6 @@ export function TaskCard({
                 {task.status}
               </span>
             )}
-
-            <TimerButton
-              taskId={task.id}
-              actualDuration={task.actual_duration}
-              onTimerChange={onTimerChange}
-              compact
-            />
 
             <DropdownMenu>
               <DropdownMenuTrigger

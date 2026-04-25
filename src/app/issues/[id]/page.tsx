@@ -109,7 +109,6 @@ export default function IssueDetailPage({ params }: { params: Promise<{ id: stri
   };
 
   const handlers = {
-    onTimerChange: fetchAll,
     onStatusChange: handleStatusChange,
     onComplete: handleComplete,
     onDelete: (taskId: string) => setConfirmTaskDelete(taskId),

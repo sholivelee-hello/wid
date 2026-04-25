@@ -1,4 +1,4 @@
-import { Task, TimeLog, CustomStatus, NotionStatusMapping } from './types';
+import { Task, CustomStatus, NotionStatusMapping } from './types';
 import { MOCK_ISSUES } from './mock-issues';
 
 // Re-export for consumers
@@ -31,10 +31,7 @@ export const MOCK_TASKS: Task[] = [
     requested_at: null,
     created_at: daysAgo(0),
     deadline: daysAgo(-2), // 2 days from now
-    started_at: hoursAgo(6),
     completed_at: null,
-    actual_duration: 90,
-    is_duration_manual: false,
     notion_task_id: null,
     slack_url: null,
     notion_issue: null,
@@ -59,10 +56,7 @@ export const MOCK_TASKS: Task[] = [
     requested_at: daysAgo(1),
     created_at: daysAgo(1),
     deadline: daysAgo(-1),
-    started_at: null,
     completed_at: null,
-    actual_duration: null,
-    is_duration_manual: false,
     notion_task_id: 'notion-page-001',
     slack_url: null,
     notion_issue: null,
@@ -87,10 +81,7 @@ export const MOCK_TASKS: Task[] = [
     requested_at: null,
     created_at: daysAgo(0),
     deadline: null,
-    started_at: daysAgo(0),
     completed_at: hoursAgo(1),
-    actual_duration: 45,
-    is_duration_manual: false,
     notion_task_id: null,
     slack_url: null,
     notion_issue: null,
@@ -115,10 +106,7 @@ export const MOCK_TASKS: Task[] = [
     requested_at: daysAgo(0),
     created_at: daysAgo(0),
     deadline: daysAgo(0),
-    started_at: hoursAgo(5),
     completed_at: hoursAgo(3),
-    actual_duration: 120,
-    is_duration_manual: false,
     notion_task_id: null,
     slack_url: 'https://slack.com/archives/C01234/p1234567890',
     notion_issue: null,
@@ -143,10 +131,7 @@ export const MOCK_TASKS: Task[] = [
     requested_at: null,
     created_at: daysAgo(2),
     deadline: daysAgo(-5),
-    started_at: daysAgo(2),
     completed_at: null,
-    actual_duration: 30,
-    is_duration_manual: true,
     notion_task_id: null,
     slack_url: null,
     notion_issue: null,
@@ -171,10 +156,7 @@ export const MOCK_TASKS: Task[] = [
     requested_at: daysAgo(3),
     created_at: daysAgo(3),
     deadline: daysAgo(-1),
-    started_at: daysAgo(1),
     completed_at: null,
-    actual_duration: 120,
-    is_duration_manual: false,
     notion_task_id: 'notion-page-002',
     slack_url: null,
     notion_issue: null,
@@ -199,10 +181,7 @@ export const MOCK_TASKS: Task[] = [
     requested_at: null,
     created_at: daysAgo(5),
     deadline: daysAgo(-10),
-    started_at: null,
     completed_at: null,
-    actual_duration: null,
-    is_duration_manual: false,
     notion_task_id: null,
     slack_url: null,
     notion_issue: null,
@@ -227,10 +206,7 @@ export const MOCK_TASKS: Task[] = [
     requested_at: daysAgo(1),
     created_at: daysAgo(1),
     deadline: daysAgo(0),
-    started_at: daysAgo(1),
     completed_at: daysAgo(0),
-    actual_duration: 180,
-    is_duration_manual: false,
     notion_task_id: null,
     slack_url: 'https://slack.com/archives/C05678/p9876543210',
     notion_issue: null,
@@ -255,10 +231,7 @@ export const MOCK_TASKS: Task[] = [
     requested_at: null,
     created_at: daysAgo(2),
     deadline: null,
-    started_at: daysAgo(2),
     completed_at: daysAgo(1),
-    actual_duration: 60,
-    is_duration_manual: false,
     notion_task_id: null,
     slack_url: null,
     notion_issue: null,
@@ -283,10 +256,7 @@ export const MOCK_TASKS: Task[] = [
     requested_at: daysAgo(7),
     created_at: daysAgo(7),
     deadline: daysAgo(-3),
-    started_at: null,
     completed_at: null,
-    actual_duration: null,
-    is_duration_manual: false,
     notion_task_id: 'notion-page-003',
     slack_url: null,
     notion_issue: null,
@@ -311,10 +281,7 @@ export const MOCK_TASKS: Task[] = [
     requested_at: null,
     created_at: daysAgo(4),
     deadline: daysAgo(-1),
-    started_at: daysAgo(3),
     completed_at: daysAgo(2),
-    actual_duration: 240,
-    is_duration_manual: false,
     notion_task_id: null,
     slack_url: null,
     notion_issue: null,
@@ -339,10 +306,7 @@ export const MOCK_TASKS: Task[] = [
     requested_at: null,
     created_at: daysAgo(6),
     deadline: null,
-    started_at: daysAgo(5),
     completed_at: daysAgo(4),
-    actual_duration: 90,
-    is_duration_manual: true,
     notion_task_id: null,
     slack_url: null,
     notion_issue: null,
@@ -368,10 +332,7 @@ export const MOCK_TASKS: Task[] = [
     requested_at: null,
     created_at: daysAgo(10),
     deadline: null,
-    started_at: null,
     completed_at: null,
-    actual_duration: null,
-    is_duration_manual: false,
     notion_task_id: null,
     slack_url: null,
     notion_issue: null,
@@ -396,10 +357,7 @@ export const MOCK_TASKS: Task[] = [
     requested_at: daysAgo(14),
     created_at: daysAgo(14),
     deadline: null,
-    started_at: daysAgo(12),
     completed_at: null,
-    actual_duration: 60,
-    is_duration_manual: false,
     notion_task_id: 'notion-page-004',
     slack_url: null,
     notion_issue: null,
@@ -425,10 +383,7 @@ export const MOCK_TASKS: Task[] = [
     requested_at: null,
     created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
     deadline: null,
-    started_at: null,
     completed_at: null,
-    actual_duration: null,
-    is_duration_manual: false,
     notion_task_id: null,
     slack_url: null,
     notion_issue: null,
@@ -453,10 +408,7 @@ export const MOCK_TASKS: Task[] = [
     requested_at: null,
     created_at: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
     deadline: null,
-    started_at: null,
     completed_at: null,
-    actual_duration: null,
-    is_duration_manual: false,
     notion_task_id: null,
     slack_url: null,
     notion_issue: null,
@@ -481,10 +433,7 @@ export const MOCK_TASKS: Task[] = [
     requested_at: null,
     created_at: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
     deadline: null,
-    started_at: null,
     completed_at: null,
-    actual_duration: null,
-    is_duration_manual: false,
     notion_task_id: null,
     slack_url: null,
     notion_issue: null,
@@ -499,30 +448,6 @@ export const MOCK_TASKS: Task[] = [
     is_deleted: false,
   },
 ];
-
-export const MOCK_TIMELOGS: TimeLog[] = [
-  // Task 1 (진행중) - 3 sessions: 2 completed + 1 active (pause/resume pattern)
-  { id: id(101), task_id: id(1), started_at: hoursAgo(6), ended_at: hoursAgo(5) },        // 세션 1: 1시간 (오전 작업)
-  { id: id(110), task_id: id(1), started_at: hoursAgo(4), ended_at: hoursAgo(3.5) },      // 세션 2: 30분 (점심 후 재개)
-  { id: id(111), task_id: id(1), started_at: hoursAgo(1), ended_at: null },                // 세션 3: 현재 진행중
-  // Task 3 (완료) - 2 sessions
-  { id: id(102), task_id: id(3), started_at: hoursAgo(4), ended_at: hoursAgo(3.5) },      // 30분
-  { id: id(112), task_id: id(3), started_at: hoursAgo(2), ended_at: hoursAgo(1.75) },     // 15분
-  // Task 4 (완료) - 2 hours in one session
-  { id: id(103), task_id: id(4), started_at: hoursAgo(5), ended_at: hoursAgo(3) },
-  // Task 6 - 3 sessions over 2 days (다른 일 하다가 돌아온 패턴)
-  { id: id(104), task_id: id(6), started_at: new Date(new Date(daysAgo(1)).getTime() + 9 * 3600000).toISOString(), ended_at: new Date(new Date(daysAgo(1)).getTime() + 10 * 3600000).toISOString() },  // 어제 1시간
-  { id: id(105), task_id: id(6), started_at: new Date(new Date(daysAgo(1)).getTime() + 14 * 3600000).toISOString(), ended_at: new Date(new Date(daysAgo(1)).getTime() + 14.5 * 3600000).toISOString() }, // 어제 30분
-  { id: id(113), task_id: id(6), started_at: hoursAgo(3), ended_at: hoursAgo(2.5) },      // 오늘 30분
-  // Task 8 - 3 hours over 2 sessions
-  { id: id(106), task_id: id(8), started_at: new Date(new Date(daysAgo(1)).getTime() + 9 * 3600000).toISOString(), ended_at: new Date(new Date(daysAgo(1)).getTime() + 11 * 3600000).toISOString() },
-  { id: id(107), task_id: id(8), started_at: new Date(new Date(daysAgo(0)).getTime() + 10 * 3600000).toISOString(), ended_at: new Date(new Date(daysAgo(0)).getTime() + 11 * 3600000).toISOString() },
-  // Task 9
-  { id: id(108), task_id: id(9), started_at: new Date(new Date(daysAgo(2)).getTime() + 14 * 3600000).toISOString(), ended_at: new Date(new Date(daysAgo(2)).getTime() + 15 * 3600000).toISOString() },
-  // Task 11 - long sessions over multiple days
-  { id: id(109), task_id: id(11), started_at: new Date(new Date(daysAgo(3)).getTime() + 9 * 3600000).toISOString(), ended_at: new Date(new Date(daysAgo(3)).getTime() + 13 * 3600000).toISOString() },
-];
-
 export const MOCK_CUSTOM_STATUSES: CustomStatus[] = [
   { id: id(201), name: '코드리뷰', color: '#8B5CF6', created_at: daysAgo(30) },
   { id: id(202), name: 'QA대기', color: '#EC4899', created_at: daysAgo(30) },

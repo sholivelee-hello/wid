@@ -11,15 +11,14 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Issue, Task, TimeLog } from '@/lib/types';
+import { Issue, Task } from '@/lib/types';
 import { DEFAULT_STATUSES, PRIORITIES } from '@/lib/constants';
 import { useHiddenStatuses } from '@/lib/hidden-statuses';
 import { useDefaultStatusRenames } from '@/lib/status-renames';
-import { formatDate, minutesToHoursMinutes, cn, getNotionPageUrl } from '@/lib/utils';
+import { formatDate, cn, getNotionPageUrl } from '@/lib/utils';
 import { apiFetch } from '@/lib/api';
-import { TimerButton } from './timer-button';
 import { IssuePicker } from '@/components/issues/issue-picker';
-import { Trash2, ExternalLink, ChevronDown, Clock, Save, X, FolderPlus } from 'lucide-react';
+import { Trash2, ExternalLink, ChevronDown, Save, X, FolderPlus } from 'lucide-react';
 
 interface TaskDetailPanelProps {
   taskId: string | null;
@@ -29,12 +28,10 @@ interface TaskDetailPanelProps {
 
 export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPanelProps) {
   const [task, setTask] = useState<Task | null>(null);
-  const [timelogs, setTimelogs] = useState<TimeLog[]>([]);
   const [customStatuses, setCustomStatuses] = useState<string[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [confirmDeleteLogId, setConfirmDeleteLogId] = useState<string | null>(null);
   const [showExtras, setShowExtras] = useState(false);
   const [issuePickerOpen, setIssuePickerOpen] = useState(false);
 
@@ -52,14 +49,12 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPa
     if (!taskId) return;
     setLoading(true);
     try {
-      const [taskData, logsData, statusData, issueData] = await Promise.all([
+      const [taskData, statusData, issueData] = await Promise.all([
         apiFetch<Task>(`/api/tasks/${taskId}`, { suppressToast: true }),
-        apiFetch<TimeLog[]>(`/api/tasks/${taskId}/timelogs`, { suppressToast: true }),
         apiFetch<{ name: string }[]>('/api/custom-statuses', { suppressToast: true }),
         apiFetch<Issue[]>('/api/issues', { suppressToast: true }),
       ]);
       setTask(taskData);
-      setTimelogs(logsData);
       setCustomStatuses(statusData.map(s => s.name));
       setIssues(issueData);
       setTitle(taskData.title);
@@ -357,63 +352,6 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPa
                 추가 정보
               </button>
 
-              {timelogs.length > 0 && (() => {
-                const completedLogs = timelogs.filter(l => l.ended_at);
-                const activeLogs = timelogs.filter(l => !l.ended_at);
-                const totalMinutes = completedLogs.reduce((sum, log) => {
-                  return sum + Math.round((new Date(log.ended_at!).getTime() - new Date(log.started_at).getTime()) / 60000);
-                }, 0);
-
-                return (
-                  <div className="rounded-lg border bg-muted/30 p-3">
-                    <Label className="text-xs text-muted-foreground flex items-center gap-1 mb-2">
-                      <Clock className="h-3 w-3" /> 작업 세션 기록
-                    </Label>
-                    <div className="space-y-1.5">
-                      {timelogs.map((log, index) => {
-                        const isActive = !log.ended_at;
-                        const duration = log.ended_at
-                          ? Math.round((new Date(log.ended_at).getTime() - new Date(log.started_at).getTime()) / 60000)
-                          : 0;
-                        return (
-                          <div key={log.id} className={cn(
-                            'group flex items-center justify-between text-xs rounded px-2 py-1',
-                            isActive ? 'bg-primary/10 text-primary font-medium' : 'text-muted-foreground'
-                          )}>
-                            <div className="flex items-center gap-2">
-                              <span className="text-muted-foreground/60 w-6">#{timelogs.length - index}</span>
-                              <span>{formatDate(log.started_at, 'MM/dd HH:mm')}</span>
-                              {log.ended_at && <span>→ {formatDate(log.ended_at, 'HH:mm')}</span>}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className={cn('font-mono tabular-nums', isActive && 'animate-pulse')}>
-                                {isActive ? '진행중' : minutesToHoursMinutes(duration)}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); setConfirmDeleteLogId(log.id); }}
-                                className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive/80 p-0.5 rounded"
-                                aria-label="세션 삭제"
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <Separator className="my-2" />
-                    <div className="flex items-center justify-between text-xs font-semibold">
-                      <span className="text-muted-foreground">총 작업 시간</span>
-                      <span className="font-mono tabular-nums text-foreground">
-                        {minutesToHoursMinutes(totalMinutes)}
-                        {activeLogs.length > 0 && ' + 진행중'}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })()}
-
               {showExtras && (
                 <div className="space-y-3 animate-fade-in">
                   <div>
@@ -432,12 +370,9 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPa
               <Separator />
 
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <TimerButton taskId={task.id} actualDuration={task?.actual_duration} onTimerChange={() => { fetchTask(); onTaskUpdated?.(); }} />
-                  <Button variant="destructive" size="sm" onClick={() => setConfirmDelete(true)}>
-                    <Trash2 className="h-4 w-4 mr-1" /> 삭제
-                  </Button>
-                </div>
+                <Button variant="destructive" size="sm" onClick={() => setConfirmDelete(true)}>
+                  <Trash2 className="h-4 w-4 mr-1" /> 삭제
+                </Button>
                 <Button size="sm" onClick={handleSave} disabled={saving}>
                   <Save className="h-4 w-4 mr-1" />
                   {saving ? '저장 중...' : '저장'}
@@ -455,23 +390,6 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPa
         description="이 task를 휴지통으로 이동합니다."
         confirmLabel="삭제"
         onConfirm={handleDelete}
-      />
-
-      <ConfirmDialog
-        open={!!confirmDeleteLogId}
-        onOpenChange={(open) => !open && setConfirmDeleteLogId(null)}
-        title="세션 삭제"
-        description="이 타이머 세션을 삭제합니다. 총 작업 시간에서 제외됩니다."
-        confirmLabel="삭제"
-        onConfirm={async () => {
-          if (!confirmDeleteLogId || !taskId) return;
-          try {
-            await apiFetch(`/api/tasks/${taskId}/timelogs/${confirmDeleteLogId}`, { method: 'DELETE' });
-            fetchTask();
-            onTaskUpdated?.();
-          } catch {}
-          setConfirmDeleteLogId(null);
-        }}
       />
 
       <IssuePicker

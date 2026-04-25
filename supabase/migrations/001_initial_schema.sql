@@ -13,10 +13,7 @@ create table tasks (
   requested_at timestamptz,
   created_at timestamptz not null default now(),
   deadline timestamptz,
-  started_at timestamptz,
   completed_at timestamptz,
-  actual_duration integer,
-  is_duration_manual boolean not null default false,
   notion_task_id text unique,
   slack_url text,
   slack_channel text,
@@ -32,14 +29,6 @@ create table custom_statuses (
   name text not null unique,
   color text not null default '#6B7280',
   created_at timestamptz not null default now()
-);
-
--- TimeLog table
-create table time_logs (
-  id uuid primary key default uuid_generate_v4(),
-  task_id uuid not null references tasks(id) on delete cascade,
-  started_at timestamptz not null default now(),
-  ended_at timestamptz
 );
 
 -- Slack event dedup table
@@ -59,4 +48,3 @@ create table notion_status_mappings (
 create index idx_task_status_deleted on tasks(status, is_deleted);
 create index idx_task_created_at on tasks(created_at);
 create index idx_task_completed_at on tasks(completed_at);
-create index idx_timelog_task_started on time_logs(task_id, started_at);

@@ -25,10 +25,7 @@ export interface Task {
   requested_at: string | null;
   created_at: string;
   deadline: string | null;
-  started_at: string | null;
   completed_at: string | null;
-  actual_duration: number | null;
-  is_duration_manual: boolean;
   notion_task_id: string | null;
   slack_url: string | null;
   notion_issue: string | null;
@@ -50,25 +47,9 @@ export interface CustomStatus {
   created_at: string;
 }
 
-export interface TimeLog {
-  id: string;
-  task_id: string;
-  started_at: string;
-  ended_at: string | null;
-}
-
 export interface NotionStatusMapping {
   id: string;
   notion_status: string;
   wid_status: string;
-}
-
-export interface DailyStats {
-  date: string;
-  completed_count: number;
-  total_duration: number;
-  in_progress_count: number;
-  tasks: Task[];
-  timelogs: TimeLog[];
 }
 

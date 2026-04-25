@@ -89,8 +89,8 @@ export async function PATCH(
     // Apply allowed fields (merge onto existing task object)
     const allowedKeys = [
       'title', 'description', 'priority', 'status', 'source',
-      'requester', 'requested_at', 'deadline', 'started_at', 'completed_at',
-      'actual_duration', 'is_duration_manual', 'notion_task_id',
+      'requester', 'requested_at', 'deadline', 'completed_at',
+      'notion_task_id',
       'slack_url', 'slack_channel', 'slack_sender',
       'delegate_to', 'follow_up_note',
       'issue_id', 'parent_task_id', 'sort_mode', 'position',

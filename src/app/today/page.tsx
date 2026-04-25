@@ -119,7 +119,6 @@ export default function TodayPage() {
   };
 
   const taskHandlers = {
-    onTimerChange: fetchAll,
     onStatusChange: handleStatusChange,
     onComplete: handleComplete,
     onDelete: (id: string) => setDeleteId(id),

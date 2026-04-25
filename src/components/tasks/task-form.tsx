@@ -39,7 +39,6 @@ export function TaskForm({ task, customStatuses = [] }: TaskFormProps) {
     deadline: task?.deadline?.slice(0, 10) ?? '',
     delegate_to: task?.delegate_to ?? '',
     follow_up_note: task?.follow_up_note ?? '',
-    actual_duration: task?.actual_duration?.toString() ?? '',
   });
 
   const [saving, setSaving] = useState(false);
@@ -49,9 +48,6 @@ export function TaskForm({ task, customStatuses = [] }: TaskFormProps) {
     const newErrors: Record<string, string> = {};
     if (form.title.length < 2) {
       newErrors.title = '제목은 2자 이상 입력해주세요';
-    }
-    if (form.actual_duration && parseInt(form.actual_duration) <= 0) {
-      newErrors.actual_duration = '소요시간은 양수여야 합니다';
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -75,10 +71,6 @@ export function TaskForm({ task, customStatuses = [] }: TaskFormProps) {
     if (isEdit) {
       payload.delegate_to = form.delegate_to || null;
       payload.follow_up_note = form.follow_up_note || null;
-      if (form.actual_duration) {
-        payload.actual_duration = parseInt(form.actual_duration);
-        payload.is_duration_manual = true;
-      }
     }
 
     const url = isEdit ? `/api/tasks/${task.id}` : '/api/tasks';
@@ -164,16 +156,9 @@ export function TaskForm({ task, customStatuses = [] }: TaskFormProps) {
         <>
           <Separator />
           <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">추가 정보</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="delegate_to">위임 대상</Label>
-              <Input id="delegate_to" value={form.delegate_to} onChange={(e) => update('delegate_to', e.target.value)} />
-            </div>
-            <div>
-              <Label htmlFor="actual_duration">소요시간 (분)</Label>
-              <Input id="actual_duration" type="number" value={form.actual_duration} onChange={(e) => update('actual_duration', e.target.value)} />
-              {errors.actual_duration && <p className="text-sm text-destructive mt-1">{errors.actual_duration}</p>}
-            </div>
+          <div>
+            <Label htmlFor="delegate_to">위임 대상</Label>
+            <Input id="delegate_to" value={form.delegate_to} onChange={(e) => update('delegate_to', e.target.value)} />
           </div>
           <div>
             <Label htmlFor="follow_up_note">후속 작업 메모</Label>

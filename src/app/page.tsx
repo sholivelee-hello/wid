@@ -231,7 +231,6 @@ export default function InboxPage() {
   }, [tasks, applyBaseFilter]);
 
   const taskHandlers = {
-    onTimerChange: fetchTasks,
     onStatusChange: handleStatusChange,
     onComplete: handleComplete,
     onDelete: (id: string) => setDeleteId(id),

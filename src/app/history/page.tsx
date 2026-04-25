@@ -10,7 +10,7 @@ import { SearchResults } from '@/components/history/search-results';
 import { TaskDetailPanel } from '@/components/tasks/task-detail-panel';
 import { apiFetch } from '@/lib/api';
 import { searchTasks } from '@/lib/search';
-import type { Task, TimeLog } from '@/lib/types';
+import type { Task } from '@/lib/types';
 import type { GCalEvent } from '@/lib/mock-gcal';
 import type { CalendarSubscription } from '@/lib/mock-calendars';
 import { Search } from 'lucide-react';
@@ -28,7 +28,6 @@ export default function HistoryPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [tasks, setTasks] = useState<Task[]>([]);
   const [events, setEvents] = useState<GCalEvent[]>([]);
-  const [timeLogs, setTimeLogs] = useState<TimeLog[]>([]);
   const [subs, setSubs] = useState<CalendarSubscription[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const debounceRef = useRef<NodeJS.Timeout>(undefined);
@@ -45,13 +44,12 @@ export default function HistoryPage() {
     const from = format(startOfMonth(monthCursor), 'yyyy-MM-dd');
     const to = format(endOfMonth(monthCursor), 'yyyy-MM-dd');
     try {
-      const [t, e, l, s] = await Promise.all([
+      const [t, e, s] = await Promise.all([
         apiFetch<Task[]>(`/api/tasks?deleted=false&from=${from}&to=${to}&dateField=either`, { suppressToast: true }),
         apiFetch<GCalEvent[]>(`/api/gcal/events?from=${from}&to=${to}`, { suppressToast: true }),
-        apiFetch<TimeLog[]>(`/api/time-logs?from=${from}&to=${to}`, { suppressToast: true }),
         apiFetch<CalendarSubscription[]>('/api/gcal/calendars', { suppressToast: true }),
       ]);
-      setTasks(t); setEvents(e); setTimeLogs(l); setSubs(s);
+      setTasks(t); setEvents(e); setSubs(s);
     } catch {}
   }, [monthCursor]);
 
@@ -126,7 +124,6 @@ export default function HistoryPage() {
               weekStart={selectedWeekStart}
               tasks={tasks}
               events={events}
-              timeLogs={timeLogs}
               subscriptions={subs}
               onTaskClick={setSelectedTaskId}
             />
@@ -135,7 +132,6 @@ export default function HistoryPage() {
               date={selectedDate}
               tasks={tasks}
               events={events}
-              timeLogs={timeLogs}
               subscriptions={subs}
               onTaskClick={setSelectedTaskId}
             />

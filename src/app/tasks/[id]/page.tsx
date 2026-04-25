@@ -2,11 +2,8 @@
 
 import { useEffect, useState, useCallback, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { Task, TimeLog } from '@/lib/types';
+import { Task } from '@/lib/types';
 import { TaskForm } from '@/components/tasks/task-form';
-import { TimerButton } from '@/components/tasks/timer-button';
-import { formatDate, minutesToHoursMinutes } from '@/lib/utils';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { TaskDetailSkeleton } from '@/components/loading/page-skeleton';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -19,7 +16,6 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
   const { id } = use(params);
   const router = useRouter();
   const [task, setTask] = useState<Task | null>(null);
-  const [timelogs, setTimelogs] = useState<TimeLog[]>([]);
   const [customStatuses, setCustomStatuses] = useState<string[]>([]);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -29,13 +25,11 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
     setLoading(true);
     setError(false);
     try {
-      const [taskData, logsData, statusData] = await Promise.all([
+      const [taskData, statusData] = await Promise.all([
         apiFetch<Task>(`/api/tasks/${id}`),
-        apiFetch<TimeLog[]>(`/api/tasks/${id}/timelogs`),
         apiFetch<{ name: string }[]>('/api/custom-statuses'),
       ]);
       setTask(taskData);
-      setTimelogs(logsData);
       setCustomStatuses(statusData.map((s) => s.name));
     } catch {
       setError(true);
@@ -65,14 +59,11 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
         <span>/</span>
         <span className="text-foreground">{task.title}</span>
       </div>
-      <div className="flex items-center gap-4">
-        <TimerButton taskId={task.id} actualDuration={task.actual_duration} onTimerChange={fetchData} />
-        {task.slack_url && (
-          <a href={task.slack_url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
-            Slack 메시지 보기
-          </a>
-        )}
-      </div>
+      {task.slack_url && (
+        <a href={task.slack_url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
+          Slack 메시지 보기
+        </a>
+      )}
       <ConfirmDialog
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
@@ -83,26 +74,6 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
       />
 
       <TaskForm task={task} customStatuses={customStatuses} />
-
-      {timelogs.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle className="text-sm">타이머 기록</CardTitle></CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {timelogs.map((log) => (
-                <div key={log.id} className="flex justify-between text-sm">
-                  <span>{formatDate(log.started_at, 'MM/dd HH:mm')}</span>
-                  <span>
-                    {log.ended_at
-                      ? minutesToHoursMinutes(Math.round((new Date(log.ended_at).getTime() - new Date(log.started_at).getTime()) / 60000))
-                      : '진행중'}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       <div className="pt-4 border-t">
         <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}>
