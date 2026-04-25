@@ -126,18 +126,45 @@ export function TaskCard({
       <CardContent className="p-4">
         <div className="flex items-center gap-3.5">
           {/* Completion toggle */}
-          <button
-            type="button"
-            className="flex-shrink-0 -m-1.5 p-1.5 rounded-full hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={(e) => { e.stopPropagation(); onComplete?.(task.id); }}
-            aria-label={isCompleted ? '완료 취소' : '완료 처리'}
-          >
-            {isCompleted ? (
-              <CheckCircle2 className="h-[18px] w-[18px] text-emerald-500" />
-            ) : (
-              <Circle className="h-[18px] w-[18px] text-muted-foreground/50 hover:text-emerald-500 transition-colors" />
-            )}
-          </button>
+          {(() => {
+            const blocked = !onComplete && !isCompleted;
+            return (
+              <button
+                type="button"
+                disabled={blocked}
+                className={cn(
+                  'flex-shrink-0 -m-1.5 p-1.5 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  blocked
+                    ? 'cursor-not-allowed opacity-50'
+                    : 'hover:bg-muted',
+                )}
+                onClick={(e) => { e.stopPropagation(); onComplete?.(task.id); }}
+                title={
+                  blocked
+                    ? 'sub-TASK가 모두 완료되어야 완료할 수 있습니다'
+                    : isCompleted ? '완료 취소' : '완료 처리'
+                }
+                aria-label={
+                  blocked
+                    ? '완료 불가 (sub-TASK 미완료)'
+                    : isCompleted ? '완료 취소' : '완료 처리'
+                }
+              >
+                {isCompleted ? (
+                  <CheckCircle2 className="h-[18px] w-[18px] text-emerald-500" />
+                ) : (
+                  <Circle
+                    className={cn(
+                      'h-[18px] w-[18px]',
+                      blocked
+                        ? 'text-muted-foreground/40'
+                        : 'text-muted-foreground/50 hover:text-emerald-500 transition-colors',
+                    )}
+                  />
+                )}
+              </button>
+            );
+          })()}
 
           {/* Title + metadata */}
           <div className="flex-1 min-w-0 space-y-1.5">
