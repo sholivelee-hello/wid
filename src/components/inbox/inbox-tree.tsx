@@ -40,6 +40,7 @@ interface Props {
   taskHandlers: TaskBranchHandlers;
   onEditIssue: (issue: Issue) => void;
   onDeleteIssue: (issue: Issue) => void;
+  onToggleSortMode: (issue: Issue) => void;
   onMutate: () => void;
 }
 
@@ -211,6 +212,7 @@ export function InboxTree({
   taskHandlers,
   onEditIssue,
   onDeleteIssue,
+  onToggleSortMode,
   onMutate,
 }: Props) {
   const tree = useMemo(() => {
@@ -357,6 +359,7 @@ export function InboxTree({
                 subCount={subCount}
                 onEdit={() => onEditIssue(issue)}
                 onDelete={() => onDeleteIssue(issue)}
+                onToggleSortMode={onToggleSortMode}
               >
                 {nodes.map(n => (
                   <DraggableTaskBranch

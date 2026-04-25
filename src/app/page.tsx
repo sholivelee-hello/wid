@@ -129,6 +129,21 @@ export default function InboxPage() {
     await handleStatusChange(taskId, newStatus);
   };
 
+  const handleToggleSortMode = async (issue: Issue) => {
+    const next = issue.sort_mode === 'sequential' ? 'checklist' : 'sequential';
+    setIssues(prev => prev.map(x => x.id === issue.id ? { ...x, sort_mode: next } : x));
+    try {
+      const updated = await apiFetch<Issue>(`/api/issues/${issue.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sort_mode: next }),
+      });
+      setIssues(prev => prev.map(x => x.id === issue.id ? updated : x));
+    } catch {
+      fetchTasks();
+    }
+  };
+
   const handleDelete = async (taskId: string) => {
     setTasks(prev => prev.filter(t => t.id !== taskId));
     try {
@@ -353,6 +368,7 @@ export default function InboxPage() {
             taskHandlers={taskHandlers}
             onEditIssue={(i) => { setAddingIssue(false); setEditingIssue(i); }}
             onDeleteIssue={(i) => setDeletingIssue(i)}
+            onToggleSortMode={handleToggleSortMode}
             onMutate={fetchTasks}
           />
         )}

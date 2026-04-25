@@ -20,6 +20,7 @@ interface Props {
   children: React.ReactNode;
   onEdit: () => void;
   onDelete: () => void;
+  onToggleSortMode?: (issue: Issue) => void;
 }
 
 export function IssueRow({
@@ -30,6 +31,7 @@ export function IssueRow({
   children,
   onEdit,
   onDelete,
+  onToggleSortMode,
 }: Props) {
   const { collapsed, toggle } = useCollapsed('issue', issue.id, false);
 
@@ -67,22 +69,44 @@ export function IssueRow({
             ⏰ {formatDate(issue.deadline, 'M월 d일')}
           </span>
         )}
-        <span
-          className={cn(
-            'inline-flex items-center gap-1 text-[10px] px-1.5 h-5 rounded-full border',
-            issue.sort_mode === 'sequential'
-              ? 'border-amber-300 text-amber-700 dark:text-amber-400'
-              : 'border-border text-muted-foreground',
-          )}
-          title={
-            issue.sort_mode === 'sequential'
-              ? '순차 워크플로우 (이전 task가 끝나야 다음 task 잠금 해제)'
-              : '체크리스트 (순서 무관)'
-          }
-        >
-          {issue.sort_mode === 'sequential' ? <Lock className="h-2.5 w-2.5" /> : null}
-          {issue.sort_mode === 'sequential' ? '순차' : '체크리스트'}
-        </span>
+        {onToggleSortMode ? (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onToggleSortMode(issue); }}
+            className={cn(
+              'inline-flex items-center gap-1 text-[10px] px-1.5 h-5 rounded-full border transition-colors',
+              issue.sort_mode === 'sequential'
+                ? 'border-amber-300 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20'
+                : 'border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground',
+            )}
+            title={
+              issue.sort_mode === 'sequential'
+                ? '순차 워크플로우 — 클릭하면 체크리스트로 전환'
+                : '체크리스트 — 클릭하면 순차로 전환'
+            }
+            aria-label="정렬 모드 전환"
+          >
+            {issue.sort_mode === 'sequential' ? <Lock className="h-2.5 w-2.5" /> : null}
+            {issue.sort_mode === 'sequential' ? '순차' : '체크리스트'}
+          </button>
+        ) : (
+          <span
+            className={cn(
+              'inline-flex items-center gap-1 text-[10px] px-1.5 h-5 rounded-full border',
+              issue.sort_mode === 'sequential'
+                ? 'border-amber-300 text-amber-700 dark:text-amber-400'
+                : 'border-border text-muted-foreground',
+            )}
+            title={
+              issue.sort_mode === 'sequential'
+                ? '순차 워크플로우 (이전 task가 끝나야 다음 task 잠금 해제)'
+                : '체크리스트 (순서 무관)'
+            }
+          >
+            {issue.sort_mode === 'sequential' ? <Lock className="h-2.5 w-2.5" /> : null}
+            {issue.sort_mode === 'sequential' ? '순차' : '체크리스트'}
+          </span>
+        )}
         <span className="text-xs text-muted-foreground ml-auto">
           TASK {doneCount}/{taskCount}
           {subCount > 0 ? ` · sub ${subCount}` : ''}
