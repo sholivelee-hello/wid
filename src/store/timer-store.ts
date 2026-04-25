@@ -5,9 +5,12 @@ interface TimerState {
   activeTimeLogId: string | null;
   startedAt: string | null;
   elapsed: number;
+  isPaused: boolean;
   intervalId: NodeJS.Timeout | null;
 
   startTimer: (taskId: string, timeLogId: string, startedAt: string) => void;
+  pauseTimer: () => void;
+  resumeTimer: () => void;
   stopTimer: () => void;
   tick: () => void;
   setFromServer: (taskId: string | null, timeLogId: string | null, startedAt: string | null) => void;
@@ -18,6 +21,7 @@ export const useTimerStore = create<TimerState>((set, get) => ({
   activeTimeLogId: null,
   startedAt: null,
   elapsed: 0,
+  isPaused: false,
   intervalId: null,
 
   startTimer: (taskId, timeLogId, startedAt) => {
@@ -27,13 +31,26 @@ export const useTimerStore = create<TimerState>((set, get) => ({
     const elapsed = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000);
     const intervalId = setInterval(() => get().tick(), 1000);
 
-    set({ activeTaskId: taskId, activeTimeLogId: timeLogId, startedAt, elapsed, intervalId });
+    set({ activeTaskId: taskId, activeTimeLogId: timeLogId, startedAt, elapsed, intervalId, isPaused: false });
+  },
+
+  pauseTimer: () => {
+    const { intervalId } = get();
+    if (intervalId) clearInterval(intervalId);
+    set({ intervalId: null, isPaused: true });
+  },
+
+  resumeTimer: () => {
+    const prev = get().intervalId;
+    if (prev) clearInterval(prev);
+    const intervalId = setInterval(() => get().tick(), 1000);
+    set({ intervalId, isPaused: false });
   },
 
   stopTimer: () => {
     const { intervalId } = get();
     if (intervalId) clearInterval(intervalId);
-    set({ activeTaskId: null, activeTimeLogId: null, startedAt: null, elapsed: 0, intervalId: null });
+    set({ activeTaskId: null, activeTimeLogId: null, startedAt: null, elapsed: 0, intervalId: null, isPaused: false });
   },
 
   tick: () => set((state) => ({ elapsed: state.elapsed + 1 })),

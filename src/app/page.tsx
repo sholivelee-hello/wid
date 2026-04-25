@@ -8,12 +8,19 @@ import { TaskListSkeleton } from '@/components/loading/page-skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { apiFetch } from '@/lib/api';
 import { TaskDetailPanel } from '@/components/tasks/task-detail-panel';
+import { useAllStatuses } from '@/lib/use-all-statuses';
+import { useDefaultStatusRenames } from '@/lib/status-renames';
 import { cn } from '@/lib/utils';
-import { Inbox, ChevronDown } from 'lucide-react';
-import { toast } from 'sonner';
+import { Inbox, ChevronDown, Plus, Pencil, Trash2 } from 'lucide-react';
+import {
+  loadViews, saveViews, loadInboxFilter, saveInboxFilter,
+  type CustomTaskView,
+} from '@/lib/custom-views';
+import { ViewEditForm } from '@/components/tasks/view-edit-form';
 
 export default function InboxPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -22,12 +29,21 @@ export default function InboxPage() {
   const [source, setSource] = useState('all');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [showCompleted, setShowCompleted] = useState(false);
-  const [showDelegated, setShowDelegated] = useState(false);
   const [sortBy, setSortBy] = useState<'priority' | 'deadline' | 'created_at'>('priority');
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const searchTimerRef = useRef<NodeJS.Timeout>(undefined);
+
+  const [statusFilter, setStatusFilter] = useState<string[]>(() => loadInboxFilter());
+
+  const [customViews, setCustomViews] = useState<CustomTaskView[]>(() => loadViews('inbox'));
+  const [addingView, setAddingView] = useState(false);
+  const [editingViewId, setEditingViewId] = useState<string | null>(null);
+  const [collapsedViews, setCollapsedViews] = useState<Set<string>>(new Set());
+  const [deleteViewId, setDeleteViewId] = useState<string | null>(null);
+
+  const allStatusOptions = useAllStatuses();
+  const defaultRenames = useDefaultStatusRenames();
 
   const handleSearchChange = (value: string) => {
     setSearch(value);
@@ -37,6 +53,10 @@ export default function InboxPage() {
 
   useEffect(() => {
     return () => { clearTimeout(searchTimerRef.current); };
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/notion/sync', { method: 'POST' }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -63,7 +83,6 @@ export default function InboxPage() {
       const data = await apiFetch<Task[]>(`/api/tasks?${params}`);
       setTasks(data);
     } catch {
-      // error toasted
     } finally {
       setLoading(false);
     }
@@ -78,7 +97,6 @@ export default function InboxPage() {
   }, [fetchTasks]);
 
   const handleStatusChange = async (taskId: string, newStatus: string) => {
-    // Optimistic update
     setTasks(prev => prev.map(t =>
       t.id === taskId ? { ...t, status: newStatus, completed_at: newStatus === '완료' ? new Date().toISOString() : t.completed_at } : t
     ));
@@ -88,10 +106,9 @@ export default function InboxPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       });
-      toast.success('상태가 변경되었습니다');
       window.dispatchEvent(new CustomEvent('task-updated'));
     } catch {
-      fetchTasks(); // revert on error
+      fetchTasks();
     }
   };
 
@@ -102,40 +119,67 @@ export default function InboxPage() {
   };
 
   const handleDelete = async (taskId: string) => {
-    const taskToDelete = tasks.find(t => t.id === taskId);
     setTasks(prev => prev.filter(t => t.id !== taskId));
     try {
       await apiFetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
-      toast.success('task가 삭제되었습니다', {
-        action: {
-          label: '실행 취소',
-          onClick: async () => {
-            try {
-              await apiFetch(`/api/tasks/${taskId}/restore`, { method: 'POST' });
-              toast.success('task가 복구되었습니다');
-              fetchTasks();
-            } catch {}
-          },
-        },
-      });
       window.dispatchEvent(new CustomEvent('task-updated'));
     } catch {
       fetchTasks();
     }
   };
 
-  // Filter by search
-  const searchFiltered = useMemo(() => {
-    if (!debouncedSearch) return tasks;
-    return tasks.filter(t => t.title.toLowerCase().includes(debouncedSearch.toLowerCase()));
-  }, [tasks, debouncedSearch]);
+  const toggleStatusFilter = (s: string) => {
+    setStatusFilter(prev => {
+      const next = prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s];
+      saveInboxFilter(next);
+      return next;
+    });
+  };
 
-  // Group tasks
+  const handleAddView = (view: CustomTaskView) => {
+    const next = [...customViews, view];
+    setCustomViews(next);
+    saveViews('inbox', next);
+    setAddingView(false);
+  };
+
+  const handleEditView = (view: CustomTaskView) => {
+    const next = customViews.map(v => v.id === view.id ? view : v);
+    setCustomViews(next);
+    saveViews('inbox', next);
+    setEditingViewId(null);
+  };
+
+  const handleDeleteView = (id: string) => {
+    const next = customViews.filter(v => v.id !== id);
+    setCustomViews(next);
+    saveViews('inbox', next);
+    setDeleteViewId(null);
+  };
+
+  const toggleCollapseView = (id: string) => {
+    setCollapsedViews(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
   const priorityOrder: Record<string, number> = { '긴급': 0, '높음': 1, '보통': 2, '낮음': 3 };
 
-  const actionRequired = useMemo(() => {
-    const filtered = searchFiltered.filter(t => !['완료', '취소', '위임'].includes(t.status));
-    return filtered.sort((a, b) => {
+  const applyBaseFilter = useCallback((list: Task[]) => {
+    if (debouncedSearch) {
+      list = list.filter(t => t.title.toLowerCase().includes(debouncedSearch.toLowerCase()));
+    }
+    return list;
+  }, [debouncedSearch]);
+
+  const mainFiltered = useMemo(() => {
+    let list = applyBaseFilter(tasks);
+    if (statusFilter.length > 0) {
+      list = list.filter(t => statusFilter.includes(t.status));
+    }
+    return list.sort((a, b) => {
       if (sortBy === 'priority') return (priorityOrder[a.priority] ?? 9) - (priorityOrder[b.priority] ?? 9);
       if (sortBy === 'deadline') {
         if (!a.deadline && !b.deadline) return 0;
@@ -143,26 +187,44 @@ export default function InboxPage() {
         if (!b.deadline) return -1;
         return a.deadline.localeCompare(b.deadline);
       }
-      return b.created_at.localeCompare(a.created_at); // newest first
+      return b.created_at.localeCompare(a.created_at);
     });
-  }, [searchFiltered, sortBy]);
+  }, [tasks, debouncedSearch, statusFilter, sortBy, applyBaseFilter]);
 
-  const delegatedCancelled = useMemo(() =>
-    searchFiltered.filter(t => ['위임', '취소'].includes(t.status)),
-    [searchFiltered]
-  );
+  const getViewTasks = useCallback((view: CustomTaskView) => {
+    let list = applyBaseFilter(tasks);
+    if (view.statuses.length > 0) {
+      list = list.filter(t => view.statuses.includes(t.status));
+    }
+    if ((view.priorities ?? []).length > 0) {
+      list = list.filter(t => view.priorities.includes(t.priority));
+    }
+    const sort = view.sortBy ?? 'priority';
+    return list.sort((a, b) => {
+      if (sort === 'priority') return (priorityOrder[a.priority] ?? 9) - (priorityOrder[b.priority] ?? 9);
+      if (sort === 'deadline') {
+        if (!a.deadline && !b.deadline) return 0;
+        if (!a.deadline) return 1;
+        if (!b.deadline) return -1;
+        return a.deadline.localeCompare(b.deadline);
+      }
+      return b.created_at.localeCompare(a.created_at);
+    });
+  }, [tasks, applyBaseFilter]);
 
-  const completedToday = useMemo(() => {
-    const todayStr = new Date().toISOString().slice(0, 10);
-    return searchFiltered.filter(t =>
-      t.status === '완료' && t.completed_at?.startsWith(todayStr)
-    );
-  }, [searchFiltered]);
+  const taskHandlers = {
+    onTimerChange: fetchTasks,
+    onStatusChange: handleStatusChange,
+    onComplete: handleComplete,
+    onDelete: (id: string) => setDeleteId(id),
+    onSelect: setSelectedTaskId,
+  };
 
   if (loading && tasks.length === 0) return <TaskListSkeleton />;
 
   return (
     <div className="space-y-4">
+      {/* Filters */}
       <div className="flex items-center gap-4 flex-wrap">
         <div className="flex-1 min-w-0">
           <TaskFilters
@@ -177,7 +239,7 @@ export default function InboxPage() {
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground">정렬:</span>
-          <Select value={sortBy} onValueChange={(v) => setSortBy(v as 'priority' | 'deadline' | 'created_at')}>
+          <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
             <SelectTrigger className="w-28 h-8 text-xs">
               <SelectValue />
             </SelectTrigger>
@@ -190,107 +252,164 @@ export default function InboxPage() {
         </div>
       </div>
 
-      <div>
-        {/* Action Required Section */}
-        <div className="mb-6">
-          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3" style={{ fontFamily: 'var(--font-heading)' }}>
-            처리 필요 <span className="text-primary">({actionRequired.length})</span>
-          </h3>
-          {actionRequired.length === 0 ? (
-            <EmptyState
-              icon={Inbox}
-              title="처리할 task가 없습니다"
-              description="모든 task를 처리했습니다! 새 task를 추가하거나 잠시 쉬세요."
-              action={{ label: '새 task 등록', href: '/tasks/new' }}
-            />
-          ) : (
-            <div className="space-y-2">
-              {actionRequired.map((task, index) => {
-                const prevTask = index > 0 ? actionRequired[index - 1] : null;
-                const showNoDeadlineDivider = sortBy === 'deadline' && prevTask?.deadline && !task.deadline;
-
-                return (
-                  <div key={task.id}>
-                    {showNoDeadlineDivider && (
-                      <div className="flex items-center gap-2 my-2">
-                        <Separator className="flex-1" />
-                        <span className="text-xs text-muted-foreground">마감일 미설정</span>
-                        <Separator className="flex-1" />
-                      </div>
-                    )}
-                    <TaskCard
-                      task={task}
-                      onTimerChange={fetchTasks}
-                      onStatusChange={handleStatusChange}
-                      onComplete={handleComplete}
-                      onDelete={(id) => setDeleteId(id)}
-                      onSelect={setSelectedTaskId}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Completed Today Section (collapsible) */}
-        {completedToday.length > 0 && (
-          <div>
+      {/* Status filter chips */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[11px] text-muted-foreground shrink-0">상태:</span>
+        {allStatusOptions.map(({ original, display, color }) => {
+          const active = statusFilter.includes(original);
+          return (
             <button
-              onClick={() => setShowCompleted(!showCompleted)}
-              aria-expanded={showCompleted}
-              className="flex items-center gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 hover:text-foreground transition-colors"
-              style={{ fontFamily: 'var(--font-heading)' }}
+              key={original}
+              type="button"
+              onClick={() => toggleStatusFilter(original)}
+              className={cn(
+                'text-[11px] h-6 px-2.5 rounded-full border transition-all',
+                active
+                  ? 'font-semibold'
+                  : 'border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground'
+              )}
+              style={active ? { backgroundColor: `${color}20`, color, borderColor: color } : {}}
             >
-              <ChevronDown className={cn("h-4 w-4 transition-transform", showCompleted && "rotate-180")} />
-              오늘 완료 <span className="text-emerald-600 dark:text-emerald-400">({completedToday.length})</span>
+              {display}
             </button>
-            {showCompleted && (
-              <div className="space-y-2 opacity-60">
-                {completedToday.map((task) => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    onTimerChange={fetchTasks}
-                    onStatusChange={handleStatusChange}
-                    onComplete={handleComplete}
-                    onDelete={(id) => setDeleteId(id)}
-                    onSelect={setSelectedTaskId}
-                  />
-                ))}
-              </div>
-            )}
+          );
+        })}
+        {statusFilter.length > 0 && (
+          <button
+            type="button"
+            onClick={() => { setStatusFilter([]); saveInboxFilter([]); }}
+            className="text-[11px] text-muted-foreground hover:text-foreground underline"
+          >
+            초기화
+          </button>
+        )}
+      </div>
+
+      {/* Main list */}
+      <div>
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3" style={{ fontFamily: 'var(--font-heading)' }}>
+          {statusFilter.length > 0
+            ? statusFilter.map(s => defaultRenames[s] ?? s).join(' · ')
+            : '모든 task'}
+          <span className="text-primary ml-1.5">({mainFiltered.length})</span>
+        </h3>
+
+        {mainFiltered.length === 0 ? (
+          <EmptyState
+            icon={Inbox}
+            title="해당하는 task가 없습니다"
+            description="다른 필터를 선택하거나 새 task를 추가하세요."
+            action={{ label: '새 task 등록', href: '/tasks/new' }}
+          />
+        ) : (
+          <div className="space-y-2">
+            {mainFiltered.map((task, index) => {
+              const prevTask = index > 0 ? mainFiltered[index - 1] : null;
+              const showDivider = sortBy === 'deadline' && prevTask?.deadline && !task.deadline;
+              return (
+                <div key={task.id}>
+                  {showDivider && (
+                    <div className="flex items-center gap-2 my-2">
+                      <Separator className="flex-1" />
+                      <span className="text-xs text-muted-foreground">마감일 미설정</span>
+                      <Separator className="flex-1" />
+                    </div>
+                  )}
+                  <TaskCard task={task} {...taskHandlers} />
+                </div>
+              );
+            })}
           </div>
         )}
+      </div>
 
-        {/* Delegated/Cancelled Section (collapsible) */}
-        {delegatedCancelled.length > 0 && (
-          <div>
-            <button
-              onClick={() => setShowDelegated(!showDelegated)}
-              aria-expanded={showDelegated}
-              className="flex items-center gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 hover:text-foreground transition-colors"
-              style={{ fontFamily: 'var(--font-heading)' }}
-            >
-              <ChevronDown className={cn("h-4 w-4 transition-transform", showDelegated && "rotate-180")} />
-              위임/취소 <span className="text-muted-foreground">({delegatedCancelled.length})</span>
-            </button>
-            {showDelegated && (
-              <div className="space-y-2 opacity-60">
-                {delegatedCancelled.map((task) => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    onTimerChange={fetchTasks}
-                    onStatusChange={handleStatusChange}
-                    onComplete={handleComplete}
-                    onDelete={(id) => setDeleteId(id)}
-                    onSelect={setSelectedTaskId}
-                  />
-                ))}
-              </div>
+      {/* Custom views */}
+      {customViews.map(view => {
+        const viewTasks = getViewTasks(view);
+        const collapsed = collapsedViews.has(view.id);
+        const isEditing = editingViewId === view.id;
+
+        return (
+          <div key={view.id}>
+            <Separator className="mb-4" />
+            {isEditing ? (
+              <ViewEditForm
+                initial={view}
+                onSave={handleEditView}
+                onCancel={() => setEditingViewId(null)}
+              />
+            ) : (
+              <>
+                <div className="flex items-center gap-1.5 mb-3">
+                  <button
+                    type="button"
+                    onClick={() => toggleCollapseView(view.id)}
+                    aria-expanded={!collapsed}
+                    className="flex items-center gap-2 flex-1 min-w-0 text-left group"
+                  >
+                    <ChevronDown className={cn(
+                      'h-4 w-4 text-muted-foreground transition-transform flex-shrink-0',
+                      collapsed && '-rotate-90'
+                    )} />
+                    <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wider truncate group-hover:text-foreground transition-colors" style={{ fontFamily: 'var(--font-heading)' }}>
+                      {view.name}
+                    </span>
+                    <span className="text-primary text-sm">({viewTasks.length})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingViewId(view.id)}
+                    className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                    aria-label="뷰 편집"
+                    title="편집"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteViewId(view.id)}
+                    className="p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-accent transition-colors"
+                    aria-label="뷰 삭제"
+                    title="삭제"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                {!collapsed && (
+                  <div className="space-y-2">
+                    {viewTasks.length === 0 ? (
+                      <p className="text-sm text-muted-foreground py-2 pl-6">해당하는 task가 없습니다.</p>
+                    ) : (
+                      viewTasks.map(task => (
+                        <TaskCard key={task.id} task={task} {...taskHandlers} />
+                      ))
+                    )}
+                  </div>
+                )}
+              </>
             )}
           </div>
+        );
+      })}
+
+      {/* Add view */}
+      <div>
+        <Separator className="mb-4" />
+        {addingView ? (
+          <ViewEditForm
+            onSave={handleAddView}
+            onCancel={() => setAddingView(false)}
+          />
+        ) : (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:text-foreground"
+            onClick={() => setAddingView(true)}
+          >
+            <Plus className="h-4 w-4 mr-1.5" />
+            뷰 추가
+          </Button>
         )}
       </div>
 
@@ -301,6 +420,15 @@ export default function InboxPage() {
         description="이 task를 휴지통으로 이동합니다."
         confirmLabel="삭제"
         onConfirm={() => { if (deleteId) handleDelete(deleteId); setDeleteId(null); }}
+      />
+
+      <ConfirmDialog
+        open={!!deleteViewId}
+        onOpenChange={(open) => !open && setDeleteViewId(null)}
+        title="뷰 삭제"
+        description="이 뷰를 삭제합니다."
+        confirmLabel="삭제"
+        onConfirm={() => { if (deleteViewId) handleDeleteView(deleteViewId); }}
       />
 
       <TaskDetailPanel

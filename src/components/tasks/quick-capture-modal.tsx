@@ -9,7 +9,6 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PRIORITIES } from '@/lib/constants';
 import { apiFetch } from '@/lib/api';
-import { toast } from 'sonner';
 import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -39,10 +38,7 @@ export function QuickCaptureModal({ open, onOpenChange, onCreated }: QuickCaptur
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || title.length < 2) {
-      toast.error('제목을 2자 이상 입력해주세요');
-      return;
-    }
+    if (!title.trim() || title.length < 2) return;
     setSaving(true);
     try {
       await apiFetch('/api/tasks', {
@@ -58,14 +54,11 @@ export function QuickCaptureModal({ open, onOpenChange, onCreated }: QuickCaptur
           deadline: deadline || null,
         }),
       });
-      toast.success('task가 등록되었습니다');
       reset();
       onOpenChange(false);
       onCreated?.();
-      // Dispatch custom event for any listening page to refetch
       window.dispatchEvent(new CustomEvent('task-created'));
     } catch {
-      // error toasted by apiFetch
     } finally {
       setSaving(false);
     }
@@ -87,6 +80,7 @@ export function QuickCaptureModal({ open, onOpenChange, onCreated }: QuickCaptur
               placeholder="task 제목을 입력하세요"
               autoFocus
               required
+              minLength={2}
             />
           </div>
           <div>
@@ -105,7 +99,7 @@ export function QuickCaptureModal({ open, onOpenChange, onCreated }: QuickCaptur
             aria-expanded={showMore}
             className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
-            <ChevronDown className={cn("h-3 w-3 transition-transform", showMore && "rotate-180")} />
+            <ChevronDown className={cn('h-3 w-3 transition-transform', showMore && 'rotate-180')} />
             추가 옵션
           </button>
 

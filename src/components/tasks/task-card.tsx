@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { TimerButton } from './timer-button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -9,10 +10,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { PRIORITY_COLORS, STATUS_COLORS, STATUS_ICONS, DEFAULT_STATUSES } from '@/lib/constants';
-import { useHiddenStatuses } from '@/lib/hidden-statuses';
+import { PRIORITY_COLORS, STATUS_ICONS, getContrastTextColor } from '@/lib/constants';
+import { getStatusColor } from '@/lib/status-colors';
+import { useAllStatuses } from '@/lib/use-all-statuses';
+import { useDefaultStatusRenames } from '@/lib/status-renames';
 import { Task } from '@/lib/types';
 import { formatDate, cn, getNotionPageUrl } from '@/lib/utils';
+import { toggleTodayTask, getTodayTaskIds } from '@/lib/today-tasks';
 import {
   Circle,
   CheckCircle2,
@@ -25,8 +29,8 @@ import {
   CalendarDays,
   FileText,
   MessageSquare,
+  Sun,
 } from 'lucide-react';
-import { toast } from 'sonner';
 
 interface TaskCardProps {
   task: Task;
@@ -57,14 +61,22 @@ export function TaskCard({
   onDelete,
   onSelect,
 }: TaskCardProps) {
-  const hiddenStatuses = useHiddenStatuses();
-  const visibleDefaults = DEFAULT_STATUSES.filter(s => !hiddenStatuses.has(s));
+  const allStatuses = useAllStatuses();
+  const defaultRenames = useDefaultStatusRenames();
+
   const isCompleted = task.status === '완료';
   const isNew = (Date.now() - new Date(task.created_at).getTime()) < 2 * 60 * 60 * 1000;
   const priorityColor = PRIORITY_COLORS[task.priority];
-  const statusColor = STATUS_COLORS[task.status] ?? '#6B7280';
+  const statusColor = allStatuses.find(s => s.original === task.status)?.color ?? getStatusColor(task.status);
 
-  // Deadline calculation
+  const [isTodayTask, setIsTodayTask] = useState(() => getTodayTaskIds().has(task.id));
+
+  useEffect(() => {
+    const handler = () => setIsTodayTask(getTodayTaskIds().has(task.id));
+    window.addEventListener('today-tasks-changed', handler);
+    return () => window.removeEventListener('today-tasks-changed', handler);
+  }, [task.id]);
+
   let deadlineTone: 'overdue' | 'today' | 'soon' | 'normal' = 'normal';
   if (task.deadline) {
     const d = new Date(task.deadline);
@@ -84,6 +96,11 @@ export function TaskCard({
     deadlineTone === 'overdue' ? ' · 기한 초과' :
     deadlineTone === 'today' ? ' · 오늘' : '';
 
+  const handleStatusSelect = (val: string | null) => {
+    if (!val) return;
+    onStatusChange?.(task.id, val);
+  };
+
   return (
     <Card
       tabIndex={0}
@@ -92,6 +109,8 @@ export function TaskCard({
         'hover:bg-accent/30',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         isCompleted && 'opacity-60',
+        task.priority === '긴급' && 'border-l-[3px] border-l-red-500',
+        task.priority === '높음' && 'border-l-[3px] border-l-amber-500',
       )}
       onClick={() => {
         if (onSelect) onSelect(task.id);
@@ -122,14 +141,11 @@ export function TaskCard({
 
           {/* Title + metadata */}
           <div className="flex-1 min-w-0 space-y-1.5">
-            {/* Title row */}
             <div className="flex items-center gap-2">
-              <span
-                className={cn(
-                  'font-medium text-sm leading-snug truncate',
-                  isCompleted && 'line-through text-muted-foreground'
-                )}
-              >
+              <span className={cn(
+                'font-medium text-sm leading-snug truncate',
+                isCompleted && 'line-through text-muted-foreground'
+              )}>
                 {task.title}
               </span>
               {isNew && (
@@ -141,22 +157,15 @@ export function TaskCard({
               )}
             </div>
 
-            {/* Metadata row */}
-            <div className="flex items-center gap-x-2.5 gap-y-1 text-xs flex-wrap text-muted-foreground">
-              {/* Priority — muted text with colored dot */}
-              <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                <span
-                  className="h-1.5 w-1.5 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: priorityColor }}
-                  aria-hidden="true"
-                />
-                {task.priority}
-              </span>
+            {task.notion_issue && (
+              <div className="text-xs text-muted-foreground/70 truncate">
+                {task.notion_issue}
+              </div>
+            )}
 
-              {/* Deadline */}
+            <div className="flex items-center gap-x-2.5 gap-y-1 text-xs flex-wrap text-muted-foreground">
               {task.deadline && (
                 <>
-                  <Dot />
                   <span className={cn('inline-flex items-center gap-1', deadlineClass)}>
                     <CalendarDays className="h-3 w-3" aria-hidden="true" />
                     {formatDate(task.deadline, 'M월 d일')}{deadlineSuffix}
@@ -164,7 +173,6 @@ export function TaskCard({
                 </>
               )}
 
-              {/* Requester */}
               {task.requester && (
                 <>
                   <Dot />
@@ -175,7 +183,6 @@ export function TaskCard({
                 </>
               )}
 
-              {/* Accumulated time */}
               {task.actual_duration != null && task.actual_duration > 0 && (
                 <>
                   <Dot />
@@ -186,7 +193,6 @@ export function TaskCard({
                 </>
               )}
 
-              {/* Source links — subtle icon-only, natural flow (no ml-auto) */}
               {task.source === 'notion' && task.notion_task_id && (
                 <>
                   <Dot />
@@ -224,47 +230,30 @@ export function TaskCard({
             </div>
           </div>
 
-          {/* Actions — consistent h-8 row, visually calm */}
-          <div className="flex items-center gap-1 flex-shrink-0">
-            {/* Status select — neutral border, muted text, colored dots in dropdown */}
+          {/* Actions */}
+          <div
+            className="flex items-center gap-1 flex-shrink-0"
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
             {onStatusChange ? (
-              <Select
-                value={task.status}
-                onValueChange={(val) => { if (val) onStatusChange(task.id, val); }}
-              >
+              <Select value={task.status} onValueChange={handleStatusSelect}>
                 <SelectTrigger
-                  className="h-8 text-xs px-2.5 gap-1.5 border border-border bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground transition-colors focus-visible:ring-2 focus-visible:ring-ring"
-                  onClick={(e) => e.stopPropagation()}
+                  className="h-7 text-[11px] px-2.5 border-0 rounded-full font-semibold focus-visible:ring-2 focus-visible:ring-ring min-w-0"
+                  style={{ backgroundColor: statusColor, color: getContrastTextColor(statusColor) }}
                   aria-label="상태 변경"
                 >
-                  {STATUS_ICONS[task.status] && (() => {
-                    const Icon = STATUS_ICONS[task.status];
-                    return (
-                      <span className="flex items-center gap-1.5">
-                        <span
-                          className="h-1.5 w-1.5 rounded-full flex-shrink-0"
-                          style={{ backgroundColor: statusColor }}
-                          aria-hidden="true"
-                        />
-                        <Icon className="h-3.5 w-3.5 flex-shrink-0" />
-                      </span>
-                    );
-                  })()}
-                  <SelectValue />
+                  {defaultRenames[task.status] ?? task.status}
                 </SelectTrigger>
                 <SelectContent>
-                  {visibleDefaults.map((s) => {
-                    const Icon = STATUS_ICONS[s];
+                  {allStatuses.map(({ original, display, color: optColor }) => {
+                    const Icon = STATUS_ICONS[original];
                     return (
-                      <SelectItem key={s} value={s}>
+                      <SelectItem key={original} value={original}>
                         <div className="flex items-center gap-2">
-                          <span
-                            className="h-2 w-2 rounded-full flex-shrink-0"
-                            style={{ backgroundColor: STATUS_COLORS[s] }}
-                            aria-hidden="true"
-                          />
+                          <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: optColor }} aria-hidden="true" />
                           {Icon && <Icon className="h-3.5 w-3.5 text-muted-foreground" />}
-                          <span>{s}</span>
+                          <span>{display}</span>
                         </div>
                       </SelectItem>
                     );
@@ -273,11 +262,7 @@ export function TaskCard({
               </Select>
             ) : (
               <span className="inline-flex items-center gap-1.5 h-8 text-xs px-2.5 rounded-md border border-border text-muted-foreground">
-                <span
-                  className="h-1.5 w-1.5 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: statusColor }}
-                  aria-hidden="true"
-                />
+                <span className="h-1.5 w-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: statusColor }} aria-hidden="true" />
                 {STATUS_ICONS[task.status] && (() => {
                   const Icon = STATUS_ICONS[task.status];
                   return <Icon className="h-3.5 w-3.5" />;
@@ -286,7 +271,6 @@ export function TaskCard({
               </span>
             )}
 
-            {/* Timer (compact in card context) */}
             <TimerButton
               taskId={task.id}
               actualDuration={task.actual_duration}
@@ -294,7 +278,6 @@ export function TaskCard({
               compact
             />
 
-            {/* Overflow */}
             <DropdownMenu>
               <DropdownMenuTrigger
                 className="inline-flex items-center justify-center rounded-md h-8 w-8 p-0 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -307,30 +290,30 @@ export function TaskCard({
                 <DropdownMenuItem
                   onClick={(e) => {
                     e.stopPropagation();
+                    toggleTodayTask(task.id);
+                  }}
+                >
+                  <Sun className="h-4 w-4 mr-2" />
+                  {isTodayTask ? '오늘에서 제거' : '오늘에 추가'}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
                     onStatusChange?.(task.id, '위임');
-                    toast.success('위임으로 변경되었습니다. 위임 대상은 상세 패널에서 입력하세요.');
                   }}
                 >
                   <UserPlus className="h-4 w-4 mr-2" />
                   위임
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDelete?.(task.id);
-                  }}
+                  onClick={(e) => { e.stopPropagation(); onDelete?.(task.id); }}
                   className="text-destructive focus:text-destructive"
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
                   삭제
                 </DropdownMenuItem>
                 {task.slack_url && (
-                  <DropdownMenuItem
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      window.open(task.slack_url!, '_blank');
-                    }}
-                  >
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); window.open(task.slack_url!, '_blank'); }}>
                     <ExternalLink className="h-4 w-4 mr-2" />
                     Slack 보기
                   </DropdownMenuItem>
@@ -340,6 +323,7 @@ export function TaskCard({
           </div>
         </div>
       </CardContent>
+
     </Card>
   );
 }

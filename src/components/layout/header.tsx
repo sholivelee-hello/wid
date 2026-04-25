@@ -18,11 +18,11 @@ import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
 import { navItems } from '@/lib/nav-items';
 import { QuickCaptureModal } from '@/components/tasks/quick-capture-modal';
-import { CalendarSubscriptions } from './calendar-subscriptions';
 
 const pageTitles: Record<string, string> = {
   '/': '인박스',
   '/today': '오늘',
+  '/calendar': '캘린더',
   '/history': '히스토리',
   '/settings': '설정',
   '/tasks/new': '새 task',
@@ -98,9 +98,6 @@ export function Header() {
                   );
                 })}
               </nav>
-              <div className="border-t pt-2 mt-2">
-                <CalendarSubscriptions />
-              </div>
             </SheetContent>
           </Sheet>
           <h2 className="text-lg font-semibold">{title}</h2>

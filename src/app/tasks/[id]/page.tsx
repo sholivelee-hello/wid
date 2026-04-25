@@ -11,7 +11,6 @@ import { Button } from '@/components/ui/button';
 import { TaskDetailSkeleton } from '@/components/loading/page-skeleton';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { apiFetch } from '@/lib/api';
-import { toast } from 'sonner';
 import { Trash2, AlertCircle } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 import Link from 'next/link';
@@ -48,7 +47,6 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
   const handleDelete = async () => {
     try {
       await apiFetch(`/api/tasks/${id}`, { method: 'DELETE' });
-      toast.success('task가 삭제되었습니다');
       router.push('/');
     } catch {
       // error already toasted by apiFetch

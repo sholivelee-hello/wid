@@ -11,7 +11,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { navItems } from '@/lib/nav-items';
-import { CalendarSubscriptions } from './calendar-subscriptions';
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -56,11 +55,23 @@ export function Sidebar() {
         collapsed ? 'w-16' : 'w-60'
       )}
     >
-      <div className={cn('px-3 py-4', collapsed ? 'text-center' : '')}>
-        <h1 className={cn('font-bold', collapsed ? 'text-base' : 'text-xl')}>
-          {collapsed ? 'W' : 'WID'}
-        </h1>
-        <div className="h-1 w-8 bg-primary rounded-full mt-1 mx-auto" />
+      {/* Logo + toggle */}
+      <div className={cn('flex items-center justify-between px-2 py-3', collapsed && 'justify-center')}>
+        {!collapsed && (
+          <div>
+            <h1 className="font-bold text-xl tracking-tight" style={{ fontFamily: 'var(--font-heading)' }}>WID</h1>
+            <div className="h-0.5 w-6 bg-primary rounded-full mt-0.5" />
+          </div>
+        )}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={toggleCollapsed}
+          className="h-8 w-8 text-sidebar-foreground/60 hover:text-sidebar-foreground"
+          aria-label={collapsed ? '사이드바 펼치기' : '사이드바 접기'}
+        >
+          {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+        </Button>
       </div>
       <nav className="flex flex-col gap-1 flex-1">
         {navItems.map((item, idx) => {
@@ -93,20 +104,6 @@ export function Sidebar() {
           );
         })}
       </nav>
-      {!collapsed && (
-        <div className="border-t border-sidebar-border mt-2 pt-1">
-          <CalendarSubscriptions />
-        </div>
-      )}
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={toggleCollapsed}
-        className="self-center mt-2"
-        aria-label={collapsed ? '사이드바 펼치기' : '사이드바 접기'}
-      >
-        {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-      </Button>
     </aside>
   );
 }

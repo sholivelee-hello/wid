@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Copy, Check } from 'lucide-react';
-import { toast } from 'sonner';
 
 export function SlackSettings() {
   const triggerEmoji = process.env.NEXT_PUBLIC_SLACK_TRIGGER_EMOJI ?? 'eyes';
@@ -15,7 +14,6 @@ export function SlackSettings() {
   const handleCopy = () => {
     navigator.clipboard.writeText(webhookUrl);
     setCopied(true);
-    toast.success('클립보드에 복사되었습니다');
     setTimeout(() => setCopied(false), 2000);
   };
 

@@ -32,7 +32,7 @@ const notoSansKR = Noto_Sans_KR({
 });
 
 export const metadata: Metadata = {
-  title: "WID - Work Diary",
+  title: "WID — What I Do",
   description: "개인 업무일지 시스템",
 };
 

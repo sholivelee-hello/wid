@@ -5,6 +5,7 @@ import { format, startOfMonth, endOfMonth, startOfWeek } from 'date-fns';
 import { Input } from '@/components/ui/input';
 import { EventMonthGrid } from '@/components/dashboard/event-month-grid';
 import { DayDetailPanel } from '@/components/history/day-detail-panel';
+import { WeekDetailPanel } from '@/components/history/week-detail-panel';
 import { SearchResults } from '@/components/history/search-results';
 import { TaskDetailPanel } from '@/components/tasks/task-detail-panel';
 import { apiFetch } from '@/lib/api';
@@ -14,9 +15,15 @@ import type { GCalEvent } from '@/lib/mock-gcal';
 import type { CalendarSubscription } from '@/lib/mock-calendars';
 import { Search } from 'lucide-react';
 
+type ViewMode = 'day' | 'week';
+
 export default function HistoryPage() {
   const [monthCursor, setMonthCursor] = useState(new Date());
+  const [viewMode, setViewMode] = useState<ViewMode>('day');
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
+  const [selectedWeekStart, setSelectedWeekStart] = useState<Date | null>(() =>
+    startOfWeek(new Date(), { weekStartsOn: 1 })
+  );
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -44,10 +51,7 @@ export default function HistoryPage() {
         apiFetch<TimeLog[]>(`/api/time-logs?from=${from}&to=${to}`, { suppressToast: true }),
         apiFetch<CalendarSubscription[]>('/api/gcal/calendars', { suppressToast: true }),
       ]);
-      setTasks(t);
-      setEvents(e);
-      setTimeLogs(l);
-      setSubs(s);
+      setTasks(t); setEvents(e); setTimeLogs(l); setSubs(s);
     } catch {}
   }, [monthCursor]);
 
@@ -69,6 +73,12 @@ export default function HistoryPage() {
     return new Set(matches.map(t => (t.completed_at ?? t.created_at).slice(0, 10)));
   }, [tasks, debouncedSearch]);
 
+  const clearSearch = () => { setSearch(''); setDebouncedSearch(''); };
+
+  const gridSelectedDate = viewMode === 'week' && selectedWeekStart
+    ? selectedWeekStart
+    : (selectedDate ?? new Date());
+
   return (
     <div className="space-y-4 max-w-7xl">
       <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--font-heading)' }}>
@@ -76,31 +86,33 @@ export default function HistoryPage() {
       </h1>
 
       <div className="relative max-w-lg">
-        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" aria-hidden="true" />
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" aria-hidden="true" />
         <Input
           value={search}
           onChange={(e) => handleSearchChange(e.target.value)}
           placeholder="task 제목/설명/요청자/위임대상 검색..."
           aria-label="task 검색"
-          className="pl-8"
+          className="pl-9"
         />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
         <div>
           <EventMonthGrid
-            selectedDate={selectedDate ?? new Date()}
+            selectedDate={gridSelectedDate}
             monthCursor={monthCursor}
             onMonthChange={setMonthCursor}
-            onWeekSelect={(d) => setSelectedDate(startOfWeek(d, { weekStartsOn: 1 }))}
-            onDaySelect={(d) => {
-              if (debouncedSearch) {
-                setSearch('');
-                setDebouncedSearch('');
-              }
-              setSelectedDate(d);
+            onWeekSelect={(d) => {
+              if (debouncedSearch) clearSearch();
+              setSelectedWeekStart(startOfWeek(d, { weekStartsOn: 1 }));
+              setViewMode('week');
             }}
-            events={events}
+            onDaySelect={(d) => {
+              if (debouncedSearch) clearSearch();
+              setSelectedDate(d);
+              setViewMode('day');
+            }}
+            events={events.filter(e => e.calendarId === 'me')}
             completedCountByDate={completedCountByDate}
             searchHighlightDates={searchMatchDates}
           />
@@ -108,9 +120,14 @@ export default function HistoryPage() {
 
         <div className="border rounded-lg p-4 bg-card min-h-[400px]">
           {debouncedSearch ? (
-            <SearchResults
+            <SearchResults tasks={tasks} query={debouncedSearch} onTaskClick={setSelectedTaskId} />
+          ) : viewMode === 'week' ? (
+            <WeekDetailPanel
+              weekStart={selectedWeekStart}
               tasks={tasks}
-              query={debouncedSearch}
+              events={events}
+              timeLogs={timeLogs}
+              subscriptions={subs}
               onTaskClick={setSelectedTaskId}
             />
           ) : (

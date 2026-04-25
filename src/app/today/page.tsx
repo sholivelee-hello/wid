@@ -4,70 +4,82 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { Task } from '@/lib/types';
-import type { GCalEvent } from '@/lib/mock-gcal';
 import { TaskCard } from '@/components/tasks/task-card';
 import { TaskDetailPanel } from '@/components/tasks/task-detail-panel';
-import { TodayTimeline } from '@/components/today/today-timeline';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { apiFetch } from '@/lib/api';
-import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { CheckCircle2, ChevronDown, ListTodo } from 'lucide-react';
+import { DEFAULT_STATUSES } from '@/lib/constants';
+import { useAllStatuses } from '@/lib/use-all-statuses';
+import { getTodayTaskIds } from '@/lib/today-tasks';
+import { ChevronDown, Sun } from 'lucide-react';
 
 export default function TodayPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [events, setEvents] = useState<GCalEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [showCompleted, setShowCompleted] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [todayIds, setTodayIds] = useState<Set<string>>(() => getTodayTaskIds());
+
+  const allStatuses = useAllStatuses();
 
   const today = new Date();
-  const todayStr = format(today, 'yyyy-MM-dd');
+  const dateLabel = format(today, 'M월 d일 (EEEE)', { locale: ko });
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [taskData, eventData] = await Promise.all([
-        apiFetch<Task[]>('/api/tasks?deleted=false', { suppressToast: true }),
-        apiFetch<GCalEvent[]>(`/api/gcal/events?from=${todayStr}&to=${todayStr}`, { suppressToast: true }),
-      ]);
+      const taskData = await apiFetch<Task[]>('/api/tasks?deleted=false', { suppressToast: true });
       setTasks(taskData);
-      setEvents(eventData);
     } catch {}
     finally { setLoading(false); }
-  }, [todayStr]);
+  }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   useEffect(() => {
-    const handler = () => fetchAll();
+    const handler = () => {
+      fetchAll();
+      setTodayIds(getTodayTaskIds());
+    };
+    const todayHandler = () => setTodayIds(getTodayTaskIds());
     window.addEventListener('task-created', handler);
     window.addEventListener('task-updated', handler);
+    window.addEventListener('today-tasks-changed', todayHandler);
     return () => {
       window.removeEventListener('task-created', handler);
       window.removeEventListener('task-updated', handler);
+      window.removeEventListener('today-tasks-changed', todayHandler);
     };
   }, [fetchAll]);
 
-  // "오늘 할 task" filter. The /api/tasks?deleted=false call already excludes
-  // is_deleted tasks (API treats any value !== 'true' as false).
-  const todoTasks = useMemo(() => {
-    return tasks.filter(t => {
-      if (['완료', '위임', '취소'].includes(t.status)) return false;
-      if (t.status === '진행중') return true;
-      if (t.deadline && t.deadline.slice(0, 10) <= todayStr) return true;
-      if (t.started_at && t.started_at.slice(0, 10) === todayStr) return true;
-      return false;
-    });
-  }, [tasks, todayStr]);
+  // 오늘에 추가된 task들
+  const todayTasks = useMemo(() =>
+    tasks.filter(t => todayIds.has(t.id)),
+    [tasks, todayIds]
+  );
 
-  const completedToday = useMemo(() => {
-    return tasks.filter(t =>
-      t.status === '완료' && t.completed_at?.startsWith(todayStr)
-    );
-  }, [tasks, todayStr]);
+  // 상태별 그룹핑 (DEFAULT_STATUSES 순서 우선, 커스텀 상태 뒤에)
+  const statusGroups = useMemo(() => {
+    const statusOrder = [
+      ...DEFAULT_STATUSES,
+      ...allStatuses.filter(s => s.isCustom).map(s => s.original),
+    ];
+    const groups = new Map<string, Task[]>();
+    for (const status of statusOrder) {
+      const group = todayTasks.filter(t => t.status === status);
+      if (group.length > 0) groups.set(status, group);
+    }
+    // 혹시 statusOrder에 없는 상태 처리
+    for (const task of todayTasks) {
+      if (!groups.has(task.status)) {
+        groups.set(task.status, [task]);
+      }
+    }
+    return groups;
+  }, [todayTasks, allStatuses]);
 
   const handleStatusChange = async (taskId: string, newStatus: string) => {
     setTasks(prev => prev.map(t =>
@@ -81,7 +93,6 @@ export default function TodayPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       });
-      toast.success('상태가 변경되었습니다');
       window.dispatchEvent(new CustomEvent('task-updated'));
     } catch { fetchAll(); }
   };
@@ -95,23 +106,31 @@ export default function TodayPage() {
     setTasks(prev => prev.filter(t => t.id !== taskId));
     try {
       await apiFetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
-      toast.success('task가 삭제되었습니다', {
-        action: {
-          label: '실행 취소',
-          onClick: async () => {
-            try {
-              await apiFetch(`/api/tasks/${taskId}/restore`, { method: 'POST' });
-              toast.success('복구되었습니다');
-              fetchAll();
-            } catch {}
-          },
-        },
-      });
       window.dispatchEvent(new CustomEvent('task-updated'));
     } catch { fetchAll(); }
   };
 
-  const dateLabel = format(today, 'M월 d일 (EEEE)', { locale: ko });
+  const toggleGroup = (status: string) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(status)) next.delete(status); else next.add(status);
+      return next;
+    });
+  };
+
+  const taskHandlers = {
+    onTimerChange: fetchAll,
+    onStatusChange: handleStatusChange,
+    onComplete: handleComplete,
+    onDelete: (id: string) => setDeleteId(id),
+    onSelect: setSelectedTaskId,
+  };
+
+  const getStatusDisplay = (status: string) =>
+    allStatuses.find(s => s.original === status)?.display ?? status;
+
+  const getStatusColor = (status: string) =>
+    allStatuses.find(s => s.original === status)?.color ?? '#6B7280';
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -120,81 +139,61 @@ export default function TodayPage() {
           ☀️ 오늘, {dateLabel}
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          오늘 일정 {events.length}건 · 처리할 task {todoTasks.length}건
+          {todayTasks.length > 0
+            ? `오늘 task ${todayTasks.length}건`
+            : '인박스에서 task를 "오늘에 추가"하면 여기에 표시됩니다.'}
         </p>
       </div>
 
-      <section>
-        <h2 className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider" style={{ fontFamily: 'var(--font-heading)' }}>
-          🗓️ 오늘의 일정
-        </h2>
-        {loading ? (
-          <div className="h-40 rounded-md bg-muted/30 animate-pulse" />
-        ) : (
-          <TodayTimeline events={events} />
-        )}
-      </section>
-
-      <section>
-        <h2 className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider" style={{ fontFamily: 'var(--font-heading)' }}>
-          📋 오늘 할 task
-        </h2>
-        {loading && todoTasks.length === 0 ? (
-          <div className="space-y-2">
-            {[1,2,3].map(i => <div key={i} className="h-20 rounded-md bg-muted/30 animate-pulse" />)}
-          </div>
-        ) : todoTasks.length === 0 ? (
-          <EmptyState
-            icon={ListTodo}
-            title="오늘 처리할 task가 없습니다"
-            description="새 task를 추가하거나 잠시 쉬세요"
-          />
-        ) : (
-          <div className="space-y-2">
-            {todoTasks.map(task => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                onTimerChange={fetchAll}
-                onStatusChange={handleStatusChange}
-                onComplete={handleComplete}
-                onDelete={(id) => setDeleteId(id)}
-                onSelect={setSelectedTaskId}
-              />
-            ))}
-          </div>
-        )}
-      </section>
-
-      {completedToday.length > 0 && (
-        <section>
-          <button
-            type="button"
-            onClick={() => setShowCompleted(!showCompleted)}
-            aria-expanded={showCompleted}
-            className="flex items-center gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors mb-3"
-            style={{ fontFamily: 'var(--font-heading)' }}
-          >
-            <ChevronDown className={cn('h-4 w-4 transition-transform', showCompleted && 'rotate-180')} />
-            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-            오늘 완료 <span className="text-emerald-600 dark:text-emerald-400">({completedToday.length})</span>
-          </button>
-          {showCompleted && (
-            <div className="space-y-2 opacity-70">
-              {completedToday.map(task => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  onTimerChange={fetchAll}
-                  onStatusChange={handleStatusChange}
-                  onComplete={handleComplete}
-                  onDelete={(id) => setDeleteId(id)}
-                  onSelect={setSelectedTaskId}
-                />
-              ))}
-            </div>
-          )}
-        </section>
+      {loading && todayTasks.length === 0 ? (
+        <div className="space-y-2">
+          {[1, 2, 3].map(i => <div key={i} className="h-20 rounded-md bg-muted/30 animate-pulse" />)}
+        </div>
+      ) : todayTasks.length === 0 ? (
+        <EmptyState
+          icon={Sun}
+          title="오늘 할 task가 없습니다"
+          description="인박스에서 task 카드의 ⋯ 메뉴 → '오늘에 추가'로 task를 등록하세요."
+        />
+      ) : (
+        <div className="space-y-4">
+          {[...statusGroups.entries()].map(([status, groupTasks]) => {
+            const collapsed = collapsedGroups.has(status);
+            const color = getStatusColor(status);
+            const display = getStatusDisplay(status);
+            return (
+              <section key={status}>
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(status)}
+                  aria-expanded={!collapsed}
+                  className="flex items-center gap-2 w-full text-left mb-3 group"
+                >
+                  <ChevronDown className={cn(
+                    'h-4 w-4 text-muted-foreground transition-transform flex-shrink-0',
+                    collapsed && '-rotate-90'
+                  )} />
+                  <span
+                    className="text-xs font-semibold px-2 py-0.5 rounded-full"
+                    style={{ backgroundColor: `${color}20`, color }}
+                  >
+                    {display}
+                  </span>
+                  <span className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">
+                    ({groupTasks.length})
+                  </span>
+                </button>
+                {!collapsed && (
+                  <div className="space-y-2">
+                    {groupTasks.map(task => (
+                      <TaskCard key={task.id} task={task} {...taskHandlers} />
+                    ))}
+                  </div>
+                )}
+              </section>
+            );
+          })}
+        </div>
       )}
 
       <TaskDetailPanel

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useReducer } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,9 +14,9 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Task, TimeLog } from '@/lib/types';
 import { DEFAULT_STATUSES, PRIORITIES } from '@/lib/constants';
 import { useHiddenStatuses } from '@/lib/hidden-statuses';
+import { useDefaultStatusRenames } from '@/lib/status-renames';
 import { formatDate, minutesToHoursMinutes, cn, getNotionPageUrl } from '@/lib/utils';
 import { apiFetch } from '@/lib/api';
-import { toast } from 'sonner';
 import { TimerButton } from './timer-button';
 import { Trash2, ExternalLink, ChevronDown, Clock, Save, X } from 'lucide-react';
 
@@ -35,7 +35,6 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPa
   const [confirmDeleteLogId, setConfirmDeleteLogId] = useState<string | null>(null);
   const [showExtras, setShowExtras] = useState(false);
 
-  // Editable fields
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState('');
@@ -58,7 +57,6 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPa
       setTask(taskData);
       setTimelogs(logsData);
       setCustomStatuses(statusData.map(s => s.name));
-      // Populate form
       setTitle(taskData.title);
       setDescription(taskData.description ?? '');
       setStatus(taskData.status);
@@ -68,7 +66,6 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPa
       setRequester(taskData.requester ?? '');
       setFollowUpNote(taskData.follow_up_note ?? '');
     } catch {
-      toast.error('task를 불러올 수 없습니다');
       onClose();
     } finally {
       setLoading(false);
@@ -79,7 +76,6 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPa
     if (taskId) fetchTask();
   }, [taskId, fetchTask]);
 
-  // Instant save for dropdowns (status, priority)
   const handleInstantSave = async (field: string, value: string) => {
     if (!taskId) return;
     try {
@@ -89,9 +85,7 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPa
         body: JSON.stringify({ [field]: value }),
       });
       onTaskUpdated?.();
-    } catch {
-      // error toasted by apiFetch
-    }
+    } catch {}
   };
 
   const handleStatusChange = (v: string | null) => {
@@ -106,7 +100,6 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPa
     handleInstantSave('priority', v);
   };
 
-  // Explicit save for text fields
   const handleSave = async () => {
     if (!taskId) return;
     setSaving(true);
@@ -122,10 +115,8 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPa
           follow_up_note: followUpNote || null,
         }),
       });
-      toast.success('저장되었습니다');
       onTaskUpdated?.();
     } catch {
-      // error toasted by apiFetch
     } finally {
       setSaving(false);
     }
@@ -135,16 +126,14 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPa
     if (!taskId) return;
     try {
       await apiFetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
-      toast.success('task가 삭제되었습니다');
       onClose();
       onTaskUpdated?.();
-    } catch {
-      // error toasted by apiFetch
-    }
+    } catch {}
   };
 
   const hiddenStatuses = useHiddenStatuses();
-  const allStatuses = [...DEFAULT_STATUSES.filter(s => !hiddenStatuses.has(s)), ...customStatuses];
+  const defaultRenames = useDefaultStatusRenames();
+  const visibleDefaultStatuses = DEFAULT_STATUSES.filter(s => !hiddenStatuses.has(s));
 
   return (
     <>
@@ -162,8 +151,8 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPa
               <Skeleton className="h-24 w-full" />
             </div>
           ) : task ? (
-            <div className={cn("space-y-5 mt-4 px-4 pb-4", loading && "opacity-50 transition-opacity")}>
-              {/* Title (editable) */}
+            <div className={cn('space-y-5 mt-4 px-4 pb-4', loading && 'opacity-50 transition-opacity')}>
+              {/* Title */}
               <div>
                 <Input
                   value={title}
@@ -183,6 +172,11 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPa
                   className="text-lg font-semibold border border-transparent hover:border-border focus:border-border px-2 py-1 rounded transition-colors shadow-none focus-visible:ring-1"
                   style={{ fontFamily: 'var(--font-heading)' }}
                 />
+                {task.notion_issue && (
+                  <div className="text-xs text-muted-foreground/70 mt-0.5 truncate">
+                    {task.notion_issue}
+                  </div>
+                )}
                 <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
                   {task.source === 'notion' && <Badge className="bg-black text-white text-[10px] px-1.5 py-0 rounded">Notion</Badge>}
                   {task.source === 'slack' && <Badge className="bg-purple-600 text-white text-[10px] px-1.5 py-0 rounded">Slack</Badge>}
@@ -202,14 +196,19 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPa
                 </div>
               </div>
 
-              {/* Quick Action Bar */}
+              {/* Status + Priority */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs text-muted-foreground">상태</Label>
                   <Select value={status} onValueChange={handleStatusChange}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {allStatuses.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                      {visibleDefaultStatuses.map(s => (
+                        <SelectItem key={s} value={s}>{defaultRenames[s] ?? s}</SelectItem>
+                      ))}
+                      {customStatuses.map(s => (
+                        <SelectItem key={s} value={s}>{s}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -223,6 +222,7 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPa
                   </Select>
                 </div>
               </div>
+
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -244,19 +244,11 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPa
 
               <Separator />
 
-              {/* Description */}
               <div>
                 <Label className="text-xs text-muted-foreground">설명</Label>
-                <Textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="task 설명..."
-                  rows={3}
-                  className="mt-1"
-                />
+                <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="task 설명..." rows={3} className="mt-1" />
               </div>
 
-              {/* Collapsible extras */}
               <button
                 type="button"
                 onClick={() => setShowExtras(!showExtras)}
@@ -267,7 +259,6 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPa
                 추가 정보
               </button>
 
-              {/* Time Sessions — always visible when there are logs */}
               {timelogs.length > 0 && (() => {
                 const completedLogs = timelogs.filter(l => l.ended_at);
                 const activeLogs = timelogs.filter(l => !l.ended_at);
@@ -288,26 +279,21 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPa
                           : 0;
                         return (
                           <div key={log.id} className={cn(
-                            "group flex items-center justify-between text-xs rounded px-2 py-1",
-                            isActive ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground"
+                            'group flex items-center justify-between text-xs rounded px-2 py-1',
+                            isActive ? 'bg-primary/10 text-primary font-medium' : 'text-muted-foreground'
                           )}>
                             <div className="flex items-center gap-2">
                               <span className="text-muted-foreground/60 w-6">#{timelogs.length - index}</span>
                               <span>{formatDate(log.started_at, 'MM/dd HH:mm')}</span>
-                              {log.ended_at && (
-                                <span>→ {formatDate(log.ended_at, 'HH:mm')}</span>
-                              )}
+                              {log.ended_at && <span>→ {formatDate(log.ended_at, 'HH:mm')}</span>}
                             </div>
                             <div className="flex items-center gap-2">
-                              <span className={cn("font-mono tabular-nums", isActive && "animate-pulse")}>
+                              <span className={cn('font-mono tabular-nums', isActive && 'animate-pulse')}>
                                 {isActive ? '진행중' : minutesToHoursMinutes(duration)}
                               </span>
                               <button
                                 type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setConfirmDeleteLogId(log.id);
-                                }}
+                                onClick={(e) => { e.stopPropagation(); setConfirmDeleteLogId(log.id); }}
                                 className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive/80 p-0.5 rounded"
                                 aria-label="세션 삭제"
                               >
@@ -318,7 +304,6 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPa
                         );
                       })}
                     </div>
-                    {/* Total accumulated time */}
                     <Separator className="my-2" />
                     <div className="flex items-center justify-between text-xs font-semibold">
                       <span className="text-muted-foreground">총 작업 시간</span>
@@ -348,7 +333,6 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPa
 
               <Separator />
 
-              {/* Footer actions */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <TimerButton taskId={task.id} actualDuration={task?.actual_duration} onTimerChange={() => { fetchTask(); onTaskUpdated?.(); }} />
@@ -385,7 +369,6 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPa
           if (!confirmDeleteLogId || !taskId) return;
           try {
             await apiFetch(`/api/tasks/${taskId}/timelogs/${confirmDeleteLogId}`, { method: 'DELETE' });
-            toast.success('세션이 삭제되었습니다');
             fetchTask();
             onTaskUpdated?.();
           } catch {}

@@ -18,6 +18,7 @@ export interface Task {
   is_duration_manual: boolean;
   notion_task_id: string | null;
   slack_url: string | null;
+  notion_issue: string | null;
   slack_channel: string | null;
   slack_sender: string | null;
   delegate_to: string | null;

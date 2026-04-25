@@ -1,11 +1,10 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { Play, Pause, Loader2 } from 'lucide-react';
+import { Play, Pause, Loader2, Save } from 'lucide-react';
 import { useTimerStore } from '@/store/timer-store';
 import { useState } from 'react';
 import { apiFetch } from '@/lib/api';
-import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 interface TimerButtonProps {
@@ -17,37 +16,45 @@ interface TimerButtonProps {
 }
 
 export function TimerButton({ taskId, onTimerChange, compact = false }: TimerButtonProps) {
-  const { activeTaskId, elapsed, startTimer, stopTimer } = useTimerStore();
+  const { activeTaskId, elapsed, isPaused, startTimer, pauseTimer, resumeTimer, stopTimer } = useTimerStore();
   const [loading, setLoading] = useState(false);
-  const isRunning = activeTaskId === taskId;
+  const isActive = activeTaskId === taskId;
+  const isRunning = isActive && !isPaused;
+  const isPausedForThis = isActive && isPaused;
 
   const handleStart = async (e: React.MouseEvent) => {
     e.stopPropagation();
     setLoading(true);
     try {
       const res = await apiFetch<{ id: string; started_at: string }>(`/api/tasks/${taskId}/timer/start`, {
-        method: 'POST', suppressToast: true
+        method: 'POST', suppressToast: true,
       });
       startTimer(taskId, res.id, res.started_at);
-      toast.success('타이머 시작');
       onTimerChange?.();
     } catch {
-      toast.error('타이머 시작에 실패했습니다');
     } finally {
       setLoading(false);
     }
   };
 
-  const handlePause = async (e: React.MouseEvent) => {
+  const handlePause = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    pauseTimer();
+  };
+
+  const handleResume = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    resumeTimer();
+  };
+
+  const handleSave = async (e: React.MouseEvent) => {
     e.stopPropagation();
     setLoading(true);
     try {
       await apiFetch(`/api/tasks/${taskId}/timer/stop`, { method: 'POST', suppressToast: true });
       stopTimer();
-      toast.success('타이머 일시정지');
       onTimerChange?.();
     } catch {
-      toast.error('타이머 정지에 실패했습니다');
     } finally {
       setLoading(false);
     }
@@ -63,25 +70,55 @@ export function TimerButton({ taskId, onTimerChange, compact = false }: TimerBut
   const size = compact ? 'h-8 w-8' : 'h-10 w-10';
   const iconSize = compact ? 'h-3.5 w-3.5' : 'h-4 w-4';
 
-  if (isRunning) {
+  if (isActive) {
     return (
-      <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+      <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
         <span className={cn(
-          "flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1",
-          compact ? "text-xs" : "text-sm"
+          'flex items-center gap-1.5 rounded-md px-2 py-1',
+          isRunning ? 'bg-primary/10' : 'bg-amber-500/10',
+          compact ? 'text-xs' : 'text-sm'
         )}>
-          <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse" aria-hidden="true" />
-          <span className="font-mono tabular-nums text-primary font-medium">{formatElapsed(elapsed)}</span>
+          {isRunning ? (
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse" aria-hidden="true" />
+          ) : (
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500" aria-hidden="true" />
+          )}
+          <span className={cn(
+            'font-mono tabular-nums font-medium',
+            isRunning ? 'text-primary' : 'text-amber-600 dark:text-amber-400'
+          )}>
+            {formatElapsed(elapsed)}
+          </span>
         </span>
+
+        {/* Pause / Resume */}
         <Button
           variant="outline"
           size="sm"
-          onClick={handlePause}
+          onClick={isPausedForThis ? handleResume : handlePause}
           disabled={loading}
-          className={cn(size, "p-0")}
-          aria-label="타이머 일시정지"
+          className={cn(size, 'p-0')}
+          aria-label={isPausedForThis ? '타이머 재개' : '타이머 일시정지'}
+          title={isPausedForThis ? '재개' : '일시정지'}
         >
-          {loading ? <Loader2 className={cn(iconSize, "animate-spin")} /> : <Pause className={iconSize} />}
+          {isPausedForThis
+            ? <Play className={cn(iconSize, 'fill-current')} />
+            : <Pause className={iconSize} />}
+        </Button>
+
+        {/* Save */}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleSave}
+          disabled={loading}
+          className={cn(size, 'p-0 text-emerald-500 hover:text-emerald-600 hover:bg-accent')}
+          aria-label="타이머 저장"
+          title="저장"
+        >
+          {loading
+            ? <Loader2 className={cn(iconSize, 'animate-spin')} />
+            : <Save className={iconSize} />}
         </Button>
       </div>
     );
@@ -93,11 +130,11 @@ export function TimerButton({ taskId, onTimerChange, compact = false }: TimerBut
       size="sm"
       onClick={handleStart}
       disabled={loading}
-      className={cn(size, "p-0 text-muted-foreground hover:bg-accent hover:text-foreground")}
+      className={cn(size, 'p-0 text-muted-foreground hover:bg-accent hover:text-foreground')}
       aria-label="타이머 시작"
       title="타이머 시작"
     >
-      {loading ? <Loader2 className={cn(iconSize, "animate-spin")} /> : <Play className={cn(iconSize, "fill-current")} />}
+      {loading ? <Loader2 className={cn(iconSize, 'animate-spin')} /> : <Play className={cn(iconSize, 'fill-current')} />}
     </Button>
   );
 }

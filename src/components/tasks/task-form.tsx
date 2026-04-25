@@ -9,9 +9,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PRIORITIES, DEFAULT_STATUSES } from '@/lib/constants';
 import { useHiddenStatuses } from '@/lib/hidden-statuses';
+import { useDefaultStatusRenames } from '@/lib/status-renames';
 import { Task } from '@/lib/types';
 import { apiFetch } from '@/lib/api';
-import { toast } from 'sonner';
 import { Separator } from '@/components/ui/separator';
 
 interface TaskFormProps {
@@ -23,7 +23,11 @@ export function TaskForm({ task, customStatuses = [] }: TaskFormProps) {
   const router = useRouter();
   const isEdit = !!task;
   const hiddenStatuses = useHiddenStatuses();
-  const allStatuses = [...DEFAULT_STATUSES.filter(s => !hiddenStatuses.has(s)), ...customStatuses];
+  const defaultRenames = useDefaultStatusRenames();
+  const allStatuses = [
+    ...DEFAULT_STATUSES.filter(s => !hiddenStatuses.has(s)).map(s => defaultRenames[s] ?? s),
+    ...customStatuses
+  ];
 
   const [form, setForm] = useState({
     title: task?.title ?? '',
@@ -86,7 +90,6 @@ export function TaskForm({ task, customStatuses = [] }: TaskFormProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      toast.success(isEdit ? 'task가 수정되었습니다' : 'task가 등록되었습니다');
       router.push(isEdit ? `/tasks/${task.id}` : '/tasks');
       router.refresh();
     } catch {

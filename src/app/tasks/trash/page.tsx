@@ -12,7 +12,6 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { PRIORITY_COLORS, STATUS_COLORS, getContrastTextColor } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { apiFetch } from '@/lib/api';
-import { toast } from 'sonner';
 
 export default function TrashPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -36,7 +35,6 @@ export default function TrashPage() {
   const handleRestore = async (id: string) => {
     try {
       await apiFetch(`/api/tasks/${id}/restore`, { method: 'POST' });
-      toast.success('task가 복구되었습니다');
       fetchTasks();
     } catch {
       // error already toasted by apiFetch

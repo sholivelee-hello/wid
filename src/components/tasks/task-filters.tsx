@@ -64,7 +64,7 @@ export function TaskFilters({
         <SelectContent>
           <SelectItem value="all">전체 출처</SelectItem>
           {SOURCES.map((s) => (
-            <SelectItem key={s} value={s}>{s}</SelectItem>
+            <SelectItem key={s} value={s}>{s === 'manual' ? 'WID' : s}</SelectItem>
           ))}
         </SelectContent>
       </Select>

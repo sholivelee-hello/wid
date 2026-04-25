@@ -45,6 +45,7 @@ export function DayDetailPanel({
   const dayEvents = useMemo(() =>
     events
       .filter(e => e.date === dateStr)
+      .filter(e => e.calendarId === 'me')
       .filter(e => viewState[e.calendarId]?.visible !== false)
       .sort((a, b) => (a.time ?? '').localeCompare(b.time ?? '')),
     [events, dateStr, viewState]
