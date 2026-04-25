@@ -3,7 +3,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { isMockMode, MOCK_TASKS } from '@/lib/mock-data';
 
 // In-memory mutable reference for the dev-mock backend (shared with sibling routes)
-let tasks: typeof MOCK_TASKS = [...MOCK_TASKS];
+const tasks: typeof MOCK_TASKS = [...MOCK_TASKS];
 export const __tasksRef = () => tasks;
 
 export async function GET(request: NextRequest) {
