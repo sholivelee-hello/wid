@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { isMockMode, MOCK_TASKS } from '@/lib/mock-data';
 
+// In-memory mutable reference for the dev-mock backend (shared with sibling routes)
+let tasks: typeof MOCK_TASKS = [...MOCK_TASKS];
+export const __tasksRef = () => tasks;
+
 export async function GET(request: NextRequest) {
   if (isMockMode()) {
     const searchParams = request.nextUrl.searchParams;
@@ -14,13 +18,19 @@ export async function GET(request: NextRequest) {
     const sort = searchParams.get('sort') ?? 'created_at';
     const order = searchParams.get('order') ?? 'desc';
     const showDeleted = searchParams.get('deleted') === 'true';
+    const issueId = searchParams.get('issue_id');
+    const parentId = searchParams.get('parent_task_id');
+    const independent = searchParams.get('independent') === 'true';
 
-    let tasks = MOCK_TASKS.filter((t) => t.is_deleted === showDeleted);
-    if (status) tasks = tasks.filter((t) => t.status === status);
-    if (priority) tasks = tasks.filter((t) => t.priority === priority);
-    if (source) tasks = tasks.filter((t) => t.source === source);
+    let result = tasks.filter((t) => t.is_deleted === showDeleted);
+    if (status) result = result.filter((t) => t.status === status);
+    if (priority) result = result.filter((t) => t.priority === priority);
+    if (source) result = result.filter((t) => t.source === source);
+    if (issueId) result = result.filter(t => t.issue_id === issueId);
+    if (parentId) result = result.filter(t => t.parent_task_id === parentId);
+    if (independent) result = result.filter(t => t.issue_id === null && t.parent_task_id === null);
     if (from || to) {
-      tasks = tasks.filter((t) => {
+      result = result.filter((t) => {
         const inRange = (iso: string | null | undefined) => {
           if (!iso) return false;
           if (from && iso < from) return false;
@@ -34,13 +44,13 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    tasks.sort((a, b) => {
+    result.sort((a, b) => {
       const aVal = String((a as unknown as Record<string, unknown>)[sort] ?? '');
       const bVal = String((b as unknown as Record<string, unknown>)[sort] ?? '');
       return order === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
     });
 
-    return NextResponse.json(tasks);
+    return NextResponse.json(result);
   }
 
   const supabase = createServerSupabaseClient();

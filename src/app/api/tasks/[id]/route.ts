@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { isMockMode, MOCK_TASKS } from '@/lib/mock-data';
+import { isMockMode } from '@/lib/mock-data';
+import { __tasksRef } from '@/app/api/tasks/route';
 
 export async function GET(
   request: NextRequest,
@@ -9,7 +10,7 @@ export async function GET(
   const { id } = await params;
 
   if (isMockMode()) {
-    const task = MOCK_TASKS.find((t) => t.id === id);
+    const task = __tasksRef().find((t) => t.id === id);
     if (!task) return NextResponse.json({ error: 'Task not found' }, { status: 404 });
     return NextResponse.json(task);
   }
@@ -34,15 +35,74 @@ export async function PATCH(
   const body = await request.json();
 
   if (isMockMode()) {
-    const task = MOCK_TASKS.find((t) => t.id === id);
-    if (!task) return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+    const tasks = __tasksRef();
+    const idx = tasks.findIndex((t) => t.id === id);
+    if (idx === -1) return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+    const current = tasks[idx];
+
+    // Guard: reject dual-parent violation
+    const draftIssue = 'issue_id' in body ? body.issue_id : current.issue_id;
+    const draftParent = 'parent_task_id' in body ? body.parent_task_id : current.parent_task_id;
+    if (draftIssue != null && draftParent != null) {
+      return NextResponse.json(
+        { error: 'TASK는 ISSUE 소속과 sub-TASK 소속을 동시에 가질 수 없습니다.', code: 'DUAL_PARENT' },
+        { status: 400 },
+      );
+    }
+
+    // Guard: reject completion if any direct sub-TASK is incomplete
+    if (body.status === '완료') {
+      const childrenIncomplete = tasks.some(
+        c => !c.is_deleted && c.parent_task_id === id && c.status !== '완료'
+      );
+      if (childrenIncomplete) {
+        return NextResponse.json(
+          { error: 'sub-TASK가 모두 완료되어야 부모 TASK를 완료할 수 있습니다.', code: 'INCOMPLETE_CHILDREN' },
+          { status: 409 },
+        );
+      }
+    }
+
+    // Guard: cycle prevention when setting parent_task_id
+    if ('parent_task_id' in body && body.parent_task_id) {
+      const candidate = body.parent_task_id as string;
+      let cursor: string | null = candidate;
+      const seen = new Set<string>();
+      while (cursor) {
+        if (cursor === id) {
+          return NextResponse.json(
+            { error: '순환 참조: 이 TASK의 자손을 부모로 지정할 수 없습니다.', code: 'CYCLE' },
+            { status: 400 },
+          );
+        }
+        if (seen.has(cursor)) break; // safety net
+        seen.add(cursor);
+        const parent = tasks.find(t => t.id === cursor && !t.is_deleted);
+        cursor = parent?.parent_task_id ?? null;
+      }
+    }
 
     if (body.status === '완료' && !body.completed_at) {
       body.completed_at = new Date().toISOString();
     }
 
-    const updated = { ...task, ...body };
-    return NextResponse.json(updated);
+    // Apply allowed fields (merge onto existing task object)
+    const allowedKeys = [
+      'title', 'description', 'priority', 'status', 'source',
+      'requester', 'requested_at', 'deadline', 'started_at', 'completed_at',
+      'actual_duration', 'is_duration_manual', 'notion_task_id',
+      'slack_url', 'slack_channel', 'slack_sender',
+      'delegate_to', 'follow_up_note',
+      'issue_id', 'parent_task_id', 'sort_mode', 'position',
+    ];
+    for (const key of allowedKeys) {
+      if (key in body) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (tasks[idx] as any)[key] = body[key];
+      }
+    }
+
+    return NextResponse.json(tasks[idx]);
   }
 
   const supabase = createServerSupabaseClient();
@@ -69,9 +129,11 @@ export async function DELETE(
   const { id } = await params;
 
   if (isMockMode()) {
-    const task = MOCK_TASKS.find((t) => t.id === id);
-    if (!task) return NextResponse.json({ error: 'Task not found' }, { status: 404 });
-    return NextResponse.json({ ...task, is_deleted: true });
+    const tasks = __tasksRef();
+    const idx = tasks.findIndex((t) => t.id === id);
+    if (idx === -1) return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+    tasks[idx].is_deleted = true;
+    return NextResponse.json(tasks[idx]);
   }
 
   const supabase = createServerSupabaseClient();
