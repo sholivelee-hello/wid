@@ -1,5 +1,18 @@
 export type Priority = '긴급' | '높음' | '보통' | '낮음';
 export type Source = 'manual' | 'notion' | 'slack';
+export type SortMode = 'checklist' | 'sequential';
+
+export interface Issue {
+  id: string;
+  name: string;
+  color: string;                  // hex like '#94a3b8'
+  deadline: string | null;        // ISO date string (YYYY-MM-DD)
+  sort_mode: SortMode;
+  position: number;
+  notion_issue_id: string | null;
+  created_at: string;
+  is_deleted: boolean;
+}
 
 export interface Task {
   id: string;
@@ -23,6 +36,10 @@ export interface Task {
   slack_sender: string | null;
   delegate_to: string | null;
   follow_up_note: string | null;
+  issue_id: string | null;
+  parent_task_id: string | null;
+  sort_mode: SortMode;
+  position: number;
   is_deleted: boolean;
 }
 
