@@ -1,0 +1,66 @@
+# CLAUDE.md — WID 프로젝트 컨텍스트
+
+이 파일은 Claude Code가 이 레포에서 작업할 때 참조하는 프로젝트 컨텍스트입니다. 사용자 개인의 토이 프로젝트(개인 업무 인박스/타임라인 앱)이며, 회사와 무관합니다.
+
+---
+
+## 프로젝트 개요
+
+- **이름**: WID (work inbox / dashboard)
+- **목적**: 개인이 노션·슬랙·수동 입력으로 들어오는 일들을 한 인박스에서 처리하고, 시각적 타임라인과 히스토리로 회고하는 앱
+- **범위**: 1인 사용자(personal use). 다인용·SaaS 아님
+- **단계**: v2 구현 완료(`a33ce28` → 개인 메일 author 재작성으로 `ec6dafe`). 현재 ISSUE/TASK 계층 기능 추가 설계 중
+- **상세 컨텍스트**: `docs/NEXT-SESSION.md`, `docs/superpowers/specs/`, `docs/superpowers/plans/`
+
+## 기술 스택
+
+- **프론트/백**: Next.js 16+ App Router, TypeScript, Tailwind CSS v4
+- **UI**: shadcn/ui v4 (base-ui 기반)
+- **상태관리**: Zustand (타이머), localStorage (캘린더 가시성, 사용자 뷰 등)
+- **데이터**: Supabase 미연결 — 현재 mock 데이터로 동작 중 (`src/lib/mock-data.ts`, `src/lib/mock-gcal.ts`, `src/lib/mock-calendars.ts`). Supabase 마이그레이션은 `supabase/migrations/`에 정의됨
+- **외부 연동**: Notion (TASK DB sync), Slack (webhook), Google Calendar — 모두 mock 또는 부분 연동
+- **개발 명령어**: `npm run dev` (Turbopack), `npm run build`, `npm run lint`
+
+## 인프라 / 계정 정보
+
+이 프로젝트는 **개인 작업물**이며, 회사 자원과 완전히 분리되어 있습니다. Claude는 작업 시 회사 메일·계정·인프라를 절대 참조하지 마세요.
+
+### Git identity (자동 분기 적용됨)
+
+`~/.gitconfig`의 `includeIf "gitdir:~/Desktop/Project/TOY/"` 설정으로 이 디렉토리 하위 모든 레포는 자동으로 개인 메일이 적용됩니다.
+
+- **이 레포에서의 author**: `이신희 <sholivelee@gmail.com>`
+- **글로벌 기본값(다른 디렉토리)**: 회사 메일이 박혀 있으니 절대 이 레포에 노출시키지 마세요
+- 새 커밋 만들 때 `git config user.email` 항상 `sholivelee@gmail.com`인지 확인 가능
+
+### 원격 저장소
+
+- **개인 GitHub**: https://github.com/sholivelee-hello/wid
+- 회사 GitHub Enterprise나 회사 조직 어디에도 없음
+- Push는 macOS 키체인의 개인 PAT로 인증 (sholivelee-hello 계정, user id 277253829)
+- 회사 GitHub 조직에는 절대 push/fork/이동하지 마세요
+
+### 디바이스
+
+- 사용자 본인 소유 Mac. MDM·EDR·DLP 없음. 회사 감시 SW 없음
+
+## 코드 작성 규칙 (이 프로젝트 한정)
+
+- **Mock-first**: Supabase 연결 전이므로, 신규 API/store는 mock을 우선 채워두고 실제 연동은 별도 단계로
+- **Korean UI**: 사용자 인터페이스 문구는 한국어 (변수/함수명·주석은 영어)
+- **개인 사용**: 다인용 권한·인증 로직 추가하지 말 것 (단일 사용자 가정)
+- **shadcn/ui 우선**: 새 UI 컴포넌트는 shadcn 기존 컴포넌트 재사용 → 확장 → 신규 순서로 검토
+- **새 라이브러리 추가 시**: 기존 의존성으로 해결 가능한지 먼저 확인. 추가 시 README/이 파일에 반영
+
+## 작업 흐름
+
+- **계획 문서**: `docs/superpowers/specs/YYYY-MM-DD-<주제>-design.md` (브레인스토밍 결과)
+- **구현 플랜**: `docs/superpowers/plans/YYYY-MM-DD-<주제>-implementation.md`
+- **세션 인계**: `docs/NEXT-SESSION.md` (다음 세션 가이드 — 새 세션 시작 시 가장 먼저 읽기)
+- 큰 변경은 spec → plan → 구현 순서. 구현 도중 결정이 바뀌면 spec/plan을 함께 업데이트
+
+## 보안·프라이버시 주의사항
+
+- **회사 식별 정보 금지**: 코드·커밋 메시지·문서·로그 어디에도 회사 메일(`shlee@mirapartners.co.kr`), 회사명, 회사 시스템 식별자를 넣지 마세요
+- **개인정보**: mock 데이터에 등장하는 이름·요청자는 의도된 더미 데이터(가상의 동료 이름)
+- **API 키**: `.env.local` 사용. `.env*` 파일은 .gitignore로 제외됨. 절대 commit 금지
