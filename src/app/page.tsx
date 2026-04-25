@@ -353,6 +353,7 @@ export default function InboxPage() {
             taskHandlers={taskHandlers}
             onEditIssue={(i) => { setAddingIssue(false); setEditingIssue(i); }}
             onDeleteIssue={(i) => setDeletingIssue(i)}
+            onMutate={fetchTasks}
           />
         )}
       </div>
