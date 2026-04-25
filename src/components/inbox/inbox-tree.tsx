@@ -47,6 +47,8 @@ interface Props {
   onMutate: () => void;
   setIssues: React.Dispatch<React.SetStateAction<Issue[]>>;
   setTasks: React.Dispatch<React.SetStateAction<Task[]>>;
+  editingTaskId: string | null;
+  onCloseEdit: () => void;
 }
 
 const ISSUE_SORT_PREFIX = 'iss:';
@@ -140,6 +142,8 @@ export function InboxTree({
   onMutate,
   setIssues,
   setTasks,
+  editingTaskId,
+  onCloseEdit,
 }: Props) {
   const { tree, forceOpenIssueIds, forceOpenTaskIds } = useMemo(() => {
     const built = buildTree(issues, tasks);
@@ -445,6 +449,8 @@ export function InboxTree({
                           lockedIds={locked}
                           forceOpenIds={forceOpenTaskIds}
                           enableSortable
+                          editingTaskId={editingTaskId}
+                          onCloseEdit={onCloseEdit}
                           {...taskHandlers}
                         />
                       </SortableTaskItem>
@@ -470,6 +476,8 @@ export function InboxTree({
                     lockedIds={new Set<string>()}
                     forceOpenIds={forceOpenTaskIds}
                     enableSortable
+                    editingTaskId={editingTaskId}
+                    onCloseEdit={onCloseEdit}
                     {...taskHandlers}
                   />
                 </SortableTaskItem>

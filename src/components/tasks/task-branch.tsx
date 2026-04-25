@@ -29,6 +29,11 @@ interface Props extends TaskBranchHandlers {
    *  so users can drag-reorder sub-TASKs. The OUTER caller is responsible
    *  for wrapping THIS branch in a SortableTaskItem. */
   enableSortable?: boolean;
+  /** id of the task currently in inline-edit mode (for the whole tree). When
+   *  it matches this node's task id, the card opens its inline editor. */
+  editingTaskId?: string | null;
+  /** Called by TaskCard's inline editor when the user closes it. */
+  onCloseEdit?: () => void;
 }
 
 export const TASK_SORT_PREFIX = 'tsk:';
@@ -64,6 +69,8 @@ export function TaskBranch({
   lockedIds,
   forceOpenIds,
   enableSortable = false,
+  editingTaskId,
+  onCloseEdit,
   onStatusChange,
   onComplete,
   onDelete,
@@ -97,6 +104,8 @@ export function TaskBranch({
           lockedIds={childLocked}
           forceOpenIds={forceOpenIds}
           enableSortable={false}
+          editingTaskId={editingTaskId}
+          onCloseEdit={onCloseEdit}
           onStatusChange={onStatusChange}
           onComplete={onComplete}
           onDelete={onDelete}
@@ -115,6 +124,8 @@ export function TaskBranch({
               lockedIds={childLocked}
               forceOpenIds={forceOpenIds}
               enableSortable
+              editingTaskId={editingTaskId}
+              onCloseEdit={onCloseEdit}
               onStatusChange={onStatusChange}
               onComplete={onComplete}
               onDelete={onDelete}
@@ -157,6 +168,8 @@ export function TaskBranch({
             onSelect={onSelect}
             hierarchyLabel={depth === 0 ? 'TASK' : 'sub-TASK'}
             onCardClick={hasChildren ? toggle : undefined}
+            editing={editingTaskId === node.task.id}
+            onCloseEdit={onCloseEdit}
           />
           {blocked && (
             <div className="text-[10px] text-amber-700 dark:text-amber-400 ml-3 mt-1">

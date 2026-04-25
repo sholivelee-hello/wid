@@ -2,20 +2,20 @@
 
 import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { PRIORITY_COLORS, STATUS_ICONS, getContrastTextColor } from '@/lib/constants';
-import { getStatusColor } from '@/lib/status-colors';
+import { STATUS_ICONS } from '@/lib/constants';
 import { useAllStatuses } from '@/lib/use-all-statuses';
 import { useDefaultStatusRenames } from '@/lib/status-renames';
 import { Task } from '@/lib/types';
 import { formatDate, cn, getNotionPageUrl } from '@/lib/utils';
 import { toggleTodayTask, getTodayTaskIds } from '@/lib/today-tasks';
+import { TaskInlineEditor } from '@/components/tasks/task-inline-editor';
 import {
   Circle,
   CheckCircle2,
@@ -41,6 +41,14 @@ interface TaskCardProps {
   /** When provided, clicking the card body invokes this instead of opening the detail panel.
    *  The title text becomes the path to the detail panel. */
   onCardClick?: () => void;
+  /** Renders a small "ISSUE › 부모 TASK" breadcrumb above the title — useful in
+   *  flat lists like Today, where the tree context is otherwise lost. */
+  breadcrumb?: { issueName?: string | null; parentTaskTitle?: string | null };
+  /** When true, an inline editor is rendered below the main row. Toggle from
+   *  the parent (typically by tracking `editingTaskId`). */
+  editing?: boolean;
+  /** Called by the inline editor when the user closes it (e.g. clicks 닫기). */
+  onCloseEdit?: () => void;
 }
 
 function Dot() {
@@ -55,6 +63,9 @@ export function TaskCard({
   onSelect,
   hierarchyLabel,
   onCardClick,
+  breadcrumb,
+  editing = false,
+  onCloseEdit,
 }: TaskCardProps) {
   const openDetail = () => {
     if (onSelect) onSelect(task.id);
@@ -65,9 +76,6 @@ export function TaskCard({
   const defaultRenames = useDefaultStatusRenames();
 
   const isCompleted = task.status === '완료';
-  const isNew = (Date.now() - new Date(task.created_at).getTime()) < 2 * 60 * 60 * 1000;
-  const priorityColor = PRIORITY_COLORS[task.priority];
-  const statusColor = allStatuses.find(s => s.original === task.status)?.color ?? getStatusColor(task.status);
 
   const [isTodayTask, setIsTodayTask] = useState(() => getTodayTaskIds().has(task.id));
 
@@ -77,24 +85,14 @@ export function TaskCard({
     return () => window.removeEventListener('today-tasks-changed', handler);
   }, [task.id]);
 
-  let deadlineTone: 'overdue' | 'today' | 'soon' | 'normal' = 'normal';
+  let deadlineSuffix = '';
   if (task.deadline) {
     const d = new Date(task.deadline);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    if (d < today && task.status !== '완료') deadlineTone = 'overdue';
-    else if (d.toDateString() === today.toDateString()) deadlineTone = 'today';
-    else if ((d.getTime() - today.getTime()) < 3 * 24 * 60 * 60 * 1000) deadlineTone = 'soon';
+    if (d < today && task.status !== '완료') deadlineSuffix = ' · 기한 초과';
+    else if (d.toDateString() === today.toDateString()) deadlineSuffix = ' · 오늘';
   }
-  const deadlineClass = {
-    overdue: 'text-red-600 dark:text-red-400 font-medium',
-    today: 'text-amber-600 dark:text-amber-400 font-medium',
-    soon: 'text-amber-600/80 dark:text-amber-400/80',
-    normal: 'text-muted-foreground',
-  }[deadlineTone];
-  const deadlineSuffix =
-    deadlineTone === 'overdue' ? ' · 기한 초과' :
-    deadlineTone === 'today' ? ' · 오늘' : '';
 
   const handleStatusSelect = (val: string | null) => {
     if (!val) return;
@@ -109,8 +107,7 @@ export function TaskCard({
         'hover:bg-accent/30',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         isCompleted && 'opacity-60',
-        task.priority === '긴급' && 'border-l-[3px] border-l-red-500',
-        task.priority === '높음' && 'border-l-[3px] border-l-amber-500',
+        editing && 'ring-1 ring-primary/40',
       )}
       onClick={handleCardActivate}
       onKeyDown={(e) => {
@@ -162,6 +159,19 @@ export function TaskCard({
 
           {/* Title + metadata */}
           <div className="flex-1 min-w-0 space-y-1.5">
+            {breadcrumb && (breadcrumb.issueName || breadcrumb.parentTaskTitle) && (
+              <div className="text-[10px] text-muted-foreground/80 truncate">
+                {breadcrumb.issueName && (
+                  <span className="font-medium">{breadcrumb.issueName}</span>
+                )}
+                {breadcrumb.issueName && breadcrumb.parentTaskTitle && (
+                  <span className="mx-1">›</span>
+                )}
+                {breadcrumb.parentTaskTitle && (
+                  <span>{breadcrumb.parentTaskTitle}</span>
+                )}
+              </div>
+            )}
             <div className="flex items-center gap-2">
               {hierarchyLabel && (
                 <span
@@ -196,13 +206,6 @@ export function TaskCard({
                   {task.title}
                 </span>
               )}
-              {isNew && (
-                <span
-                  className="inline-flex h-1.5 w-1.5 rounded-full bg-primary animate-pulse flex-shrink-0"
-                  title="최근 2시간 내 생성"
-                  aria-label="새 task"
-                />
-              )}
             </div>
 
             {task.notion_issue && (
@@ -213,12 +216,10 @@ export function TaskCard({
 
             <div className="flex items-center gap-x-2.5 gap-y-1 text-xs flex-wrap text-muted-foreground">
               {task.deadline && (
-                <>
-                  <span className={cn('inline-flex items-center gap-1', deadlineClass)}>
-                    <CalendarDays className="h-3 w-3" aria-hidden="true" />
-                    {formatDate(task.deadline, 'M월 d일')}{deadlineSuffix}
-                  </span>
-                </>
+                <span className="inline-flex items-center gap-1">
+                  <CalendarDays className="h-3 w-3" aria-hidden="true" />
+                  {formatDate(task.deadline, 'M월 d일')}{deadlineSuffix}
+                </span>
               )}
 
               {task.requester && (
@@ -277,19 +278,17 @@ export function TaskCard({
             {onStatusChange ? (
               <Select value={task.status} onValueChange={handleStatusSelect}>
                 <SelectTrigger
-                  className="h-7 text-[11px] px-2.5 border-0 rounded-full font-semibold focus-visible:ring-2 focus-visible:ring-ring min-w-0"
-                  style={{ backgroundColor: statusColor, color: getContrastTextColor(statusColor) }}
+                  className="h-7 text-[11px] px-2.5 rounded-full border border-border/60 bg-background text-foreground hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring min-w-0"
                   aria-label="상태 변경"
                 >
                   {defaultRenames[task.status] ?? task.status}
                 </SelectTrigger>
                 <SelectContent>
-                  {allStatuses.map(({ original, display, color: optColor }) => {
+                  {allStatuses.map(({ original, display }) => {
                     const Icon = STATUS_ICONS[original];
                     return (
                       <SelectItem key={original} value={original}>
                         <div className="flex items-center gap-2">
-                          <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: optColor }} aria-hidden="true" />
                           {Icon && <Icon className="h-3.5 w-3.5 text-muted-foreground" />}
                           <span>{display}</span>
                         </div>
@@ -300,7 +299,6 @@ export function TaskCard({
               </Select>
             ) : (
               <span className="inline-flex items-center gap-1.5 h-8 text-xs px-2.5 rounded-md border border-border text-muted-foreground">
-                <span className="h-1.5 w-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: statusColor }} aria-hidden="true" />
                 {STATUS_ICONS[task.status] && (() => {
                   const Icon = STATUS_ICONS[task.status];
                   return <Icon className="h-3.5 w-3.5" />;
@@ -353,6 +351,14 @@ export function TaskCard({
             </DropdownMenu>
           </div>
         </div>
+        {editing && (
+          <div className="mt-4 pt-4 border-t border-border/40">
+            <TaskInlineEditor
+              task={task}
+              onClose={() => onCloseEdit?.()}
+            />
+          </div>
+        )}
       </CardContent>
 
     </Card>

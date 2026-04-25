@@ -9,8 +9,6 @@ import { RotateCcw, Trash2 } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 import { TaskListSkeleton } from '@/components/loading/page-skeleton';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { PRIORITY_COLORS, STATUS_COLORS, getContrastTextColor } from '@/lib/constants';
-import { cn } from '@/lib/utils';
 import { apiFetch } from '@/lib/api';
 
 export default function TrashPage() {
@@ -59,27 +57,13 @@ export default function TrashPage() {
     <div className="space-y-3">
       {tasks.length === 0 && <EmptyState icon={Trash2} title="휴지통이 비어있습니다" description="삭제된 task가 여기에 표시됩니다" />}
       {tasks.map((task) => (
-        <Card key={task.id} className={cn("shadow-sm border-l-4", {
-          'border-l-red-500': task.priority === '긴급',
-          'border-l-amber-500': task.priority === '높음',
-          'border-l-primary': task.priority === '보통',
-          'border-l-muted': task.priority === '낮음',
-        })}>
+        <Card key={task.id} className="shadow-sm">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
               <p className="font-medium">{task.title}</p>
               <div className="flex items-center gap-2 mt-1">
-                <Badge
-                  variant="outline"
-                  style={{ borderColor: PRIORITY_COLORS[task.priority], color: PRIORITY_COLORS[task.priority] }}
-                >
-                  {task.priority}
-                </Badge>
-                <Badge
-                  style={{ backgroundColor: STATUS_COLORS[task.status] ?? '#6B7280', color: getContrastTextColor(STATUS_COLORS[task.status] ?? '#6B7280') }}
-                >
-                  {task.status}
-                </Badge>
+                <Badge variant="outline">{task.priority}</Badge>
+                <Badge variant="outline">{task.status}</Badge>
               </div>
             </div>
             <Button variant="outline" size="sm" onClick={() => openRestoreConfirm(task.id)}>

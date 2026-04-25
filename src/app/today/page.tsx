@@ -3,22 +3,22 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import { Task } from '@/lib/types';
+import { Issue, Task } from '@/lib/types';
 import { TaskCard } from '@/components/tasks/task-card';
-import { TaskDetailPanel } from '@/components/tasks/task-detail-panel';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { apiFetch } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { DEFAULT_STATUSES } from '@/lib/constants';
 import { useAllStatuses } from '@/lib/use-all-statuses';
-import { getTodayTaskIds } from '@/lib/today-tasks';
+import { getTodayTaskIds, getEffectiveTodayTaskIds } from '@/lib/today-tasks';
 import { ChevronDown, Sun } from 'lucide-react';
 
 export default function TodayPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [issues, setIssues] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [todayIds, setTodayIds] = useState<Set<string>>(() => getTodayTaskIds());
@@ -31,8 +31,12 @@ export default function TodayPage() {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const taskData = await apiFetch<Task[]>('/api/tasks?deleted=false', { suppressToast: true });
+      const [taskData, issueData] = await Promise.all([
+        apiFetch<Task[]>('/api/tasks?deleted=false', { suppressToast: true }),
+        apiFetch<Issue[]>('/api/issues', { suppressToast: true }),
+      ]);
       setTasks(taskData);
+      setIssues(issueData);
     } catch {}
     finally { setLoading(false); }
   }, []);
@@ -55,11 +59,37 @@ export default function TodayPage() {
     };
   }, [fetchAll]);
 
-  // 오늘에 추가된 task들
-  const todayTasks = useMemo(() =>
-    tasks.filter(t => todayIds.has(t.id)),
-    [tasks, todayIds]
-  );
+  // 오늘에 추가된 task들 (명시적 + 그 자손까지 포함한 효과적 집합)
+  const todayTasks = useMemo(() => {
+    const effective = getEffectiveTodayTaskIds(todayIds, tasks);
+    return tasks.filter(t => effective.has(t.id) && !t.is_deleted);
+  }, [tasks, todayIds]);
+
+  // breadcrumb 계산용 lookup
+  const tasksById = useMemo(() => {
+    const m = new Map<string, Task>();
+    for (const t of tasks) m.set(t.id, t);
+    return m;
+  }, [tasks]);
+  const issuesById = useMemo(() => {
+    const m = new Map<string, Issue>();
+    for (const i of issues) m.set(i.id, i);
+    return m;
+  }, [issues]);
+
+  const buildBreadcrumb = (task: Task) => {
+    let issueName: string | null = null;
+    let parentTaskTitle: string | null = null;
+    if (task.parent_task_id) {
+      const parent = tasksById.get(task.parent_task_id);
+      parentTaskTitle = parent?.title ?? null;
+      const parentIssueId = parent?.issue_id ?? null;
+      if (parentIssueId) issueName = issuesById.get(parentIssueId)?.name ?? null;
+    } else if (task.issue_id) {
+      issueName = issuesById.get(task.issue_id)?.name ?? null;
+    }
+    return { issueName, parentTaskTitle };
+  };
 
   // 상태별 그룹핑 (DEFAULT_STATUSES 순서 우선, 커스텀 상태 뒤에)
   const statusGroups = useMemo(() => {
@@ -122,14 +152,12 @@ export default function TodayPage() {
     onStatusChange: handleStatusChange,
     onComplete: handleComplete,
     onDelete: (id: string) => setDeleteId(id),
-    onSelect: setSelectedTaskId,
+    onSelect: (id: string) =>
+      setEditingTaskId(prev => (prev === id ? null : id)),
   };
 
   const getStatusDisplay = (status: string) =>
     allStatuses.find(s => s.original === status)?.display ?? status;
-
-  const getStatusColor = (status: string) =>
-    allStatuses.find(s => s.original === status)?.color ?? '#6B7280';
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -158,7 +186,6 @@ export default function TodayPage() {
         <div className="space-y-4">
           {[...statusGroups.entries()].map(([status, groupTasks]) => {
             const collapsed = collapsedGroups.has(status);
-            const color = getStatusColor(status);
             const display = getStatusDisplay(status);
             return (
               <section key={status}>
@@ -172,10 +199,7 @@ export default function TodayPage() {
                     'h-4 w-4 text-muted-foreground transition-transform flex-shrink-0',
                     collapsed && '-rotate-90'
                   )} />
-                  <span
-                    className="text-xs font-semibold px-2 py-0.5 rounded-full"
-                    style={{ backgroundColor: `${color}20`, color }}
-                  >
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full border border-border/60 text-foreground">
                     {display}
                   </span>
                   <span className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">
@@ -185,7 +209,15 @@ export default function TodayPage() {
                 {!collapsed && (
                   <div className="space-y-2">
                     {groupTasks.map(task => (
-                      <TaskCard key={task.id} task={task} {...taskHandlers} />
+                      <TaskCard
+                        key={task.id}
+                        task={task}
+                        hierarchyLabel={task.parent_task_id ? 'sub-TASK' : 'TASK'}
+                        breadcrumb={buildBreadcrumb(task)}
+                        editing={editingTaskId === task.id}
+                        onCloseEdit={() => setEditingTaskId(null)}
+                        {...taskHandlers}
+                      />
                     ))}
                   </div>
                 )}
@@ -194,12 +226,6 @@ export default function TodayPage() {
           })}
         </div>
       )}
-
-      <TaskDetailPanel
-        taskId={selectedTaskId}
-        onClose={() => setSelectedTaskId(null)}
-        onTaskUpdated={fetchAll}
-      />
 
       <ConfirmDialog
         open={!!deleteId}

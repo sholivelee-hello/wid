@@ -11,7 +11,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { apiFetch } from '@/lib/api';
-import { TaskDetailPanel } from '@/components/tasks/task-detail-panel';
 import { useAllStatuses } from '@/lib/use-all-statuses';
 import { cn } from '@/lib/utils';
 import { Inbox, ChevronDown, Plus, Pencil, Trash2 } from 'lucide-react';
@@ -35,7 +34,7 @@ export default function InboxPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sortBy, setSortBy] = useState<'priority' | 'deadline' | 'created_at'>('priority');
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
   const [addingIssue, setAddingIssue] = useState(false);
   const [editingIssue, setEditingIssue] = useState<Issue | null>(null);
@@ -104,7 +103,11 @@ export default function InboxPage() {
   useEffect(() => {
     const handler = () => fetchTasks();
     window.addEventListener('task-created', handler);
-    return () => window.removeEventListener('task-created', handler);
+    window.addEventListener('task-updated', handler);
+    return () => {
+      window.removeEventListener('task-created', handler);
+      window.removeEventListener('task-updated', handler);
+    };
   }, [fetchTasks]);
 
   const handleStatusChange = async (taskId: string, newStatus: string) => {
@@ -234,8 +237,10 @@ export default function InboxPage() {
     onStatusChange: handleStatusChange,
     onComplete: handleComplete,
     onDelete: (id: string) => setDeleteId(id),
-    onSelect: setSelectedTaskId,
+    onSelect: (id: string) =>
+      setEditingTaskId(prev => (prev === id ? null : id)),
   };
+  const closeEdit = () => setEditingTaskId(null);
 
   if (loading && tasks.length === 0) return <TaskListSkeleton />;
 
@@ -372,6 +377,8 @@ export default function InboxPage() {
             onMutate={fetchTasks}
             setIssues={setIssues}
             setTasks={setTasks}
+            editingTaskId={editingTaskId}
+            onCloseEdit={closeEdit}
           />
         )}
       </div>
@@ -434,7 +441,13 @@ export default function InboxPage() {
                       <p className="text-sm text-muted-foreground py-2 pl-6">해당하는 task가 없습니다.</p>
                     ) : (
                       viewTasks.map(task => (
-                        <TaskCard key={task.id} task={task} {...taskHandlers} />
+                        <TaskCard
+                          key={task.id}
+                          task={task}
+                          {...taskHandlers}
+                          editing={editingTaskId === task.id}
+                          onCloseEdit={closeEdit}
+                        />
                       ))
                     )}
                   </div>
@@ -495,11 +508,6 @@ export default function InboxPage() {
         onDeleted={fetchTasks}
       />
 
-      <TaskDetailPanel
-        taskId={selectedTaskId}
-        onClose={() => setSelectedTaskId(null)}
-        onTaskUpdated={fetchTasks}
-      />
     </div>
   );
 }

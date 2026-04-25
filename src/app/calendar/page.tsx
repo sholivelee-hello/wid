@@ -1,109 +1,73 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, addMonths, isSameMonth, startOfMonth, isToday } from 'date-fns';
-import { ko } from 'date-fns/locale';
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { WeekView } from '@/components/calendar/week-view';
-import { MiniMonthPicker } from '@/components/calendar/mini-month-picker';
-import { CalendarSubscriptions } from '@/components/layout/calendar-subscriptions';
-import { apiFetch } from '@/lib/api';
-import type { GCalEvent } from '@/lib/mock-gcal';
+import { CalendarDays, Settings as SettingsIcon } from 'lucide-react';
+import { getGCalEmbedRaw, buildEmbedUrl, GCAL_EMBED_EVENT } from '@/lib/gcal-embed';
+
+type Mode = 'WEEK' | 'MONTH' | 'AGENDA';
 
 export default function CalendarPage() {
-  const [selectedWeekStart, setSelectedWeekStart] = useState(() =>
-    startOfWeek(new Date(), { weekStartsOn: 1 })
-  );
-  const [monthCursor, setMonthCursor] = useState(new Date());
-  const [events, setEvents] = useState<GCalEvent[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [raw, setRaw] = useState(() => getGCalEmbedRaw());
+  const [mode, setMode] = useState<Mode>('WEEK');
 
-  const weekEnd = endOfWeek(selectedWeekStart, { weekStartsOn: 1 });
-  const fromStr = format(selectedWeekStart, 'yyyy-MM-dd');
-  const toStr = format(weekEnd, 'yyyy-MM-dd');
+  useEffect(() => {
+    const handler = () => setRaw(getGCalEmbedRaw());
+    window.addEventListener(GCAL_EMBED_EVENT, handler);
+    return () => window.removeEventListener(GCAL_EMBED_EVENT, handler);
+  }, []);
 
-  const fetchEvents = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await apiFetch<GCalEvent[]>(
-        `/api/gcal/events?from=${fromStr}&to=${toStr}`,
-        { suppressToast: true }
-      );
-      setEvents(data);
-    } catch {}
-    finally { setLoading(false); }
-  }, [fromStr, toStr]);
-
-  useEffect(() => { fetchEvents(); }, [fetchEvents]);
-
-  const navigate = (ws: Date) => {
-    setSelectedWeekStart(ws);
-    if (!isSameMonth(ws, monthCursor)) setMonthCursor(startOfMonth(ws));
-  };
-
-  const handleWeekSelect = (weekStart: Date) => {
-    navigate(startOfWeek(weekStart, { weekStartsOn: 1 }));
-  };
-
-  const isCurrentWeek = isToday(selectedWeekStart) ||
-    (selectedWeekStart <= new Date() && new Date() <= weekEnd);
-
-  const weekLabel = `${format(selectedWeekStart, 'M월 d일', { locale: ko })} – ${format(weekEnd, 'M월 d일', { locale: ko })}`;
-  const eventDates = new Set(events.map(ev => ev.date));
+  const embedUrl = buildEmbedUrl(raw, mode);
 
   return (
     <div className="space-y-4 max-w-7xl">
-      {/* Week navigation */}
-      <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" onClick={() => navigate(subWeeks(selectedWeekStart, 1))} aria-label="이전 주">
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <h1
-          className="text-xl font-bold min-w-[260px] text-center"
-          style={{ fontFamily: 'var(--font-heading)' }}
-        >
-          {weekLabel}
-          {isCurrentWeek && (
-            <span className="ml-2 text-sm font-normal text-primary">이번 주</span>
-          )}
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-xl font-bold" style={{ fontFamily: 'var(--font-heading)' }}>
+          캘린더
         </h1>
-        <Button variant="ghost" size="icon" onClick={() => navigate(addWeeks(selectedWeekStart, 1))} aria-label="다음 주">
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-        {!isCurrentWeek && (
-          <Button variant="outline" size="sm" onClick={() => navigate(startOfWeek(new Date(), { weekStartsOn: 1 }))}>
-            이번 주
-          </Button>
+        {embedUrl && (
+          <div className="flex items-center gap-1">
+            {(['WEEK', 'MONTH', 'AGENDA'] as Mode[]).map(m => (
+              <Button
+                key={m}
+                variant={mode === m ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setMode(m)}
+                className="h-7 text-xs"
+              >
+                {m === 'WEEK' ? '주' : m === 'MONTH' ? '월' : '일정'}
+              </Button>
+            ))}
+          </div>
         )}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
-        {/* Left: mini month + subscriptions */}
-        <div className="space-y-4">
-          <div className="rounded-lg border bg-card p-3">
-            <MiniMonthPicker
-              selectedWeekStart={selectedWeekStart}
-              monthCursor={monthCursor}
-              onMonthChange={setMonthCursor}
-              onWeekSelect={handleWeekSelect}
-              eventDates={eventDates}
-            />
-          </div>
-          <div className="rounded-lg border bg-card">
-            <CalendarSubscriptions />
-          </div>
+      {embedUrl ? (
+        <div className="rounded-lg border border-border/60 bg-card overflow-hidden">
+          <iframe
+            key={embedUrl}
+            src={embedUrl}
+            className="w-full h-[78vh] border-0"
+            title="Google Calendar"
+          />
         </div>
-
-        {/* Right: week view */}
-        <div>
-          {loading ? (
-            <div className="h-64 rounded-lg bg-muted/30 animate-pulse" />
-          ) : (
-            <WeekView weekStart={selectedWeekStart} events={events} />
-          )}
+      ) : (
+        <div className="rounded-lg border border-dashed border-border/60 bg-card/40 p-10 text-center space-y-4">
+          <CalendarDays className="h-10 w-10 mx-auto text-muted-foreground/50" />
+          <div>
+            <p className="text-sm font-medium">아직 Google 캘린더가 연결되지 않았습니다</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              설정 페이지에서 캘린더 ID 또는 임베드 URL을 등록하면 여기에 임베드됩니다.
+            </p>
+          </div>
+          <Button asChild size="sm" variant="outline">
+            <Link href="/settings#gcal">
+              <SettingsIcon className="h-4 w-4 mr-1.5" /> 설정으로 이동
+            </Link>
+          </Button>
         </div>
-      </div>
+      )}
     </div>
   );
 }

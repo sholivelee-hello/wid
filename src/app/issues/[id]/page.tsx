@@ -10,7 +10,6 @@ import { lockedSiblings } from '@/lib/lock-state';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { TaskBranch } from '@/components/tasks/task-branch';
-import { TaskDetailPanel } from '@/components/tasks/task-detail-panel';
 import { IssueForm } from '@/components/issues/issue-form';
 import { IssueDeleteDialog } from '@/components/issues/issue-delete-dialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -25,7 +24,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ id: stri
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCompleted, setShowCompleted] = useState(false);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmTaskDelete, setConfirmTaskDelete] = useState<string | null>(null);
@@ -48,6 +47,12 @@ export default function IssueDetailPage({ params }: { params: Promise<{ id: stri
   }, [id]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  useEffect(() => {
+    const handler = () => fetchAll();
+    window.addEventListener('task-updated', handler);
+    return () => window.removeEventListener('task-updated', handler);
+  }, [fetchAll]);
 
   const tree = useMemo(() => {
     if (!issue) return null;
@@ -112,7 +117,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ id: stri
     onStatusChange: handleStatusChange,
     onComplete: handleComplete,
     onDelete: (taskId: string) => setConfirmTaskDelete(taskId),
-    onSelect: setSelectedTaskId,
+    onSelect: (id: string) =>
+      setEditingTaskId(prev => (prev === id ? null : id)),
   };
 
   if (loading) {
@@ -235,6 +241,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ id: stri
               node={n}
               depth={0}
               lockedIds={lockedTop}
+              editingTaskId={editingTaskId}
+              onCloseEdit={() => setEditingTaskId(null)}
               {...handlers}
             />
           ))}
@@ -263,11 +271,6 @@ export default function IssueDetailPage({ params }: { params: Promise<{ id: stri
         }}
       />
 
-      <TaskDetailPanel
-        taskId={selectedTaskId}
-        onClose={() => setSelectedTaskId(null)}
-        onTaskUpdated={fetchAll}
-      />
     </div>
   );
 }
