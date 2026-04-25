@@ -22,6 +22,7 @@ interface Props {
   onDelete: () => void;
   onToggleSortMode?: (issue: Issue) => void;
   forceOpen?: boolean;
+  dragHandleSlot?: React.ReactNode;
 }
 
 export function IssueRow({
@@ -34,6 +35,7 @@ export function IssueRow({
   onDelete,
   onToggleSortMode,
   forceOpen = false,
+  dragHandleSlot,
 }: Props) {
   const { collapsed, toggle } = useCollapsed('issue', issue.id, false, forceOpen);
 
@@ -51,8 +53,9 @@ export function IssueRow({
         }}
         aria-expanded={!collapsed}
         aria-label={collapsed ? 'ISSUE 펼치기' : 'ISSUE 접기'}
-        className="flex items-center gap-2 px-3 py-2.5 rounded-xl hover:bg-accent/30 transition-colors cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="group/issue-row flex items-center gap-2 px-3 py-2.5 rounded-xl hover:bg-accent/30 transition-colors cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
+        {dragHandleSlot}
         <ChevronDown
           className={cn(
             'h-4 w-4 text-muted-foreground transition-transform duration-200',

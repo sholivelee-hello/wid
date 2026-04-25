@@ -5,7 +5,7 @@ import { TaskNode } from '@/lib/hierarchy';
 import { lockedSiblings, completionBlocked, incompleteChildCount } from '@/lib/lock-state';
 import { TaskCard } from '@/components/tasks/task-card';
 import { useCollapsed } from '@/lib/use-tree-collapsed';
-import { ChevronDown, Plus } from 'lucide-react';
+import { ChevronDown, Plus, GripVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiFetch } from '@/lib/api';
 import { Input } from '@/components/ui/input';
@@ -16,6 +16,8 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import type { DraggableAttributes } from '@dnd-kit/core';
+import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities';
 
 export interface TaskBranchHandlers {
   onStatusChange: (id: string, status: string) => void;
@@ -41,6 +43,8 @@ interface Props extends TaskBranchHandlers {
   /** Optional breadcrumb forwarded to TaskCard. Only the root TaskBranch in a
    *  flat list (e.g. Today) sets this; recursion does not propagate it. */
   breadcrumb?: { issueName?: string | null; parentTaskTitle?: string | null };
+  /** Drag handle slot passed from parent SortableTaskItem. */
+  dragHandle?: HandleSlot;
 }
 
 function AddSubTaskRow({ parentId }: { parentId: string }) {
@@ -117,6 +121,35 @@ function AddSubTaskRow({ parentId }: { parentId: string }) {
 export const TASK_SORT_PREFIX = 'tsk:';
 export const taskSortId = (id: string) => `${TASK_SORT_PREFIX}${id}`;
 
+interface DragHandleProps {
+  ariaLabel: string;
+  listeners: SyntheticListenerMap | undefined;
+  attributes: DraggableAttributes;
+  setActivatorNodeRef?: (node: HTMLElement | null) => void;
+}
+
+function DragHandle({ ariaLabel, listeners, attributes, setActivatorNodeRef }: DragHandleProps) {
+  return (
+    <button
+      type="button"
+      ref={setActivatorNodeRef}
+      {...attributes}
+      {...listeners}
+      aria-label={ariaLabel}
+      onClick={(e) => e.stopPropagation()}
+      className="mt-3 p-1 -m-1 rounded text-muted-foreground/60 opacity-30 group-hover/row:opacity-100 focus-visible:opacity-100 transition-opacity hover:bg-accent/50 cursor-grab active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+    >
+      <GripVertical className="h-3.5 w-3.5" />
+    </button>
+  );
+}
+
+interface HandleSlot {
+  listeners: SyntheticListenerMap | undefined;
+  attributes: DraggableAttributes;
+  setActivatorNodeRef?: (node: HTMLElement | null) => void;
+}
+
 /** Sortable wrapper for a single TaskBranch row. Used both at the top level
  *  (by inbox-tree) and recursively here for sub-TASKs. */
 export function SortableTaskItem({
@@ -124,9 +157,9 @@ export function SortableTaskItem({
   children,
 }: {
   id: string;
-  children: React.ReactNode;
+  children: (handle: HandleSlot) => React.ReactNode;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
     useSortable({ id: taskSortId(id) });
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -135,8 +168,8 @@ export function SortableTaskItem({
     touchAction: 'none',
   };
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      {children}
+    <div ref={setNodeRef} style={style}>
+      {children({ listeners, attributes, setActivatorNodeRef })}
     </div>
   );
 }
@@ -150,6 +183,7 @@ export function TaskBranch({
   editingTaskId,
   onCloseEdit,
   breadcrumb,
+  dragHandle,
   onStatusChange,
   onComplete,
   onDelete,
@@ -197,19 +231,22 @@ export function TaskBranch({
       <SortableContext items={childIds} strategy={verticalListSortingStrategy}>
         {node.children.map(child => (
           <SortableTaskItem key={child.task.id} id={child.task.id}>
-            <TaskBranch
-              node={child}
-              depth={depth + 1}
-              lockedIds={childLocked}
-              forceOpenIds={forceOpenIds}
-              enableSortable
-              editingTaskId={editingTaskId}
-              onCloseEdit={onCloseEdit}
-              onStatusChange={onStatusChange}
-              onComplete={onComplete}
-              onDelete={onDelete}
-              onSelect={onSelect}
-            />
+            {(handle) => (
+              <TaskBranch
+                node={child}
+                depth={depth + 1}
+                lockedIds={childLocked}
+                forceOpenIds={forceOpenIds}
+                enableSortable
+                editingTaskId={editingTaskId}
+                onCloseEdit={onCloseEdit}
+                onStatusChange={onStatusChange}
+                onComplete={onComplete}
+                onDelete={onDelete}
+                onSelect={onSelect}
+                dragHandle={handle}
+              />
+            )}
           </SortableTaskItem>
         ))}
       </SortableContext>
@@ -218,7 +255,17 @@ export function TaskBranch({
 
   return (
     <div>
-      <div className="flex items-start gap-1">
+      <div className="group/row flex items-start gap-1">
+        {dragHandle ? (
+          <DragHandle
+            ariaLabel="끌어서 순서 변경"
+            listeners={dragHandle.listeners}
+            attributes={dragHandle.attributes}
+            setActivatorNodeRef={dragHandle.setActivatorNodeRef}
+          />
+        ) : (
+          <span className="mt-3 inline-block w-[22px]" aria-hidden />
+        )}
         {hasChildren ? (
           <button
             type="button"
@@ -246,7 +293,6 @@ export function TaskBranch({
             onDelete={onDelete}
             onSelect={onSelect}
             hierarchyLabel={depth === 0 ? 'TASK' : 'sub-TASK'}
-            onCardClick={hasChildren ? toggle : undefined}
             editing={editingTaskId === node.task.id}
             onCloseEdit={onCloseEdit}
             breadcrumb={breadcrumb}
@@ -262,10 +308,16 @@ export function TaskBranch({
             </div>
           )}
           {hasChildren && (
-            <div className="text-[10px] text-muted-foreground/80 ml-3 mt-1">
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); toggle(); }}
+              onPointerDown={(e) => e.stopPropagation()}
+              className="text-[10px] text-muted-foreground/80 ml-3 mt-1 hover:text-foreground hover:underline underline-offset-2 cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded"
+            >
               ↳ sub-TASK {node.children.length}개
               {node.task.sort_mode === 'sequential' ? ' · 순차' : ''}
-            </div>
+              {collapsed ? ' (펼치기)' : ' (접기)'}
+            </button>
           )}
         </div>
       </div>

@@ -9,6 +9,7 @@ import {
   DndContext,
   DragEndEvent,
   DragStartEvent,
+  KeyboardSensor,
   PointerSensor,
   useDroppable,
   useSensor,
@@ -20,8 +21,10 @@ import {
   useSortable,
   verticalListSortingStrategy,
   arrayMove,
+  sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { GripVertical } from 'lucide-react';
 import { Issue, Task } from '@/lib/types';
 import { buildTree, filterIncomplete, filterBySearch, countSubtasks } from '@/lib/hierarchy';
 import { lockedSiblings } from '@/lib/lock-state';
@@ -79,7 +82,7 @@ function SortableIssueItem({
 }: {
   id: string;
   dropEnabled: boolean;
-  children: React.ReactNode;
+  children: (dragHandleSlot: React.ReactNode) => React.ReactNode;
 }) {
   const sortable = useSortable({ id: issueSortId(id) });
   const droppable = useDroppable({ id: issueDropId(id), disabled: !dropEnabled });
@@ -93,18 +96,29 @@ function SortableIssueItem({
     opacity: sortable.isDragging ? 0.4 : 1,
     touchAction: 'none',
   };
+  const dragHandleSlot = (
+    <button
+      type="button"
+      ref={sortable.setActivatorNodeRef}
+      {...sortable.attributes}
+      {...sortable.listeners}
+      aria-label="ISSUE 순서 변경"
+      onClick={(e) => e.stopPropagation()}
+      className="p-1 -m-1 rounded text-muted-foreground/60 opacity-30 group-hover/issue-row:opacity-100 focus-visible:opacity-100 transition-opacity hover:bg-accent/50 cursor-grab active:cursor-grabbing flex-shrink-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+    >
+      <GripVertical className="h-3.5 w-3.5" />
+    </button>
+  );
   return (
     <div
       ref={setRef}
       style={style}
-      {...sortable.attributes}
-      {...sortable.listeners}
       className={cn(
         'rounded-xl transition-shadow',
         dropEnabled && droppable.isOver && 'ring-2 ring-primary ring-offset-2',
       )}
     >
-      {children}
+      {children(dragHandleSlot)}
     </div>
   );
 }
@@ -160,6 +174,7 @@ export function InboxTree({
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
   const tasksById = useMemo(() => {
@@ -430,33 +445,39 @@ export function InboxTree({
                 id={issue.id}
                 dropEnabled={draggingTask}
               >
-                <IssueRow
-                  issue={issue}
-                  taskCount={total}
-                  doneCount={done}
-                  subCount={subCount}
-                  onEdit={() => onEditIssue(issue)}
-                  onDelete={() => onDeleteIssue(issue)}
-                  onToggleSortMode={onToggleSortMode}
-                  forceOpen={forceOpenIssueIds.has(issue.id)}
-                >
-                  <SortableContext items={taskItemIds} strategy={verticalListSortingStrategy}>
-                    {nodes.map(n => (
-                      <SortableTaskItem key={n.task.id} id={n.task.id}>
-                        <TaskBranch
-                          node={n}
-                          depth={0}
-                          lockedIds={locked}
-                          forceOpenIds={forceOpenTaskIds}
-                          enableSortable
-                          editingTaskId={editingTaskId}
-                          onCloseEdit={onCloseEdit}
-                          {...taskHandlers}
-                        />
-                      </SortableTaskItem>
-                    ))}
-                  </SortableContext>
-                </IssueRow>
+                {(dragHandleSlot) => (
+                  <IssueRow
+                    issue={issue}
+                    taskCount={total}
+                    doneCount={done}
+                    subCount={subCount}
+                    onEdit={() => onEditIssue(issue)}
+                    onDelete={() => onDeleteIssue(issue)}
+                    onToggleSortMode={onToggleSortMode}
+                    forceOpen={forceOpenIssueIds.has(issue.id)}
+                    dragHandleSlot={dragHandleSlot}
+                  >
+                    <SortableContext items={taskItemIds} strategy={verticalListSortingStrategy}>
+                      {nodes.map(n => (
+                        <SortableTaskItem key={n.task.id} id={n.task.id}>
+                          {(handle) => (
+                            <TaskBranch
+                              node={n}
+                              depth={0}
+                              lockedIds={locked}
+                              forceOpenIds={forceOpenTaskIds}
+                              enableSortable
+                              editingTaskId={editingTaskId}
+                              onCloseEdit={onCloseEdit}
+                              dragHandle={handle}
+                              {...taskHandlers}
+                            />
+                          )}
+                        </SortableTaskItem>
+                      ))}
+                    </SortableContext>
+                  </IssueRow>
+                )}
               </SortableIssueItem>
             );
           })}
@@ -470,16 +491,19 @@ export function InboxTree({
             <div className="space-y-2">
               {tree.independents.map(n => (
                 <SortableTaskItem key={n.task.id} id={n.task.id}>
-                  <TaskBranch
-                    node={n}
-                    depth={0}
-                    lockedIds={new Set<string>()}
-                    forceOpenIds={forceOpenTaskIds}
-                    enableSortable
-                    editingTaskId={editingTaskId}
-                    onCloseEdit={onCloseEdit}
-                    {...taskHandlers}
-                  />
+                  {(handle) => (
+                    <TaskBranch
+                      node={n}
+                      depth={0}
+                      lockedIds={new Set<string>()}
+                      forceOpenIds={forceOpenTaskIds}
+                      enableSortable
+                      editingTaskId={editingTaskId}
+                      onCloseEdit={onCloseEdit}
+                      dragHandle={handle}
+                      {...taskHandlers}
+                    />
+                  )}
                 </SortableTaskItem>
               ))}
             </div>

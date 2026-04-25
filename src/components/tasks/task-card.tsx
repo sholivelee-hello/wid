@@ -38,9 +38,6 @@ interface TaskCardProps {
   onSelect?: (taskId: string) => void;
   /** Optional hierarchy label rendered as a small badge before the title. */
   hierarchyLabel?: 'TASK' | 'sub-TASK';
-  /** When provided, clicking the card body invokes this instead of opening the detail panel.
-   *  The title text becomes the path to the detail panel. */
-  onCardClick?: () => void;
   /** Renders a small "ISSUE › 부모 TASK" breadcrumb above the title — useful in
    *  flat lists like Today, where the tree context is otherwise lost. */
   breadcrumb?: { issueName?: string | null; parentTaskTitle?: string | null };
@@ -62,7 +59,6 @@ export function TaskCard({
   onDelete,
   onSelect,
   hierarchyLabel,
-  onCardClick,
   breadcrumb,
   editing = false,
   onCloseEdit,
@@ -71,7 +67,6 @@ export function TaskCard({
     if (onSelect) onSelect(task.id);
     else window.location.href = `/tasks/${task.id}`;
   };
-  const handleCardActivate = onCardClick ?? openDetail;
   const allStatuses = useAllStatuses();
   const defaultRenames = useDefaultStatusRenames();
 
@@ -109,9 +104,9 @@ export function TaskCard({
         isCompleted && 'opacity-60',
         editing && 'ring-1 ring-primary/40',
       )}
-      onClick={handleCardActivate}
+      onClick={openDetail}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') handleCardActivate();
+        if (e.key === 'Enter') openDetail();
       }}
     >
       <CardContent className="p-4">
@@ -160,15 +155,17 @@ export function TaskCard({
           {/* Title + metadata */}
           <div className="flex-1 min-w-0 space-y-1.5">
             {breadcrumb && (breadcrumb.issueName || breadcrumb.parentTaskTitle) && (
-              <div className="text-[10px] text-muted-foreground/80 truncate">
+              <div className="text-[10px] text-muted-foreground/80 truncate flex items-center gap-1">
                 {breadcrumb.issueName && (
-                  <span className="font-medium">{breadcrumb.issueName}</span>
+                  <span className="bg-primary/10 text-primary px-1.5 py-0.5 rounded text-[10px] font-semibold">
+                    {breadcrumb.issueName}
+                  </span>
                 )}
                 {breadcrumb.issueName && breadcrumb.parentTaskTitle && (
-                  <span className="mx-1">›</span>
+                  <span className="text-muted-foreground/60">›</span>
                 )}
                 {breadcrumb.parentTaskTitle && (
-                  <span>{breadcrumb.parentTaskTitle}</span>
+                  <span className="truncate">{breadcrumb.parentTaskTitle}</span>
                 )}
               </div>
             )}
@@ -186,26 +183,15 @@ export function TaskCard({
                   {hierarchyLabel}
                 </span>
               )}
-              {onCardClick ? (
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); openDetail(); }}
-                  className={cn(
-                    'font-medium text-sm leading-snug truncate text-left hover:underline underline-offset-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded',
-                    isCompleted && 'line-through text-muted-foreground',
-                  )}
-                  title="상세 보기"
-                >
-                  {task.title}
-                </button>
-              ) : (
-                <span className={cn(
+              <span
+                className={cn(
                   'font-medium text-sm leading-snug truncate',
-                  isCompleted && 'line-through text-muted-foreground'
-                )}>
-                  {task.title}
-                </span>
-              )}
+                  isCompleted && 'line-through text-muted-foreground',
+                )}
+                title={task.title}
+              >
+                {task.title}
+              </span>
             </div>
 
             {task.notion_issue && (

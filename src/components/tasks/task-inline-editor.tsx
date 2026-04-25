@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -15,7 +15,7 @@ import { DEFAULT_STATUSES, PRIORITIES } from '@/lib/constants';
 import { useHiddenStatuses } from '@/lib/hidden-statuses';
 import { useDefaultStatusRenames } from '@/lib/status-renames';
 import { apiFetch } from '@/lib/api';
-import { Trash2, X, FolderPlus } from 'lucide-react';
+import { Check, Loader2, Trash2, X, FolderPlus } from 'lucide-react';
 
 interface Props {
   task: Task;
@@ -36,6 +36,10 @@ export function TaskInlineEditor({ task, onClose }: Props) {
   const [customStatuses, setCustomStatuses] = useState<string[]>([]);
   const [linkedIssueId, setLinkedIssueId] = useState<string | null>(task.issue_id);
 
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+  const savedAtTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const hiddenStatuses = useHiddenStatuses();
   const defaultRenames = useDefaultStatusRenames();
   const visibleDefaultStatuses = DEFAULT_STATUSES.filter(s => !hiddenStatuses.has(s));
@@ -47,20 +51,32 @@ export function TaskInlineEditor({ task, onClose }: Props) {
       .then(d => setCustomStatuses(d.map(s => s.name))).catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (savedAt === null) return;
+    if (savedAtTimerRef.current) clearTimeout(savedAtTimerRef.current);
+    savedAtTimerRef.current = setTimeout(() => setSavedAt(null), 1500);
+    return () => {
+      if (savedAtTimerRef.current) clearTimeout(savedAtTimerRef.current);
+    };
+  }, [savedAt]);
+
   const currentIssue = linkedIssueId
     ? issues.find(i => i.id === linkedIssueId) ?? null
     : null;
 
   const save = async (patch: Record<string, unknown>) => {
     try {
+      setSaving(true);
       await apiFetch(`/api/tasks/${task.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patch),
-        suppressToast: true,
       });
       window.dispatchEvent(new CustomEvent('task-updated'));
-    } catch {}
+      setSavedAt(Date.now());
+    } finally {
+      setSaving(false);
+    }
   };
 
   const attachToIssue = async (issueId: string) => {
@@ -69,16 +85,13 @@ export function TaskInlineEditor({ task, onClose }: Props) {
   };
 
   const createAndAttach = async (name: string) => {
-    try {
-      const issue = await apiFetch<Issue>('/api/issues', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
-        suppressToast: true,
-      });
-      setIssues(prev => [...prev, issue]);
-      await attachToIssue(issue.id);
-    } catch {}
+    const issue = await apiFetch<Issue>('/api/issues', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    setIssues(prev => [...prev, issue]);
+    await attachToIssue(issue.id);
   };
 
   const unlinkFromIssue = async () => {
@@ -87,11 +100,9 @@ export function TaskInlineEditor({ task, onClose }: Props) {
   };
 
   const handleDelete = async () => {
-    try {
-      await apiFetch(`/api/tasks/${task.id}`, { method: 'DELETE', suppressToast: true });
-      window.dispatchEvent(new CustomEvent('task-updated'));
-      onClose();
-    } catch {}
+    await apiFetch(`/api/tasks/${task.id}`, { method: 'DELETE' });
+    window.dispatchEvent(new CustomEvent('task-updated'));
+    onClose();
   };
 
   return (
@@ -103,16 +114,28 @@ export function TaskInlineEditor({ task, onClose }: Props) {
     >
       <div className="flex items-center justify-between">
         <span className="text-xs text-muted-foreground">인라인 편집</span>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className="h-7 px-2 text-xs"
-          onClick={onClose}
-          aria-label="편집 닫기"
-        >
-          <X className="h-3.5 w-3.5 mr-1" /> 닫기
-        </Button>
+        <div className="flex items-center gap-2">
+          {savedAt !== null && (
+            <span className="text-[11px] text-emerald-600 dark:text-emerald-400 inline-flex items-center gap-1 animate-in fade-in">
+              <Check className="h-3 w-3" /> 저장됨
+            </span>
+          )}
+          {saving && savedAt === null && (
+            <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1 animate-in fade-in">
+              <Loader2 className="h-3 w-3 animate-spin" /> 저장 중…
+            </span>
+          )}
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-xs"
+            onClick={onClose}
+            aria-label="편집 닫기"
+          >
+            <X className="h-3.5 w-3.5 mr-1" /> 닫기
+          </Button>
+        </div>
       </div>
 
       <div>
