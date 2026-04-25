@@ -21,6 +21,7 @@ interface Props {
   onEdit: () => void;
   onDelete: () => void;
   onToggleSortMode?: (issue: Issue) => void;
+  forceOpen?: boolean;
 }
 
 export function IssueRow({
@@ -32,8 +33,9 @@ export function IssueRow({
   onEdit,
   onDelete,
   onToggleSortMode,
+  forceOpen = false,
 }: Props) {
-  const { collapsed, toggle } = useCollapsed('issue', issue.id, false);
+  const { collapsed, toggle } = useCollapsed('issue', issue.id, false, forceOpen);
 
   return (
     <div className="rounded-xl border border-border/60 bg-card/40">

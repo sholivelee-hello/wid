@@ -365,6 +365,7 @@ export default function InboxPage() {
             issues={issues}
             tasks={tasks}
             showCompleted={showCompleted}
+            searchQuery={debouncedSearch}
             taskHandlers={taskHandlers}
             onEditIssue={(i) => { setAddingIssue(false); setEditingIssue(i); }}
             onDeleteIssue={(i) => setDeletingIssue(i)}

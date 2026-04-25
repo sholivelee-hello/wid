@@ -19,19 +19,22 @@ interface Props extends TaskBranchHandlers {
   node: TaskNode;
   depth: number;
   lockedIds: Set<string>;
+  forceOpenIds?: Set<string>;
 }
 
 export function TaskBranch({
   node,
   depth,
   lockedIds,
+  forceOpenIds,
   onTimerChange,
   onStatusChange,
   onComplete,
   onDelete,
   onSelect,
 }: Props) {
-  const { collapsed, toggle } = useCollapsed('task', node.task.id, false);
+  const forceOpen = forceOpenIds?.has(node.task.id) ?? false;
+  const { collapsed, toggle } = useCollapsed('task', node.task.id, false, forceOpen);
   const blocked = completionBlocked(node);
   const locked = lockedIds.has(node.task.id);
   const childLocked = lockedSiblings(node.children, node.task.sort_mode);
@@ -97,6 +100,7 @@ export function TaskBranch({
               node={child}
               depth={depth + 1}
               lockedIds={childLocked}
+              forceOpenIds={forceOpenIds}
               onTimerChange={onTimerChange}
               onStatusChange={onStatusChange}
               onComplete={onComplete}

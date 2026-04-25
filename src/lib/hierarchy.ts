@@ -76,3 +76,71 @@ export function countSubtasks(nodes: TaskNode[]): number {
   }
   return total;
 }
+
+export interface SearchResult {
+  tree: Tree;
+  forceOpenIssueIds: Set<string>;
+  forceOpenTaskIds: Set<string>;
+  matched: Set<string>;
+}
+
+function pruneNode(node: TaskNode, q: string, forceOpenTaskIds: Set<string>): TaskNode | null {
+  const selfMatch = node.task.title.toLowerCase().includes(q);
+  const prunedChildren = node.children
+    .map(c => pruneNode(c, q, forceOpenTaskIds))
+    .filter((c): c is TaskNode => c !== null);
+
+  if (selfMatch) {
+    // Show the entire descendant subtree intact.
+    if (node.children.length > 0) forceOpenTaskIds.add(node.task.id);
+    return { task: node.task, children: node.children };
+  }
+  if (prunedChildren.length > 0) {
+    forceOpenTaskIds.add(node.task.id);
+    return { task: node.task, children: prunedChildren };
+  }
+  return null;
+}
+
+export function filterBySearch(tree: Tree, query: string): SearchResult {
+  const q = query.trim().toLowerCase();
+  const forceOpenIssueIds = new Set<string>();
+  const forceOpenTaskIds = new Set<string>();
+  const matched = new Set<string>();
+
+  if (!q) {
+    return { tree, forceOpenIssueIds, forceOpenTaskIds, matched };
+  }
+
+  const collectMatched = (n: TaskNode) => {
+    if (n.task.title.toLowerCase().includes(q)) matched.add(n.task.id);
+    n.children.forEach(collectMatched);
+  };
+
+  const issuesPruned = tree.issues
+    .map(({ issue, tasks }) => {
+      tasks.forEach(collectMatched);
+      const issueNameMatch = issue.name.toLowerCase().includes(q);
+      const prunedTasks = issueNameMatch
+        ? tasks
+        : tasks
+            .map(t => pruneNode(t, q, forceOpenTaskIds))
+            .filter((t): t is TaskNode => t !== null);
+      if (prunedTasks.length === 0 && !issueNameMatch) return null;
+      forceOpenIssueIds.add(issue.id);
+      return { issue, tasks: prunedTasks };
+    })
+    .filter((i): i is NonNullable<typeof i> => i !== null);
+
+  tree.independents.forEach(collectMatched);
+  const indPruned = tree.independents
+    .map(t => pruneNode(t, q, forceOpenTaskIds))
+    .filter((t): t is TaskNode => t !== null);
+
+  return {
+    tree: { issues: issuesPruned, independents: indPruned },
+    forceOpenIssueIds,
+    forceOpenTaskIds,
+    matched,
+  };
+}

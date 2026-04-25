@@ -17,7 +17,7 @@ import {
   closestCenter,
 } from '@dnd-kit/core';
 import { Issue, Task } from '@/lib/types';
-import { buildTree, filterIncomplete, countSubtasks } from '@/lib/hierarchy';
+import { buildTree, filterIncomplete, filterBySearch, countSubtasks } from '@/lib/hierarchy';
 import { lockedSiblings } from '@/lib/lock-state';
 import { IssueRow } from '@/components/issues/issue-row';
 import { TaskBranch, TaskBranchHandlers } from '@/components/tasks/task-branch';
@@ -37,6 +37,7 @@ interface Props {
   issues: Issue[];
   tasks: Task[];
   showCompleted: boolean;
+  searchQuery?: string;
   taskHandlers: TaskBranchHandlers;
   onEditIssue: (issue: Issue) => void;
   onDeleteIssue: (issue: Issue) => void;
@@ -209,16 +210,23 @@ export function InboxTree({
   issues,
   tasks,
   showCompleted,
+  searchQuery = '',
   taskHandlers,
   onEditIssue,
   onDeleteIssue,
   onToggleSortMode,
   onMutate,
 }: Props) {
-  const tree = useMemo(() => {
+  const { tree, forceOpenIssueIds, forceOpenTaskIds } = useMemo(() => {
     const built = buildTree(issues, tasks);
-    return showCompleted ? built : filterIncomplete(built);
-  }, [issues, tasks, showCompleted]);
+    const completionFiltered = showCompleted ? built : filterIncomplete(built);
+    const search = filterBySearch(completionFiltered, searchQuery);
+    return {
+      tree: search.tree,
+      forceOpenIssueIds: search.forceOpenIssueIds,
+      forceOpenTaskIds: search.forceOpenTaskIds,
+    };
+  }, [issues, tasks, showCompleted, searchQuery]);
 
   const [activeId, setActiveId] = useState<string | null>(null);
   const [mergeRequest, setMergeRequest] = useState<MergeRequest | null>(null);
@@ -360,6 +368,7 @@ export function InboxTree({
                 onEdit={() => onEditIssue(issue)}
                 onDelete={() => onDeleteIssue(issue)}
                 onToggleSortMode={onToggleSortMode}
+                forceOpen={forceOpenIssueIds.has(issue.id)}
               >
                 {nodes.map(n => (
                   <DraggableTaskBranch
@@ -371,6 +380,7 @@ export function InboxTree({
                       node={n}
                       depth={0}
                       lockedIds={locked}
+                      forceOpenIds={forceOpenTaskIds}
                       {...taskHandlers}
                     />
                   </DraggableTaskBranch>
@@ -391,6 +401,7 @@ export function InboxTree({
                   node={n}
                   depth={0}
                   lockedIds={new Set<string>()}
+                  forceOpenIds={forceOpenTaskIds}
                   {...taskHandlers}
                 />
               </DraggableTaskBranch>

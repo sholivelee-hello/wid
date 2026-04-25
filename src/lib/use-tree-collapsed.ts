@@ -15,7 +15,12 @@ function readInitial(kind: 'issue' | 'task', id: string, fallback: boolean) {
   }
 }
 
-export function useCollapsed(kind: 'issue' | 'task', id: string, defaultCollapsed = false) {
+export function useCollapsed(
+  kind: 'issue' | 'task',
+  id: string,
+  defaultCollapsed = false,
+  forceOpen = false,
+) {
   const [collapsed, setCollapsed] = useState(() => readInitial(kind, id, defaultCollapsed));
   const toggle = useCallback(() => {
     setCollapsed(prev => {
@@ -24,5 +29,7 @@ export function useCollapsed(kind: 'issue' | 'task', id: string, defaultCollapse
       return next;
     });
   }, [kind, id]);
-  return { collapsed, toggle };
+  // forceOpen wins over user state without overwriting it — when search
+  // clears, the previously persisted collapse returns.
+  return { collapsed: forceOpen ? false : collapsed, toggle };
 }
