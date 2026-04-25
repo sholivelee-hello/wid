@@ -16,6 +16,8 @@ import { useAllStatuses } from '@/lib/use-all-statuses';
 import { cn } from '@/lib/utils';
 import { Inbox, ChevronDown, Plus, Pencil, Trash2 } from 'lucide-react';
 import { InboxTree } from '@/components/inbox/inbox-tree';
+import { IssueForm } from '@/components/issues/issue-form';
+import { IssueDeleteDialog } from '@/components/issues/issue-delete-dialog';
 import { buildTree, filterIncomplete } from '@/lib/hierarchy';
 import {
   loadViews, saveViews, loadInboxFilter, saveInboxFilter,
@@ -35,9 +37,9 @@ export default function InboxPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
-  // Phase 4 will wire these to actual edit/delete dialogs.
-  const [, setEditingIssue] = useState<Issue | null>(null);
-  const [, setDeletingIssue] = useState<Issue | null>(null);
+  const [addingIssue, setAddingIssue] = useState(false);
+  const [editingIssue, setEditingIssue] = useState<Issue | null>(null);
+  const [deletingIssue, setDeletingIssue] = useState<Issue | null>(null);
   const searchTimerRef = useRef<NodeJS.Timeout>(undefined);
 
   const [statusFilter, setStatusFilter] = useState<string[]>(() => loadInboxFilter());
@@ -250,6 +252,15 @@ export default function InboxPage() {
               <SelectItem value="created_at">생성일</SelectItem>
             </SelectContent>
           </Select>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8"
+            onClick={() => { setEditingIssue(null); setAddingIssue(true); }}
+          >
+            <Plus className="h-3.5 w-3.5 mr-1" />
+            새 ISSUE
+          </Button>
         </div>
       </div>
 
@@ -303,6 +314,30 @@ export default function InboxPage() {
           </Button>
         </div>
 
+        {addingIssue && (
+          <div className="mb-3">
+            <IssueForm
+              onSave={(i) => {
+                setIssues(prev => [...prev, i]);
+                setAddingIssue(false);
+              }}
+              onCancel={() => setAddingIssue(false)}
+            />
+          </div>
+        )}
+        {editingIssue && (
+          <div className="mb-3">
+            <IssueForm
+              initial={editingIssue}
+              onSave={(i) => {
+                setIssues(prev => prev.map(x => x.id === i.id ? i : x));
+                setEditingIssue(null);
+              }}
+              onCancel={() => setEditingIssue(null)}
+            />
+          </div>
+        )}
+
         {treeVisibleCount === 0 ? (
           <EmptyState
             icon={Inbox}
@@ -316,7 +351,7 @@ export default function InboxPage() {
             tasks={tasks}
             showCompleted={showCompleted}
             taskHandlers={taskHandlers}
-            onEditIssue={(i) => setEditingIssue(i)}
+            onEditIssue={(i) => { setAddingIssue(false); setEditingIssue(i); }}
             onDeleteIssue={(i) => setDeletingIssue(i)}
           />
         )}
@@ -428,6 +463,17 @@ export default function InboxPage() {
         description="이 뷰를 삭제합니다."
         confirmLabel="삭제"
         onConfirm={() => { if (deleteViewId) handleDeleteView(deleteViewId); }}
+      />
+
+      <IssueDeleteDialog
+        issue={deletingIssue}
+        taskCount={
+          deletingIssue
+            ? tasks.filter(t => t.issue_id === deletingIssue.id && !t.is_deleted).length
+            : 0
+        }
+        onClose={() => setDeletingIssue(null)}
+        onDeleted={fetchTasks}
       />
 
       <TaskDetailPanel
