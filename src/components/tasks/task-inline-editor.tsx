@@ -287,8 +287,12 @@ export function TaskInlineEditor({ task, onClose }: Props) {
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
-        title="task 삭제"
-        description="이 task를 휴지통으로 이동합니다."
+        title={task.parent_task_id ? 'sub-TASK 삭제' : 'TASK 삭제'}
+        description={
+          task.parent_task_id
+            ? '이 sub-TASK를 휴지통으로 이동합니다.'
+            : '이 TASK를 휴지통으로 이동합니다.'
+        }
         confirmLabel="삭제"
         onConfirm={handleDelete}
       />

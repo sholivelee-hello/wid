@@ -1,11 +1,15 @@
 'use client';
 
+import { useState } from 'react';
 import { TaskNode } from '@/lib/hierarchy';
 import { lockedSiblings, completionBlocked, incompleteChildCount } from '@/lib/lock-state';
 import { TaskCard } from '@/components/tasks/task-card';
 import { useCollapsed } from '@/lib/use-tree-collapsed';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { apiFetch } from '@/lib/api';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import {
   SortableContext,
   useSortable,
@@ -34,6 +38,80 @@ interface Props extends TaskBranchHandlers {
   editingTaskId?: string | null;
   /** Called by TaskCard's inline editor when the user closes it. */
   onCloseEdit?: () => void;
+  /** Optional breadcrumb forwarded to TaskCard. Only the root TaskBranch in a
+   *  flat list (e.g. Today) sets this; recursion does not propagate it. */
+  breadcrumb?: { issueName?: string | null; parentTaskTitle?: string | null };
+}
+
+function AddSubTaskRow({ parentId }: { parentId: string }) {
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    const t = title.trim();
+    if (!t || busy) return;
+    setBusy(true);
+    try {
+      await apiFetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: t, parent_task_id: parentId, issue_id: null }),
+        suppressToast: true,
+      });
+      window.dispatchEvent(new CustomEvent('task-created'));
+      setTitle('');
+      setOpen(false);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setOpen(true); }}
+        onPointerDown={(e) => e.stopPropagation()}
+        className="text-[11px] text-muted-foreground/70 hover:text-foreground transition-colors inline-flex items-center gap-1 px-1.5 py-1 rounded"
+      >
+        <Plus className="h-3 w-3" /> sub-TASK 추가
+      </button>
+    );
+  }
+
+  return (
+    <div
+      className="flex items-center gap-1.5"
+      onClick={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+    >
+      <Input
+        autoFocus
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); submit(); }
+          else if (e.key === 'Escape') { e.preventDefault(); setOpen(false); setTitle(''); }
+        }}
+        placeholder="sub-TASK 제목"
+        className="h-7 text-xs"
+      />
+      <Button type="button" size="sm" onClick={submit} disabled={!title.trim() || busy} className="h-7 text-xs">
+        추가
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        onClick={() => { setOpen(false); setTitle(''); }}
+        className="h-7 text-xs"
+      >
+        취소
+      </Button>
+    </div>
+  );
 }
 
 export const TASK_SORT_PREFIX = 'tsk:';
@@ -71,6 +149,7 @@ export function TaskBranch({
   enableSortable = false,
   editingTaskId,
   onCloseEdit,
+  breadcrumb,
   onStatusChange,
   onComplete,
   onDelete,
@@ -170,6 +249,7 @@ export function TaskBranch({
             onCardClick={hasChildren ? toggle : undefined}
             editing={editingTaskId === node.task.id}
             onCloseEdit={onCloseEdit}
+            breadcrumb={breadcrumb}
           />
           {blocked && (
             <div className="text-[10px] text-amber-700 dark:text-amber-400 ml-3 mt-1">
@@ -199,8 +279,16 @@ export function TaskBranch({
           <div className="overflow-hidden">
             <div className="mt-2 ml-2 pl-4 border-l-2 border-border/50 space-y-2">
               {renderChildren()}
+              <div className="pt-1">
+                <AddSubTaskRow parentId={node.task.id} />
+              </div>
             </div>
           </div>
+        </div>
+      )}
+      {!hasChildren && (
+        <div className="ml-[22px] mt-1">
+          <AddSubTaskRow parentId={node.task.id} />
         </div>
       )}
     </div>

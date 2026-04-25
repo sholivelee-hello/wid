@@ -259,17 +259,29 @@ export default function IssueDetailPage({ params }: { params: Promise<{ id: stri
         }}
       />
 
-      <ConfirmDialog
-        open={!!confirmTaskDelete}
-        onOpenChange={(open) => !open && setConfirmTaskDelete(null)}
-        title="task 삭제"
-        description="이 task를 휴지통으로 이동합니다."
-        confirmLabel="삭제"
-        onConfirm={() => {
-          if (confirmTaskDelete) handleDeleteTask(confirmTaskDelete);
-          setConfirmTaskDelete(null);
-        }}
-      />
+      {(() => {
+        const target = confirmTaskDelete
+          ? tasks.find(t => t.id === confirmTaskDelete)
+          : null;
+        const isSub = !!target?.parent_task_id;
+        return (
+          <ConfirmDialog
+            open={!!confirmTaskDelete}
+            onOpenChange={(open) => !open && setConfirmTaskDelete(null)}
+            title={isSub ? 'sub-TASK 삭제' : 'TASK 삭제'}
+            description={
+              isSub
+                ? '이 sub-TASK를 휴지통으로 이동합니다.'
+                : '이 TASK를 휴지통으로 이동합니다.'
+            }
+            confirmLabel="삭제"
+            onConfirm={() => {
+              if (confirmTaskDelete) handleDeleteTask(confirmTaskDelete);
+              setConfirmTaskDelete(null);
+            }}
+          />
+        );
+      })()}
 
     </div>
   );

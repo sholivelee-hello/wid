@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { Issue, Task } from '@/lib/types';
-import { TaskCard } from '@/components/tasks/task-card';
+import { TaskBranch } from '@/components/tasks/task-branch';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { apiFetch } from '@/lib/api';
@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import { DEFAULT_STATUSES } from '@/lib/constants';
 import { useAllStatuses } from '@/lib/use-all-statuses';
 import { getTodayTaskIds, getEffectiveTodayTaskIds } from '@/lib/today-tasks';
+import type { TaskNode } from '@/lib/hierarchy';
 import { ChevronDown, Sun } from 'lucide-react';
 
 export default function TodayPage() {
@@ -59,13 +60,12 @@ export default function TodayPage() {
     };
   }, [fetchAll]);
 
-  // 오늘에 추가된 task들 (명시적 + 그 자손까지 포함한 효과적 집합)
+  // Effective today set = explicit ids ∪ all descendants.
   const todayTasks = useMemo(() => {
     const effective = getEffectiveTodayTaskIds(todayIds, tasks);
     return tasks.filter(t => effective.has(t.id) && !t.is_deleted);
   }, [tasks, todayIds]);
 
-  // breadcrumb 계산용 lookup
   const tasksById = useMemo(() => {
     const m = new Map<string, Task>();
     for (const t of tasks) m.set(t.id, t);
@@ -76,6 +76,46 @@ export default function TodayPage() {
     for (const i of issues) m.set(i.id, i);
     return m;
   }, [issues]);
+
+  // Today-only forest: tasks whose parent is also in today nest under their
+  // parent; everything else becomes a root.
+  const todayForest = useMemo<TaskNode[]>(() => {
+    const todaySet = new Set(todayTasks.map(t => t.id));
+    const childrenByParent = new Map<string, Task[]>();
+    for (const t of todayTasks) {
+      if (t.parent_task_id && todaySet.has(t.parent_task_id)) {
+        const arr = childrenByParent.get(t.parent_task_id) ?? [];
+        arr.push(t);
+        childrenByParent.set(t.parent_task_id, arr);
+      }
+    }
+    const sortPos = (a: Task, b: Task) => a.position - b.position;
+    const buildNode = (t: Task): TaskNode => ({
+      task: t,
+      children: (childrenByParent.get(t.id) ?? []).sort(sortPos).map(buildNode),
+    });
+    return todayTasks
+      .filter(t => !t.parent_task_id || !todaySet.has(t.parent_task_id))
+      .sort(sortPos)
+      .map(buildNode);
+  }, [todayTasks]);
+
+  // Group ROOTS by status (children inside a tree keep their own status pill).
+  const statusGroups = useMemo(() => {
+    const order = [
+      ...DEFAULT_STATUSES,
+      ...allStatuses.filter(s => s.isCustom).map(s => s.original),
+    ];
+    const groups = new Map<string, TaskNode[]>();
+    for (const status of order) {
+      const g = todayForest.filter(n => n.task.status === status);
+      if (g.length > 0) groups.set(status, g);
+    }
+    for (const root of todayForest) {
+      if (!groups.has(root.task.status)) groups.set(root.task.status, [root]);
+    }
+    return groups;
+  }, [todayForest, allStatuses]);
 
   const buildBreadcrumb = (task: Task) => {
     let issueName: string | null = null;
@@ -90,26 +130,6 @@ export default function TodayPage() {
     }
     return { issueName, parentTaskTitle };
   };
-
-  // 상태별 그룹핑 (DEFAULT_STATUSES 순서 우선, 커스텀 상태 뒤에)
-  const statusGroups = useMemo(() => {
-    const statusOrder = [
-      ...DEFAULT_STATUSES,
-      ...allStatuses.filter(s => s.isCustom).map(s => s.original),
-    ];
-    const groups = new Map<string, Task[]>();
-    for (const status of statusOrder) {
-      const group = todayTasks.filter(t => t.status === status);
-      if (group.length > 0) groups.set(status, group);
-    }
-    // 혹시 statusOrder에 없는 상태 처리
-    for (const task of todayTasks) {
-      if (!groups.has(task.status)) {
-        groups.set(task.status, [task]);
-      }
-    }
-    return groups;
-  }, [todayTasks, allStatuses]);
 
   const handleStatusChange = async (taskId: string, newStatus: string) => {
     setTasks(prev => prev.map(t =>
@@ -184,7 +204,7 @@ export default function TodayPage() {
         />
       ) : (
         <div className="space-y-4">
-          {[...statusGroups.entries()].map(([status, groupTasks]) => {
+          {[...statusGroups.entries()].map(([status, groupRoots]) => {
             const collapsed = collapsedGroups.has(status);
             const display = getStatusDisplay(status);
             return (
@@ -203,19 +223,20 @@ export default function TodayPage() {
                     {display}
                   </span>
                   <span className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">
-                    ({groupTasks.length})
+                    ({groupRoots.length})
                   </span>
                 </button>
                 {!collapsed && (
                   <div className="space-y-2">
-                    {groupTasks.map(task => (
-                      <TaskCard
-                        key={task.id}
-                        task={task}
-                        hierarchyLabel={task.parent_task_id ? 'sub-TASK' : 'TASK'}
-                        breadcrumb={buildBreadcrumb(task)}
-                        editing={editingTaskId === task.id}
+                    {groupRoots.map(root => (
+                      <TaskBranch
+                        key={root.task.id}
+                        node={root}
+                        depth={0}
+                        lockedIds={new Set<string>()}
+                        editingTaskId={editingTaskId}
                         onCloseEdit={() => setEditingTaskId(null)}
+                        breadcrumb={buildBreadcrumb(root.task)}
                         {...taskHandlers}
                       />
                     ))}
@@ -227,14 +248,24 @@ export default function TodayPage() {
         </div>
       )}
 
-      <ConfirmDialog
-        open={!!deleteId}
-        onOpenChange={(open) => !open && setDeleteId(null)}
-        title="task 삭제"
-        description="이 task를 휴지통으로 이동합니다."
-        confirmLabel="삭제"
-        onConfirm={() => { if (deleteId) handleDelete(deleteId); setDeleteId(null); }}
-      />
+      {(() => {
+        const target = deleteId ? tasks.find(t => t.id === deleteId) : null;
+        const isSub = !!target?.parent_task_id;
+        return (
+          <ConfirmDialog
+            open={!!deleteId}
+            onOpenChange={(open) => !open && setDeleteId(null)}
+            title={isSub ? 'sub-TASK 삭제' : 'TASK 삭제'}
+            description={
+              isSub
+                ? '이 sub-TASK를 휴지통으로 이동합니다.'
+                : '이 TASK를 휴지통으로 이동합니다.'
+            }
+            confirmLabel="삭제"
+            onConfirm={() => { if (deleteId) handleDelete(deleteId); setDeleteId(null); }}
+          />
+        );
+      })()}
     </div>
   );
 }

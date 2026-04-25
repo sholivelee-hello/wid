@@ -2,23 +2,50 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import { CalendarDays, Settings as SettingsIcon } from 'lucide-react';
-import { getGCalEmbedRaw, buildEmbedUrl, GCAL_EMBED_EVENT } from '@/lib/gcal-embed';
+import {
+  getGCalConfig,
+  buildEmbedUrl,
+  GCAL_EMBED_EVENT,
+  type CalendarMode,
+  type GCalConfig,
+} from '@/lib/gcal-embed';
 
-type Mode = 'WEEK' | 'MONTH' | 'AGENDA';
+const PX_PER_HOUR = 60; // tuning constant for the WEEK-mode iframe crop
 
 export default function CalendarPage() {
-  const [raw, setRaw] = useState(() => getGCalEmbedRaw());
-  const [mode, setMode] = useState<Mode>('WEEK');
+  const [config, setConfig] = useState<GCalConfig>(() => getGCalConfig());
+  const [mode, setMode] = useState<CalendarMode>('WEEK');
+  const { resolvedTheme } = useTheme();
 
   useEffect(() => {
-    const handler = () => setRaw(getGCalEmbedRaw());
+    const handler = () => setConfig(getGCalConfig());
     window.addEventListener(GCAL_EMBED_EVENT, handler);
     return () => window.removeEventListener(GCAL_EMBED_EVENT, handler);
   }, []);
 
-  const embedUrl = buildEmbedUrl(raw, mode);
+  const useDark =
+    config.darkMode === 'dark' ||
+    (config.darkMode === 'auto' && resolvedTheme === 'dark');
+
+  const embedUrl = buildEmbedUrl(config, {
+    mode,
+    bgColor: useDark ? '#0b0b0c' : undefined,
+  });
+
+  // Time-of-day crop only applies in WEEK mode where Google renders a
+  // 24-hour vertical grid we can offset.
+  const cropEnabled = mode === 'WEEK' && config.endHour > config.startHour;
+  const visibleHours = cropEnabled ? config.endHour - config.startHour : 24;
+  const wrapperHeight = visibleHours * PX_PER_HOUR;
+  const iframeHeight = 24 * PX_PER_HOUR;
+  const iframeMarginTop = cropEnabled ? -config.startHour * PX_PER_HOUR : 0;
+
+  // Dark mode: invert + hue-rotate makes the iframe look dark without messing
+  // up the event hue too badly. Color is approximate, not perfect.
+  const darkFilter = useDark ? 'invert(0.92) hue-rotate(180deg)' : undefined;
 
   return (
     <div className="space-y-4 max-w-7xl">
@@ -28,7 +55,7 @@ export default function CalendarPage() {
         </h1>
         {embedUrl && (
           <div className="flex items-center gap-1">
-            {(['WEEK', 'MONTH', 'AGENDA'] as Mode[]).map(m => (
+            {(['WEEK', 'MONTH', 'AGENDA'] as CalendarMode[]).map(m => (
               <Button
                 key={m}
                 variant={mode === m ? 'default' : 'outline'}
@@ -44,11 +71,19 @@ export default function CalendarPage() {
       </div>
 
       {embedUrl ? (
-        <div className="rounded-lg border border-border/60 bg-card overflow-hidden">
+        <div
+          className="rounded-lg border border-border/60 bg-card overflow-hidden"
+          style={{ height: wrapperHeight, maxHeight: '82vh' }}
+        >
           <iframe
-            key={embedUrl}
+            key={`${embedUrl}|${useDark ? 'dark' : 'light'}`}
             src={embedUrl}
-            className="w-full h-[78vh] border-0"
+            className="w-full border-0 block"
+            style={{
+              height: cropEnabled ? iframeHeight : '100%',
+              marginTop: iframeMarginTop,
+              filter: darkFilter,
+            }}
             title="Google Calendar"
           />
         </div>
@@ -67,6 +102,13 @@ export default function CalendarPage() {
             </Link>
           </Button>
         </div>
+      )}
+
+      {embedUrl && cropEnabled && (
+        <p className="text-[11px] text-muted-foreground/70">
+          {config.startHour}:00 – {config.endHour}:00 시간대만 표시 중. 설정에서 범위를 조절할 수 있어요.
+          {useDark && ' · 다크 모드는 색상 반전 필터로 적용된 비공식 표시입니다.'}
+        </p>
       )}
     </div>
   );
