@@ -15,6 +15,7 @@ import { DEFAULT_STATUSES, PRIORITIES } from '@/lib/constants';
 import { useHiddenStatuses } from '@/lib/hidden-statuses';
 import { useDefaultStatusRenames } from '@/lib/status-renames';
 import { apiFetch } from '@/lib/api';
+import { promptNextInTodayIfNeeded } from '@/lib/today-tasks';
 import { Check, Loader2, Trash2, X, FolderPlus } from 'lucide-react';
 
 interface Props {
@@ -74,6 +75,9 @@ export function TaskInlineEditor({ task, onClose }: Props) {
       });
       window.dispatchEvent(new CustomEvent('task-updated'));
       setSavedAt(Date.now());
+      if (patch.status === '완료' && task.status !== '완료') {
+        promptNextInTodayIfNeeded({ ...task, status: '완료' });
+      }
     } finally {
       setSaving(false);
     }

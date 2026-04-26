@@ -1,3 +1,5 @@
+import { toast } from 'sonner';
+import { apiFetch } from './api';
 import type { Task } from './types';
 
 const KEY = 'wid-today-task-ids';
@@ -56,4 +58,54 @@ export function getEffectiveTodayTaskIds(
     }
   }
   return out;
+}
+
+/** Next undone sibling under the same parent (issue_id + parent_task_id), by position. */
+export function findNextSiblingTask(current: Task, allTasks: Task[]): Task | null {
+  const candidates = allTasks
+    .filter(t =>
+      !t.is_deleted &&
+      t.id !== current.id &&
+      t.issue_id === current.issue_id &&
+      t.parent_task_id === current.parent_task_id &&
+      t.status !== '완료' &&
+      t.position > current.position,
+    )
+    .sort((a, b) => a.position - b.position);
+  return candidates[0] ?? null;
+}
+
+/**
+ * Called whenever a TASK transitions to 완료. If it was explicitly in 오늘
+ * AND has an undone sibling that is NOT yet in 오늘, surface a toast offering
+ * to pull that next sibling into today.
+ */
+export async function promptNextInTodayIfNeeded(completed: Task) {
+  if (typeof window === 'undefined') return;
+  // Only meaningful for tasks that have siblings (under an ISSUE or under a parent TASK).
+  if (!completed.issue_id && !completed.parent_task_id) return;
+  const explicit = getTodayTaskIds();
+  if (!explicit.has(completed.id)) return; // only fire for explicitly-added today items
+  let allTasks: Task[];
+  try {
+    allTasks = await apiFetch<Task[]>('/api/tasks?deleted=false', { suppressToast: true });
+  } catch {
+    return;
+  }
+  const next = findNextSiblingTask(completed, allTasks);
+  if (!next) return;
+  // If the next sibling is already in today (explicit or via descendant pull), skip.
+  if (getEffectiveTodayTaskIds(explicit, allTasks).has(next.id)) return;
+  toast(`✓ 완료. 다음: "${next.title}"`, {
+    description: '이 TASK도 오늘에 추가할까요?',
+    duration: 8000,
+    action: {
+      label: '오늘에 추가',
+      onClick: () => {
+        const ids = getTodayTaskIds();
+        ids.add(next.id);
+        saveTodayTaskIds(ids);
+      },
+    },
+  });
 }

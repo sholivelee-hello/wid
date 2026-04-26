@@ -11,7 +11,7 @@ import { apiFetch } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { DEFAULT_STATUSES } from '@/lib/constants';
 import { useAllStatuses } from '@/lib/use-all-statuses';
-import { getTodayTaskIds, getEffectiveTodayTaskIds } from '@/lib/today-tasks';
+import { getTodayTaskIds, getEffectiveTodayTaskIds, promptNextInTodayIfNeeded } from '@/lib/today-tasks';
 import type { TaskNode } from '@/lib/hierarchy';
 import { ChevronDown, Sun } from 'lucide-react';
 
@@ -132,6 +132,7 @@ export default function TodayPage() {
   };
 
   const handleStatusChange = async (taskId: string, newStatus: string) => {
+    const before = tasks.find(t => t.id === taskId);
     setTasks(prev => prev.map(t =>
       t.id === taskId
         ? { ...t, status: newStatus, completed_at: newStatus === '완료' ? new Date().toISOString() : t.completed_at }
@@ -144,6 +145,9 @@ export default function TodayPage() {
         body: JSON.stringify({ status: newStatus }),
       });
       window.dispatchEvent(new CustomEvent('task-updated'));
+      if (newStatus === '완료' && before && before.status !== '완료') {
+        promptNextInTodayIfNeeded({ ...before, status: '완료' });
+      }
     } catch { fetchAll(); }
   };
 

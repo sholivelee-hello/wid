@@ -292,7 +292,7 @@ export function TaskBranch({
             onComplete={handleComplete}
             onDelete={onDelete}
             onSelect={onSelect}
-            hierarchyLabel={depth === 0 ? 'TASK' : 'sub-TASK'}
+            hierarchyLabel={node.task.parent_task_id ? 'sub-TASK' : 'TASK'}
             editing={editingTaskId === node.task.id}
             onCloseEdit={onCloseEdit}
             breadcrumb={breadcrumb}

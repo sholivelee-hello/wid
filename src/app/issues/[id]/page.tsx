@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Issue, Task } from '@/lib/types';
 import { apiFetch } from '@/lib/api';
 import { buildTree, filterIncomplete, countSubtasks } from '@/lib/hierarchy';
+import { promptNextInTodayIfNeeded } from '@/lib/today-tasks';
 import { lockedSiblings } from '@/lib/lock-state';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -90,12 +91,17 @@ export default function IssueDetailPage({ params }: { params: Promise<{ id: stri
   };
 
   const handleStatusChange = (taskId: string, newStatus: string) => {
+    const before = tasks.find(t => t.id === taskId);
     setTasks(prev => prev.map(t =>
       t.id === taskId
         ? { ...t, status: newStatus, completed_at: newStatus === '완료' ? new Date().toISOString() : t.completed_at }
         : t,
     ));
-    patchTask(taskId, { status: newStatus });
+    patchTask(taskId, { status: newStatus }).then(() => {
+      if (newStatus === '완료' && before && before.status !== '완료') {
+        promptNextInTodayIfNeeded({ ...before, status: '완료' });
+      }
+    });
   };
 
   const handleComplete = (taskId: string) => {

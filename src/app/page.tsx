@@ -18,6 +18,7 @@ import { InboxTree } from '@/components/inbox/inbox-tree';
 import { IssueForm } from '@/components/issues/issue-form';
 import { IssueDeleteDialog } from '@/components/issues/issue-delete-dialog';
 import { buildTree, filterIncomplete } from '@/lib/hierarchy';
+import { promptNextInTodayIfNeeded } from '@/lib/today-tasks';
 import {
   loadViews, saveViews, loadInboxFilter, saveInboxFilter,
   type CustomTaskView,
@@ -111,6 +112,7 @@ export default function InboxPage() {
   }, [fetchTasks]);
 
   const handleStatusChange = async (taskId: string, newStatus: string) => {
+    const before = tasks.find(t => t.id === taskId);
     setTasks(prev => prev.map(t =>
       t.id === taskId ? { ...t, status: newStatus, completed_at: newStatus === '완료' ? new Date().toISOString() : t.completed_at } : t
     ));
@@ -121,6 +123,9 @@ export default function InboxPage() {
         body: JSON.stringify({ status: newStatus }),
       });
       window.dispatchEvent(new CustomEvent('task-updated'));
+      if (newStatus === '완료' && before && before.status !== '완료') {
+        promptNextInTodayIfNeeded({ ...before, status: '완료' });
+      }
     } catch {
       fetchTasks();
     }
