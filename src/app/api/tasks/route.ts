@@ -94,6 +94,13 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   if (isMockMode()) {
     const body = await request.json();
+    const issueId = body.issue_id ?? null;
+    const parentId = body.parent_task_id ?? null;
+    // Append to the same parent's sibling list so the new task lands at the end.
+    const siblings = tasks.filter(t =>
+      !t.is_deleted && t.issue_id === issueId && t.parent_task_id === parentId,
+    );
+    const nextPos = siblings.reduce((m, t) => Math.max(m, t.position), -1) + 1;
     const newTask = {
       id: `mock-${Date.now()}`,
       title: body.title,
@@ -113,12 +120,13 @@ export async function POST(request: NextRequest) {
       slack_sender: body.slack_sender ?? null,
       delegate_to: null,
       follow_up_note: null,
-      issue_id: body.issue_id ?? null,
-      parent_task_id: body.parent_task_id ?? null,
+      issue_id: issueId,
+      parent_task_id: parentId,
       sort_mode: 'checklist' as const,
-      position: 0,
+      position: nextPos,
       is_deleted: false,
     };
+    tasks.push(newTask);
     return NextResponse.json(newTask, { status: 201 });
   }
 
