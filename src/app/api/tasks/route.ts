@@ -6,6 +6,44 @@ import { isMockMode, MOCK_TASKS } from '@/lib/mock-data';
 const tasks: typeof MOCK_TASKS = [...MOCK_TASKS];
 export const __tasksRef = () => tasks;
 
+/**
+ * Hierarchy invariant: ISSUE > TASK > sub-TASK only — at most 2 task levels.
+ * Returns true when `parentId` references a top-level TASK (parent_task_id === null).
+ */
+export function isValidTaskParent(taskList: typeof MOCK_TASKS, parentId: string): boolean {
+  const parent = taskList.find(t => t.id === parentId && !t.is_deleted);
+  if (!parent) return false;
+  return parent.parent_task_id === null;
+}
+
+/** True if any non-deleted task has this id as parent_task_id. */
+export function hasChildTasks(taskList: typeof MOCK_TASKS, id: string): boolean {
+  return taskList.some(t => t.parent_task_id === id && !t.is_deleted);
+}
+
+/**
+ * One-time normalization: anything currently nested deeper than sub-TASK is
+ * promoted so its parent becomes the topmost TASK ancestor. Runs once at
+ * module load so dev-mode runtime state (e.g. items the user created before
+ * the depth guard shipped) self-heals.
+ */
+function normalizeDepth(taskList: typeof MOCK_TASKS) {
+  const byId = new Map(taskList.map(t => [t.id, t]));
+  for (const t of taskList) {
+    if (!t.parent_task_id) continue;
+    let cur = byId.get(t.parent_task_id);
+    let last: typeof t | undefined = cur;
+    while (cur?.parent_task_id) {
+      last = byId.get(cur.parent_task_id);
+      cur = last;
+    }
+    if (last && last.id !== t.parent_task_id) {
+      t.parent_task_id = last.id;
+    }
+  }
+}
+normalizeDepth(tasks);
+
 export async function GET(request: NextRequest) {
   if (isMockMode()) {
     const searchParams = request.nextUrl.searchParams;
@@ -96,6 +134,12 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const issueId = body.issue_id ?? null;
     const parentId = body.parent_task_id ?? null;
+    if (parentId !== null && !isValidTaskParent(tasks, parentId)) {
+      return NextResponse.json(
+        { error: '계층은 ISSUE > TASK > sub-TASK 까지만 허용됩니다.', code: 'MAX_DEPTH' },
+        { status: 400 },
+      );
+    }
     // Append to the same parent's sibling list so the new task lands at the end.
     const siblings = tasks.filter(t =>
       !t.is_deleted && t.issue_id === issueId && t.parent_task_id === parentId,

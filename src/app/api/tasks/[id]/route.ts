@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { isMockMode } from '@/lib/mock-data';
-import { __tasksRef } from '@/app/api/tasks/route';
+import { __tasksRef, isValidTaskParent, hasChildTasks } from '@/app/api/tasks/route';
 
 export async function GET(
   request: NextRequest,
@@ -79,6 +79,22 @@ export async function PATCH(
         seen.add(cursor);
         const parent = tasks.find(t => t.id === cursor && !t.is_deleted);
         cursor = parent?.parent_task_id ?? null;
+      }
+    }
+
+    // Guard: enforce 2-level hierarchy (ISSUE > TASK > sub-TASK only)
+    if ('parent_task_id' in body && body.parent_task_id) {
+      if (!isValidTaskParent(tasks, body.parent_task_id as string)) {
+        return NextResponse.json(
+          { error: '계층은 ISSUE > TASK > sub-TASK 까지만 허용됩니다.', code: 'MAX_DEPTH' },
+          { status: 400 },
+        );
+      }
+      if (hasChildTasks(tasks, id)) {
+        return NextResponse.json(
+          { error: 'sub-TASK가 있는 TASK는 sub-TASK로 이동할 수 없습니다.', code: 'WOULD_DEEPEN' },
+          { status: 400 },
+        );
       }
     }
 

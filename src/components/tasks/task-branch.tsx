@@ -331,14 +331,16 @@ export function TaskBranch({
           <div className="overflow-hidden">
             <div className="mt-2 ml-2 pl-4 border-l-2 border-border/50 space-y-2">
               {renderChildren()}
-              <div className="pt-1">
-                <AddSubTaskRow parentId={node.task.id} />
-              </div>
+              {depth === 0 && (
+                <div className="pt-1">
+                  <AddSubTaskRow parentId={node.task.id} />
+                </div>
+              )}
             </div>
           </div>
         </div>
       )}
-      {!hasChildren && (
+      {!hasChildren && depth === 0 && (
         <div className="ml-[22px] mt-1">
           <AddSubTaskRow parentId={node.task.id} />
         </div>
