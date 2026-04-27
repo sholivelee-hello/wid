@@ -2,6 +2,17 @@ export type Priority = '긴급' | '높음' | '보통' | '낮음';
 export type Source = 'manual' | 'notion' | 'slack';
 export type SortMode = 'checklist' | 'sequential';
 
+export const TASK_STATUSES = ['등록', '진행중', '대기중', '완료', '위임', '취소'] as const;
+export type TaskStatus = typeof TASK_STATUSES[number];
+
+export function isTaskStatus(v: unknown): v is TaskStatus {
+  return typeof v === 'string' && (TASK_STATUSES as readonly string[]).includes(v);
+}
+
+export function normalizeStatus(s: unknown): TaskStatus {
+  return isTaskStatus(s) ? s : '등록';
+}
+
 export interface Issue {
   id: string;
   name: string;
@@ -18,7 +29,7 @@ export interface Task {
   title: string;
   description: string | null;
   priority: Priority;
-  status: string;
+  status: TaskStatus;
   source: Source;
   requester: string | null;
   requested_at: string | null;
@@ -37,13 +48,6 @@ export interface Task {
   sort_mode: SortMode;
   position: number;
   is_deleted: boolean;
-}
-
-export interface CustomStatus {
-  id: string;
-  name: string;
-  color: string;
-  created_at: string;
 }
 
 export interface NotionStatusMapping {

@@ -1,4 +1,4 @@
-import { Task, CustomStatus, NotionStatusMapping } from './types';
+import { Task, NotionStatusMapping } from './types';
 import { MOCK_ISSUES } from './mock-issues';
 
 // Re-export for consumers
@@ -50,7 +50,7 @@ export const MOCK_TASKS: Task[] = [
     title: '신규 회원가입 플로우 디자인 리뷰',
     description: '디자인팀에서 전달한 회원가입 플로우 Figma 시안 리뷰. UX 피드백 정리 후 공유.',
     priority: '높음',
-    status: '대기',
+    status: '대기중',
     source: 'notion',
     requester: '김민지',
     requested_at: daysAgo(1),
@@ -175,7 +175,7 @@ export const MOCK_TASKS: Task[] = [
     title: '사내 해커톤 발표자료 준비',
     description: null,
     priority: '낮음',
-    status: '보류',
+    status: '대기중',
     source: 'manual',
     requester: null,
     requested_at: null,
@@ -326,7 +326,7 @@ export const MOCK_TASKS: Task[] = [
     title: '레거시 API 마이그레이션 조사',
     description: '더 이상 필요하지 않은 태스크.',
     priority: '낮음',
-    status: '대기',
+    status: '대기중',
     source: 'manual',
     requester: null,
     requested_at: null,
@@ -402,7 +402,7 @@ export const MOCK_TASKS: Task[] = [
     title: '체크박스 라벨 정리',
     description: null,
     priority: '보통',
-    status: '대기',
+    status: '대기중',
     source: 'manual',
     requester: null,
     requested_at: null,
@@ -427,7 +427,7 @@ export const MOCK_TASKS: Task[] = [
     title: '에러 메시지 카피',
     description: null,
     priority: '낮음',
-    status: '대기',
+    status: '대기중',
     source: 'manual',
     requester: null,
     requested_at: null,
@@ -448,17 +448,11 @@ export const MOCK_TASKS: Task[] = [
     is_deleted: false,
   },
 ];
-export const MOCK_CUSTOM_STATUSES: CustomStatus[] = [
-  { id: id(201), name: '코드리뷰', color: '#8B5CF6', created_at: daysAgo(30) },
-  { id: id(202), name: 'QA대기', color: '#EC4899', created_at: daysAgo(30) },
-  { id: id(203), name: '배포예정', color: '#14B8A6', created_at: daysAgo(30) },
-];
-
 export const MOCK_NOTION_MAPPINGS: NotionStatusMapping[] = [
-  { id: id(301), notion_status: 'Not Started', wid_status: '대기' },
+  { id: id(301), notion_status: 'Not Started', wid_status: '대기중' },
   { id: id(302), notion_status: 'In Progress', wid_status: '진행중' },
   { id: id(303), notion_status: 'Done', wid_status: '완료' },
-  { id: id(304), notion_status: 'Blocked', wid_status: '보류' },
+  { id: id(304), notion_status: 'Blocked', wid_status: '대기중' },
 ];
 
 // Helper: check if using mock data

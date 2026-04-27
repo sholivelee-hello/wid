@@ -16,7 +16,6 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
   const { id } = use(params);
   const router = useRouter();
   const [task, setTask] = useState<Task | null>(null);
-  const [customStatuses, setCustomStatuses] = useState<string[]>([]);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -25,12 +24,8 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
     setLoading(true);
     setError(false);
     try {
-      const [taskData, statusData] = await Promise.all([
-        apiFetch<Task>(`/api/tasks/${id}`),
-        apiFetch<{ name: string }[]>('/api/custom-statuses'),
-      ]);
+      const taskData = await apiFetch<Task>(`/api/tasks/${id}`);
       setTask(taskData);
-      setCustomStatuses(statusData.map((s) => s.name));
     } catch {
       setError(true);
     } finally {
@@ -73,7 +68,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
         onConfirm={handleDelete}
       />
 
-      <TaskForm task={task} customStatuses={customStatuses} />
+      <TaskForm task={task} />
 
       <div className="pt-4 border-t">
         <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}>

@@ -3,14 +3,13 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import { Issue, Task } from '@/lib/types';
+import { Issue, Task, TaskStatus } from '@/lib/types';
 import { TaskBranch } from '@/components/tasks/task-branch';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { apiFetch } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { DEFAULT_STATUSES } from '@/lib/constants';
-import { useAllStatuses } from '@/lib/use-all-statuses';
+import { TASK_STATUSES } from '@/lib/types';
 import { getTodayTaskIds, getEffectiveTodayTaskIds, promptNextInTodayIfNeeded } from '@/lib/today-tasks';
 import type { TaskNode } from '@/lib/hierarchy';
 import { ChevronDown, Sun } from 'lucide-react';
@@ -23,8 +22,6 @@ export default function TodayPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [todayIds, setTodayIds] = useState<Set<string>>(() => getTodayTaskIds());
-
-  const allStatuses = useAllStatuses();
 
   const today = new Date();
   const dateLabel = format(today, 'M월 d일 (EEEE)', { locale: ko });
@@ -102,12 +99,8 @@ export default function TodayPage() {
 
   // Group ROOTS by status (children inside a tree keep their own status pill).
   const statusGroups = useMemo(() => {
-    const order = [
-      ...DEFAULT_STATUSES,
-      ...allStatuses.filter(s => s.isCustom).map(s => s.original),
-    ];
     const groups = new Map<string, TaskNode[]>();
-    for (const status of order) {
+    for (const status of TASK_STATUSES) {
       const g = todayForest.filter(n => n.task.status === status);
       if (g.length > 0) groups.set(status, g);
     }
@@ -115,7 +108,7 @@ export default function TodayPage() {
       if (!groups.has(root.task.status)) groups.set(root.task.status, [root]);
     }
     return groups;
-  }, [todayForest, allStatuses]);
+  }, [todayForest]);
 
   const buildBreadcrumb = (task: Task) => {
     let issueName: string | null = null;
@@ -131,7 +124,7 @@ export default function TodayPage() {
     return { issueName, parentTaskTitle };
   };
 
-  const handleStatusChange = async (taskId: string, newStatus: string) => {
+  const handleStatusChange = async (taskId: string, newStatus: TaskStatus) => {
     const before = tasks.find(t => t.id === taskId);
     setTasks(prev => prev.map(t =>
       t.id === taskId
@@ -153,7 +146,7 @@ export default function TodayPage() {
 
   const handleComplete = async (taskId: string) => {
     const t = tasks.find(x => x.id === taskId);
-    await handleStatusChange(taskId, t?.status === '완료' ? '대기' : '완료');
+    await handleStatusChange(taskId, t?.status === '완료' ? '등록' : '완료');
   };
 
   const handleDelete = async (taskId: string) => {
@@ -179,9 +172,6 @@ export default function TodayPage() {
     onSelect: (id: string) =>
       setEditingTaskId(prev => (prev === id ? null : id)),
   };
-
-  const getStatusDisplay = (status: string) =>
-    allStatuses.find(s => s.original === status)?.display ?? status;
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -210,7 +200,6 @@ export default function TodayPage() {
         <div className="space-y-4">
           {[...statusGroups.entries()].map(([status, groupRoots]) => {
             const collapsed = collapsedGroups.has(status);
-            const display = getStatusDisplay(status);
             return (
               <section key={status}>
                 <button
@@ -224,7 +213,7 @@ export default function TodayPage() {
                     collapsed && '-rotate-90'
                   )} />
                   <span className="text-xs font-semibold px-2 py-0.5 rounded-full border border-border/60 text-foreground">
-                    {display}
+                    {status}
                   </span>
                   <span className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">
                     ({groupRoots.length})

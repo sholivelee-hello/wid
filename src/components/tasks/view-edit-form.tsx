@@ -4,9 +4,8 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useAllStatuses } from '@/lib/use-all-statuses';
-import { PRIORITIES } from '@/lib/constants';
-import { getStatusColor } from '@/lib/status-colors';
+import { PRIORITIES, STATUS_COLORS } from '@/lib/constants';
+import { TASK_STATUSES } from '@/lib/types';
 import { makeViewId, type CustomTaskView } from '@/lib/custom-views';
 import { cn } from '@/lib/utils';
 
@@ -21,8 +20,6 @@ export function ViewEditForm({ initial, onSave, onCancel }: ViewEditFormProps) {
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>(initial?.statuses ?? []);
   const [selectedPriorities, setSelectedPriorities] = useState<string[]>(initial?.priorities ?? []);
   const [sortBy, setSortBy] = useState<'priority' | 'deadline' | 'created_at'>(initial?.sortBy ?? 'priority');
-
-  const allStatuses = useAllStatuses();
 
   const toggleStatus = (original: string) =>
     setSelectedStatuses(prev =>
@@ -67,20 +64,21 @@ export function ViewEditForm({ initial, onSave, onCancel }: ViewEditFormProps) {
       <div>
         <p className="text-[11px] text-muted-foreground mb-1.5">상태 필터 (비워두면 전체)</p>
         <div className="flex flex-wrap gap-1.5">
-          {allStatuses.map(({ original, display, color }) => {
-            const active = selectedStatuses.includes(original);
+          {TASK_STATUSES.map((s) => {
+            const color = STATUS_COLORS[s];
+            const active = selectedStatuses.includes(s);
             return (
               <button
-                key={original}
+                key={s}
                 type="button"
-                onClick={() => toggleStatus(original)}
+                onClick={() => toggleStatus(s)}
                 className={cn(
                   'text-[11px] px-2.5 py-0.5 rounded-full border transition-all',
                   active ? 'font-medium' : 'border-border text-muted-foreground hover:border-foreground/30'
                 )}
                 style={active ? { backgroundColor: `${color}20`, color, borderColor: color } : {}}
               >
-                {display}
+                {s}
               </button>
             );
           })}

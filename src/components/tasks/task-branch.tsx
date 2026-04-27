@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { TaskNode } from '@/lib/hierarchy';
+import type { TaskStatus } from '@/lib/types';
 import { lockedSiblings, completionBlocked, incompleteChildCount } from '@/lib/lock-state';
 import { TaskCard } from '@/components/tasks/task-card';
 import { useCollapsed } from '@/lib/use-tree-collapsed';
@@ -20,7 +21,7 @@ import type { DraggableAttributes } from '@dnd-kit/core';
 import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities';
 
 export interface TaskBranchHandlers {
-  onStatusChange: (id: string, status: string) => void;
+  onStatusChange: (id: string, status: TaskStatus) => void;
   onComplete: (id: string) => void;
   onDelete: (id: string) => void;
   onSelect: (id: string) => void;
@@ -201,7 +202,7 @@ export function TaskBranch({
     ? () => {/* blocked: no-op */}
     : onComplete;
   const handleStatusChange = blocked
-    ? (id: string, status: string) => {
+    ? (id: string, status: TaskStatus) => {
         if (status === '완료') return;
         onStatusChange(id, status);
       }

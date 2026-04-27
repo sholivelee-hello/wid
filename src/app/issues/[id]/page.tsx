@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, use } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Issue, Task } from '@/lib/types';
+import { Issue, Task, TaskStatus } from '@/lib/types';
 import { apiFetch } from '@/lib/api';
 import { buildTree, filterIncomplete, countSubtasks } from '@/lib/hierarchy';
 import { promptNextInTodayIfNeeded } from '@/lib/today-tasks';
@@ -90,7 +90,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ id: stri
     }
   };
 
-  const handleStatusChange = (taskId: string, newStatus: string) => {
+  const handleStatusChange = (taskId: string, newStatus: TaskStatus) => {
     const before = tasks.find(t => t.id === taskId);
     setTasks(prev => prev.map(t =>
       t.id === taskId
@@ -106,7 +106,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ id: stri
 
   const handleComplete = (taskId: string) => {
     const t = tasks.find(x => x.id === taskId);
-    const next = t?.status === '완료' ? '대기' : '완료';
+    const next: TaskStatus = t?.status === '완료' ? '등록' : '완료';
     handleStatusChange(taskId, next);
   };
 

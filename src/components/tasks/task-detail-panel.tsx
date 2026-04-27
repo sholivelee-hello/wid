@@ -11,10 +11,8 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Issue, Task } from '@/lib/types';
-import { DEFAULT_STATUSES, PRIORITIES } from '@/lib/constants';
-import { useHiddenStatuses } from '@/lib/hidden-statuses';
-import { useDefaultStatusRenames } from '@/lib/status-renames';
+import { Issue, Task, TASK_STATUSES } from '@/lib/types';
+import { PRIORITIES } from '@/lib/constants';
 import { formatDate, cn, getNotionPageUrl } from '@/lib/utils';
 import { apiFetch } from '@/lib/api';
 import { IssuePicker } from '@/components/issues/issue-picker';
@@ -28,7 +26,6 @@ interface TaskDetailPanelProps {
 
 export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPanelProps) {
   const [task, setTask] = useState<Task | null>(null);
-  const [customStatuses, setCustomStatuses] = useState<string[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -49,13 +46,11 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPa
     if (!taskId) return;
     setLoading(true);
     try {
-      const [taskData, statusData, issueData] = await Promise.all([
+      const [taskData, issueData] = await Promise.all([
         apiFetch<Task>(`/api/tasks/${taskId}`, { suppressToast: true }),
-        apiFetch<{ name: string }[]>('/api/custom-statuses', { suppressToast: true }),
         apiFetch<Issue[]>('/api/issues', { suppressToast: true }),
       ]);
       setTask(taskData);
-      setCustomStatuses(statusData.map(s => s.name));
       setIssues(issueData);
       setTitle(taskData.title);
       setDescription(taskData.description ?? '');
@@ -174,9 +169,6 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPa
     } catch {}
   };
 
-  const hiddenStatuses = useHiddenStatuses();
-  const defaultRenames = useDefaultStatusRenames();
-  const visibleDefaultStatuses = DEFAULT_STATUSES.filter(s => !hiddenStatuses.has(s));
 
   return (
     <>
@@ -294,10 +286,7 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated }: TaskDetailPa
                   <Select value={status} onValueChange={handleStatusChange}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {visibleDefaultStatuses.map(s => (
-                        <SelectItem key={s} value={s}>{defaultRenames[s] ?? s}</SelectItem>
-                      ))}
-                      {customStatuses.map(s => (
+                      {TASK_STATUSES.map(s => (
                         <SelectItem key={s} value={s}>{s}</SelectItem>
                       ))}
                     </SelectContent>

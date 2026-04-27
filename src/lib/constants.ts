@@ -1,31 +1,29 @@
-import { Clock, PlayCircle, CheckCircle2, UserCheck, XCircle, PauseCircle, CircleDot, LucideIcon } from 'lucide-react';
+import { Clock, PlayCircle, CheckCircle2, UserCheck, XCircle, PauseCircle, LucideIcon } from 'lucide-react';
+import { TASK_STATUSES, type TaskStatus } from '@/lib/types';
 
-export const DEFAULT_STATUSES = [
-  '대기', '진행중', '완료', '위임', '취소', '보류', '부분완료',
-] as const;
+/** Canonical status list — same as TASK_STATUSES, re-exported for convenience. */
+export const DEFAULT_STATUSES = TASK_STATUSES;
 
 export const PRIORITIES = ['긴급', '높음', '보통', '낮음'] as const;
 
 export const SOURCES = ['manual', 'notion', 'slack'] as const;
 
-export const STATUS_ICONS: Record<string, LucideIcon> = {
-  '대기': Clock,
+export const STATUS_ICONS: Record<TaskStatus, LucideIcon> = {
+  '등록': Clock,
   '진행중': PlayCircle,
+  '대기중': PauseCircle,
   '완료': CheckCircle2,
   '위임': UserCheck,
   '취소': XCircle,
-  '보류': PauseCircle,
-  '부분완료': CircleDot,
 };
 
-export const STATUS_COLORS: Record<string, string> = {
-  '대기': '#9CA3AF',
+export const STATUS_COLORS: Record<TaskStatus, string> = {
+  '등록': '#6B7280',
   '진행중': '#3B82F6',
+  '대기중': '#F59E0B',
   '완료': '#10B981',
-  '위임': '#F59E0B',
-  '취소': '#EF4444',
-  '보류': '#8B5CF6',
-  '부분완료': '#06B6D4',
+  '위임': '#8B5CF6',
+  '취소': '#9CA3AF',
 };
 
 export const PRIORITY_COLORS: Record<string, string> = {

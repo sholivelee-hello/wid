@@ -7,33 +7,24 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PRIORITIES, DEFAULT_STATUSES } from '@/lib/constants';
-import { useHiddenStatuses } from '@/lib/hidden-statuses';
-import { useDefaultStatusRenames } from '@/lib/status-renames';
-import { Task } from '@/lib/types';
+import { PRIORITIES } from '@/lib/constants';
+import { TASK_STATUSES, Task } from '@/lib/types';
 import { apiFetch } from '@/lib/api';
 import { Separator } from '@/components/ui/separator';
 
 interface TaskFormProps {
   task?: Task;
-  customStatuses?: string[];
 }
 
-export function TaskForm({ task, customStatuses = [] }: TaskFormProps) {
+export function TaskForm({ task }: TaskFormProps) {
   const router = useRouter();
   const isEdit = !!task;
-  const hiddenStatuses = useHiddenStatuses();
-  const defaultRenames = useDefaultStatusRenames();
-  const allStatuses = [
-    ...DEFAULT_STATUSES.filter(s => !hiddenStatuses.has(s)).map(s => defaultRenames[s] ?? s),
-    ...customStatuses
-  ];
 
   const [form, setForm] = useState({
     title: task?.title ?? '',
     description: task?.description ?? '',
     priority: task?.priority ?? '보통',
-    status: task?.status ?? '대기',
+    status: task?.status ?? '등록',
     requester: task?.requester ?? '',
     requested_at: task?.requested_at?.slice(0, 10) ?? '',
     deadline: task?.deadline?.slice(0, 10) ?? '',
@@ -128,10 +119,10 @@ export function TaskForm({ task, customStatuses = [] }: TaskFormProps) {
         </div>
         <div>
           <Label>상태</Label>
-          <Select value={form.status} onValueChange={(v) => update('status', v ?? '대기')}>
+          <Select value={form.status} onValueChange={(v) => update('status', v ?? '등록')}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
-              {allStatuses.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              {TASK_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
