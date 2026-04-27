@@ -63,8 +63,10 @@ export default function RootLayout({
               </div>
               <div className="flex-1 flex flex-col overflow-hidden">
                 <Header />
-                <main id="main-content" className="flex-1 overflow-y-auto p-4 md:p-6 animate-fade-in">
-                  {children}
+                <main id="main-content" className="flex-1 overflow-y-auto">
+                  <div className="px-4 md:px-6 py-4 md:py-6 animate-fade-in">
+                    {children}
+                  </div>
                 </main>
               </div>
             </div>

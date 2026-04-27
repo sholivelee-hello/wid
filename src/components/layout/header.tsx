@@ -21,7 +21,6 @@ import { useQuickCapture } from '@/components/tasks/quick-capture-provider';
 const pageTitles: Record<string, string> = {
   '/': '인박스',
   '/today': '오늘',
-  '/calendar': '캘린더',
   '/history': '히스토리',
   '/settings': '설정',
   '/tasks/trash': '휴지통',
