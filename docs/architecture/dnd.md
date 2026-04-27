@@ -56,12 +56,35 @@ useSensors(
 
 ```
 active=iss:X, over=iss:Y      → 이슈 순서 변경
-active=tsk:X, over=dropiss:Y  → task를 issue Y로 reparent (마지막 위치)
-active=tsk:X, over=unlinked   → task에서 issue/parent 해제 (independent로)
+active=tsk:X, over=dropiss:Y  → task를 issue Y로 reparent (마지막 위치)  *
+active=tsk:X, over=unlinked   → task에서 issue/parent 해제 (independent로) *
 active=tsk:X, over=tsk:Y:
   같은 부모            → 같은 부모 안에서 reorder
-  다른 부모            → reparent + Y의 위치에 끼워넣기
+  다른 부모, 같은 depth → reparent + Y의 위치에 끼워넣기
+  다른 부모, 다른 depth → 거부 (toast)                                  *
 ```
+
+`*` 표시는 hierarchy invariant 강제 지점.
+
+## Hierarchy invariant (DnD가 절대 깨선 안 되는 룰)
+
+**TASK ↔ sub-TASK 변환 금지.** task의 hierarchy depth(top-level vs sub)는 생성 시점에 결정되며 DnD로는 절대 바뀌지 않는다.
+
+거부 케이스:
+- sub-TASK를 ISSUE 헤더(`dropiss:`)에 떨어뜨림 → top-level 승격 거부.
+- sub-TASK를 unlinked 영역에 떨어뜨림 → 독립 top-level 분리 거부.
+- top-level TASK를 sub-TASK 위에 떨어뜨림 → sub로 강등 거부.
+- sub-TASK를 top-level TASK 위에 떨어뜨림 → top-level 승격 거부.
+
+거부 시: 로컬 state / 서버 PATCH 모두 미수행 + `toast()` 로 사용자에게 통지. 하위 어떤 mutation 헬퍼(`reparentTaskToIssueLast`, `unlinkTask`, `reparentTaskAtTarget`)도 호출되지 않는다.
+
+시각 hint도 함께 — sub-TASK drag 중에는 ISSUE 헤더의 drop ring과 unlinked 점선 박스가 둘 다 비활성화 (`SortableIssueItem dropEnabled=draggingTopLevelTask`, `<DroppableUnlinked />` 도 `draggingTopLevelTask` 일 때만 마운트).
+
+같은 depth 내 reparent는 OK:
+- top-level → 다른 ISSUE의 top-level (cross-issue 이동) ✓
+- sub-TASK → 다른 부모 TASK의 sub-TASK (cross-parent 이동) ✓
+
+depth 변경이 필요한 경우는 인라인 에디터의 ISSUE chip 같은 명시적 액션으로만 가능 — DnD는 reorder + 같은 depth reparent 전용.
 
 ## 옵티미스틱 상태
 

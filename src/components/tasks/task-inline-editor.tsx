@@ -5,18 +5,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { IssuePicker } from '@/components/issues/issue-picker';
-import { Issue, Task } from '@/lib/types';
-import { DEFAULT_STATUSES, PRIORITIES } from '@/lib/constants';
-import { useHiddenStatuses } from '@/lib/hidden-statuses';
-import { useDefaultStatusRenames } from '@/lib/status-renames';
+import { TaskChipButton } from '@/components/tasks/task-chip-button';
+import { DeadlinePopover } from '@/components/tasks/deadline-popover';
+import { Issue, Task, TASK_STATUSES } from '@/lib/types';
+import { PRIORITIES } from '@/lib/constants';
 import { apiFetch } from '@/lib/api';
 import { promptNextInTodayIfNeeded } from '@/lib/today-tasks';
-import { Check, Loader2, Trash2, X, FolderPlus } from 'lucide-react';
+import { Check, Loader2, Trash2, X, FolderOpen, ChevronDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface Props {
   task: Task;
@@ -28,28 +27,29 @@ export function TaskInlineEditor({ task, onClose }: Props) {
   const [description, setDescription] = useState(task.description ?? '');
   const [status, setStatus] = useState(task.status);
   const [priority, setPriority] = useState(task.priority);
-  const [deadline, setDeadline] = useState(task.deadline?.slice(0, 10) ?? '');
+  const [deadline, setDeadline] = useState<string | null>(task.deadline?.slice(0, 10) ?? null);
   const [requester, setRequester] = useState(task.requester ?? '');
   const [delegateTo, setDelegateTo] = useState(task.delegate_to ?? '');
   const [issues, setIssues] = useState<Issue[]>([]);
   const [issuePickerOpen, setIssuePickerOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [customStatuses, setCustomStatuses] = useState<string[]>([]);
   const [linkedIssueId, setLinkedIssueId] = useState<string | null>(task.issue_id);
+
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [priorityOpen, setPriorityOpen] = useState(false);
+
+  // Auto-expand the optional section when task already has any of its values.
+  const [moreOpen, setMoreOpen] = useState(
+    !!(task.requester || task.delegate_to || task.description),
+  );
 
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const savedAtTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const hiddenStatuses = useHiddenStatuses();
-  const defaultRenames = useDefaultStatusRenames();
-  const visibleDefaultStatuses = DEFAULT_STATUSES.filter(s => !hiddenStatuses.has(s));
-
   useEffect(() => {
     apiFetch<Issue[]>('/api/issues', { suppressToast: true })
       .then(setIssues).catch(() => {});
-    apiFetch<{ name: string }[]>('/api/custom-statuses', { suppressToast: true })
-      .then(d => setCustomStatuses(d.map(s => s.name))).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -109,6 +109,8 @@ export function TaskInlineEditor({ task, onClose }: Props) {
     onClose();
   };
 
+  const issueChipLabel = currentIssue ? currentIssue.name : 'ISSUE 연결';
+
   return (
     <div
       className="space-y-3"
@@ -142,166 +144,198 @@ export function TaskInlineEditor({ task, onClose }: Props) {
         </div>
       </div>
 
-      <div>
-        <Label className="text-xs text-muted-foreground">제목</Label>
-        <Input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          onBlur={() => {
-            if (title.trim() && title !== task.title) save({ title: title.trim() });
-          }}
-        />
-      </div>
+      <Input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        onBlur={() => {
+          if (title.trim() && title !== task.title) save({ title: title.trim() });
+        }}
+        aria-label="제목"
+      />
 
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <Label className="text-xs text-muted-foreground">상태</Label>
-          <Select
-            value={status}
-            onValueChange={(v) => {
-              if (!v) return;
-              setStatus(v);
-              save({ status: v });
-            }}
-          >
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {visibleDefaultStatuses.map(s => (
-                <SelectItem key={s} value={s}>{defaultRenames[s] ?? s}</SelectItem>
-              ))}
-              {customStatuses.map(s => (
-                <SelectItem key={s} value={s}>{s}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label className="text-xs text-muted-foreground">우선순위</Label>
-          <Select
-            value={priority}
-            onValueChange={(v) => {
-              if (!v) return;
-              setPriority(v as typeof priority);
-              save({ priority: v });
-            }}
-          >
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {PRIORITIES.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <Label className="text-xs text-muted-foreground">마감일</Label>
-          <Input
-            type="date"
-            value={deadline}
-            onChange={(e) => {
-              setDeadline(e.target.value);
-              save({ deadline: e.target.value || null });
-            }}
-          />
-        </div>
-        <div>
-          <Label className="text-xs text-muted-foreground">요청자</Label>
-          <Input
-            value={requester}
-            onChange={(e) => setRequester(e.target.value)}
-            onBlur={() => {
-              if ((requester || null) !== (task.requester || null)) {
-                save({ requester: requester || null });
-              }
-            }}
-            placeholder="요청자 없음"
-          />
-        </div>
-      </div>
-
-      <div>
-        <Label className="text-xs text-muted-foreground">위임 대상</Label>
-        <Input
-          value={delegateTo}
-          onChange={(e) => setDelegateTo(e.target.value)}
-          onBlur={() => {
-            if ((delegateTo || null) !== (task.delegate_to || null)) {
-              save({ delegate_to: delegateTo || null });
+      {/* Compact chip row */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {/* Status chip */}
+        <Popover open={statusOpen} onOpenChange={setStatusOpen}>
+          <PopoverTrigger
+            render={
+              <TaskChipButton active>
+                {status}
+              </TaskChipButton>
             }
-          }}
-          placeholder="담당자 이름"
-        />
-      </div>
+          />
+          <PopoverContent className="w-36 p-1" align="start">
+            <div className="flex flex-col">
+              {TASK_STATUSES.map(s => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => {
+                    setStatusOpen(false);
+                    if (s === status) return;
+                    setStatus(s);
+                    save({ status: s });
+                  }}
+                  className={cn(
+                    'text-left px-2 py-1.5 rounded text-xs hover:bg-accent transition-colors',
+                    s === status && 'font-semibold',
+                  )}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
 
-      <div>
-        <Label className="text-xs text-muted-foreground">설명</Label>
-        <Textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          onBlur={() => {
-            if ((description || null) !== (task.description || null)) {
-              save({ description: description || null });
+        {/* Priority chip */}
+        <Popover open={priorityOpen} onOpenChange={setPriorityOpen}>
+          <PopoverTrigger
+            render={
+              <TaskChipButton
+                active={priority !== '보통'}
+                variant={priority === '긴급' ? 'destructive' : 'default'}
+              >
+                {priority}
+              </TaskChipButton>
             }
+          />
+          <PopoverContent className="w-32 p-1" align="start">
+            <div className="flex flex-col">
+              {PRIORITIES.map(p => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => {
+                    setPriorityOpen(false);
+                    if (p === priority) return;
+                    setPriority(p);
+                    save({ priority: p });
+                  }}
+                  className={cn(
+                    'text-left px-2 py-1.5 rounded text-xs hover:bg-accent transition-colors',
+                    p === priority && 'font-semibold',
+                    p === '긴급' && 'text-destructive',
+                  )}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
+
+        {/* Deadline chip */}
+        <DeadlinePopover
+          value={deadline}
+          onChange={(v) => {
+            setDeadline(v);
+            save({ deadline: v });
           }}
-          rows={3}
-          placeholder="task 설명..."
         />
+
+        {/* ISSUE chip — only for top-level TASKs */}
+        {!task.parent_task_id && (
+          <TaskChipButton
+            active={currentIssue !== null}
+            icon={<FolderOpen className="h-3 w-3" />}
+            caret={currentIssue === null}
+            onClick={() => setIssuePickerOpen(true)}
+            trailing={
+              currentIssue !== null ? (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  aria-label="ISSUE 분리"
+                  className="ml-0.5 -mr-0.5 inline-flex items-center justify-center h-4 w-4 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                  onClick={(e) => { e.stopPropagation(); unlinkFromIssue(); }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      unlinkFromIssue();
+                    }
+                  }}
+                >
+                  <X className="h-3 w-3" />
+                </span>
+              ) : null
+            }
+          >
+            {issueChipLabel}
+          </TaskChipButton>
+        )}
       </div>
 
-      {!task.parent_task_id && (
-        <div>
-          <Label className="text-xs text-muted-foreground">ISSUE</Label>
-          {currentIssue ? (
-            <div className="mt-1 flex items-center gap-2 px-2 py-1.5 rounded-md bg-accent/30 border border-border/40">
-              <span className="inline-flex items-center justify-center text-[9px] font-semibold tracking-wide px-1.5 h-4 rounded-sm bg-primary/10 text-primary flex-shrink-0">
-                ISSUE
-              </span>
-              <span className="text-sm flex-1 truncate">{currentIssue.name}</span>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="h-6 px-2 text-xs"
-                onClick={() => setIssuePickerOpen(true)}
-              >
-                변경
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
-                onClick={unlinkFromIssue}
-              >
-                <X className="h-3 w-3 mr-0.5" /> 분리
-              </Button>
+      {/* "더 보기" toggle */}
+      <button
+        type="button"
+        onClick={() => setMoreOpen(v => !v)}
+        aria-expanded={moreOpen}
+        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ChevronDown className={cn('h-3 w-3 transition-transform', !moreOpen && '-rotate-90')} />
+        더 보기
+      </button>
+
+      {moreOpen && (
+        <div className="space-y-3 animate-in fade-in-0 duration-150">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs text-muted-foreground">요청자</Label>
+              <Input
+                value={requester}
+                onChange={(e) => setRequester(e.target.value)}
+                onBlur={() => {
+                  if ((requester || null) !== (task.requester || null)) {
+                    save({ requester: requester || null });
+                  }
+                }}
+                placeholder="요청자 없음"
+              />
             </div>
-          ) : (
-            <div className="mt-1">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => setIssuePickerOpen(true)}
-              >
-                <FolderPlus className="h-3.5 w-3.5 mr-1.5" /> ISSUE 연결
-              </Button>
+            <div>
+              <Label className="text-xs text-muted-foreground">위임 대상</Label>
+              <Input
+                value={delegateTo}
+                onChange={(e) => setDelegateTo(e.target.value)}
+                onBlur={() => {
+                  if ((delegateTo || null) !== (task.delegate_to || null)) {
+                    save({ delegate_to: delegateTo || null });
+                  }
+                }}
+                placeholder="담당자 이름"
+              />
             </div>
-          )}
+          </div>
+
+          <div>
+            <Label className="text-xs text-muted-foreground">설명</Label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              onBlur={() => {
+                if ((description || null) !== (task.description || null)) {
+                  save({ description: description || null });
+                }
+              }}
+              rows={3}
+              placeholder="task 설명..."
+            />
+          </div>
+
+          <div className="flex items-center justify-end pt-1">
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={() => setConfirmDelete(true)}
+            >
+              <Trash2 className="h-4 w-4 mr-1" /> 삭제
+            </Button>
+          </div>
         </div>
       )}
-
-      <div className="flex items-center justify-end pt-1">
-        <Button
-          type="button"
-          variant="destructive"
-          size="sm"
-          onClick={() => setConfirmDelete(true)}
-        >
-          <Trash2 className="h-4 w-4 mr-1" /> 삭제
-        </Button>
-      </div>
 
       <IssuePicker
         open={issuePickerOpen}

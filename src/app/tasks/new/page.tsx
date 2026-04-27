@@ -1,10 +1,5 @@
-import { TaskForm } from '@/components/tasks/task-form';
+import { redirect } from 'next/navigation';
 
-export default function NewTaskPage() {
-  return (
-    <div>
-      <p className="text-sm text-muted-foreground mb-6">새로운 task의 정보를 입력하세요.</p>
-      <TaskForm />
-    </div>
-  );
+export default function Page() {
+  redirect('/');
 }

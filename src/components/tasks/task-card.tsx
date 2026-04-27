@@ -10,8 +10,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { STATUS_ICONS } from '@/lib/constants';
-import { useAllStatuses } from '@/lib/use-all-statuses';
-import { useDefaultStatusRenames } from '@/lib/status-renames';
+import { TASK_STATUSES, type TaskStatus } from '@/lib/types';
 import { Task } from '@/lib/types';
 import { formatDate, cn, getNotionPageUrl } from '@/lib/utils';
 import { toggleTodayTask, getTodayTaskIds } from '@/lib/today-tasks';
@@ -32,7 +31,7 @@ import {
 
 interface TaskCardProps {
   task: Task;
-  onStatusChange?: (taskId: string, newStatus: string) => void;
+  onStatusChange?: (taskId: string, newStatus: TaskStatus) => void;
   onComplete?: (taskId: string) => void;
   onDelete?: (taskId: string) => void;
   onSelect?: (taskId: string) => void;
@@ -67,9 +66,6 @@ export function TaskCard({
     if (onSelect) onSelect(task.id);
     else window.location.href = `/tasks/${task.id}`;
   };
-  const allStatuses = useAllStatuses();
-  const defaultRenames = useDefaultStatusRenames();
-
   const isCompleted = task.status === '완료';
 
   const [isTodayTask, setIsTodayTask] = useState(() => getTodayTaskIds().has(task.id));
@@ -91,7 +87,8 @@ export function TaskCard({
 
   const handleStatusSelect = (val: string | null) => {
     if (!val) return;
-    onStatusChange?.(task.id, val);
+    if (!(TASK_STATUSES as readonly string[]).includes(val)) return;
+    onStatusChange?.(task.id, val as TaskStatus);
   };
 
   return (
@@ -151,6 +148,23 @@ export function TaskCard({
               </button>
             );
           })()}
+
+          {/* 1-tap "오늘 토글" */}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); toggleTodayTask(task.id); }}
+            className={cn(
+              'flex-shrink-0 -ml-2 -my-1.5 p-1.5 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              isTodayTask
+                ? 'text-amber-500 hover:text-amber-600'
+                : 'text-muted-foreground/30 group-hover/card:text-muted-foreground hover:text-amber-500',
+            )}
+            aria-pressed={isTodayTask}
+            aria-label={isTodayTask ? '오늘에서 제거' : '오늘에 추가'}
+            title={isTodayTask ? '오늘에서 제거' : '오늘에 추가'}
+          >
+            <Sun className={cn('h-4 w-4', isTodayTask && 'fill-amber-400')} />
+          </button>
 
           {/* Title + metadata */}
           <div className="flex-1 min-w-0 space-y-1.5">
@@ -267,16 +281,16 @@ export function TaskCard({
                   className="h-7 text-[11px] px-2.5 rounded-full border border-border/60 bg-background text-foreground hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring min-w-0"
                   aria-label="상태 변경"
                 >
-                  {defaultRenames[task.status] ?? task.status}
+                  {task.status}
                 </SelectTrigger>
                 <SelectContent>
-                  {allStatuses.map(({ original, display }) => {
-                    const Icon = STATUS_ICONS[original];
+                  {TASK_STATUSES.map((s) => {
+                    const Icon = STATUS_ICONS[s];
                     return (
-                      <SelectItem key={original} value={original}>
+                      <SelectItem key={s} value={s}>
                         <div className="flex items-center gap-2">
                           {Icon && <Icon className="h-3.5 w-3.5 text-muted-foreground" />}
-                          <span>{display}</span>
+                          <span>{s}</span>
                         </div>
                       </SelectItem>
                     );
@@ -302,15 +316,6 @@ export function TaskCard({
                 <MoreHorizontal className="h-4 w-4" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleTodayTask(task.id);
-                  }}
-                >
-                  <Sun className="h-4 w-4 mr-2" />
-                  {isTodayTask ? '오늘에서 제거' : '오늘에 추가'}
-                </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={(e) => {
                     e.stopPropagation();

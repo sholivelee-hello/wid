@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { buttonVariants } from '@/components/ui/button';
 import { Button } from '@/components/ui/button';
@@ -17,7 +16,7 @@ import {
 import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
 import { navItems } from '@/lib/nav-items';
-import { QuickCaptureModal } from '@/components/tasks/quick-capture-modal';
+import { useQuickCapture } from '@/components/tasks/quick-capture-provider';
 
 const pageTitles: Record<string, string> = {
   '/': '인박스',
@@ -25,7 +24,6 @@ const pageTitles: Record<string, string> = {
   '/calendar': '캘린더',
   '/history': '히스토리',
   '/settings': '설정',
-  '/tasks/new': '새 task',
   '/tasks/trash': '휴지통',
 };
 
@@ -37,23 +35,9 @@ const getTitle = (path: string) => {
 
 export function Header() {
   const pathname = usePathname();
-  const router = useRouter();
   const { setTheme, resolvedTheme } = useTheme();
+  const { openModal } = useQuickCapture();
   const title = getTitle(pathname);
-  const [captureOpen, setCaptureOpen] = useState(false);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
-        const target = e.target as HTMLElement;
-        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
-        e.preventDefault();
-        setCaptureOpen(true);
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, []);
 
   return (
     <>
@@ -112,20 +96,15 @@ export function Header() {
             <Sun className="h-4 w-4 hidden dark:block" />
             <Moon className="h-4 w-4 block dark:hidden" />
           </Button>
-          {!pathname.startsWith('/settings') && (
-            <Button size="sm" onClick={() => setCaptureOpen(true)} title="새 task 등록 (Ctrl+N)">
+          {!pathname.startsWith('/settings') && pathname !== '/' && (
+            <Button size="sm" variant="ghost" onClick={openModal} title="새 task 추가 (Ctrl+N)">
               <Plus className="h-4 w-4 mr-1" />
               새 task
-              <kbd className="ml-2 hidden sm:inline-flex text-[10px] font-mono bg-primary-foreground/20 px-1 rounded border border-primary-foreground/30">⌘N</kbd>
+              <kbd className="ml-2 hidden sm:inline-flex text-[10px] font-mono bg-foreground/10 px-1 rounded border border-foreground/20">⌘N</kbd>
             </Button>
           )}
         </div>
       </header>
-      <QuickCaptureModal
-        open={captureOpen}
-        onOpenChange={setCaptureOpen}
-        onCreated={() => router.refresh()}
-      />
     </>
   );
 }

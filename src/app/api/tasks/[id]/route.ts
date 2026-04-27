@@ -40,6 +40,20 @@ export async function PATCH(
     if (idx === -1) return NextResponse.json({ error: 'Task not found' }, { status: 404 });
     const current = tasks[idx];
 
+    // Guard: TASK ↔ sub-TASK depth flip rejected. Hierarchy depth is fixed
+    // at creation; PATCH may move a task across parents but never flip null↔non-null.
+    // Evaluated before DUAL_PARENT so the user gets the more specific reason.
+    if ('parent_task_id' in body) {
+      const wasSub = current.parent_task_id !== null;
+      const willBeSub = body.parent_task_id !== null;
+      if (wasSub !== willBeSub) {
+        return NextResponse.json(
+          { error: 'TASK와 sub-TASK는 서로 변환할 수 없습니다. 계층은 생성 시 결정됩니다.', code: 'DEPTH_FLIP' },
+          { status: 400 },
+        );
+      }
+    }
+
     // Guard: reject dual-parent violation
     const draftIssue = 'issue_id' in body ? body.issue_id : current.issue_id;
     const draftParent = 'parent_task_id' in body ? body.parent_task_id : current.parent_task_id;

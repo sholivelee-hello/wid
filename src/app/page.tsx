@@ -1,19 +1,17 @@
 'use client';
 
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { Issue, Task } from '@/lib/types';
+import { Issue, Task, TaskStatus } from '@/lib/types';
 import { TaskCard } from '@/components/tasks/task-card';
-import { TaskFilters } from '@/components/tasks/task-filters';
 import { TaskListSkeleton } from '@/components/loading/page-skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { apiFetch } from '@/lib/api';
-import { useAllStatuses } from '@/lib/use-all-statuses';
 import { cn } from '@/lib/utils';
-import { Inbox, ChevronDown, Plus, Pencil, Trash2 } from 'lucide-react';
+import { Inbox, ChevronDown, Plus, Pencil, Trash2, Search } from 'lucide-react';
 import { InboxTree } from '@/components/inbox/inbox-tree';
 import { IssueForm } from '@/components/issues/issue-form';
 import { IssueDeleteDialog } from '@/components/issues/issue-delete-dialog';
@@ -21,9 +19,13 @@ import { buildTree, filterIncomplete } from '@/lib/hierarchy';
 import { promptNextInTodayIfNeeded } from '@/lib/today-tasks';
 import {
   loadViews, saveViews, loadInboxFilter, saveInboxFilter,
-  type CustomTaskView,
+  loadInboxSort, saveInboxSort,
+  type CustomTaskView, type SortKey,
 } from '@/lib/custom-views';
 import { ViewEditForm } from '@/components/tasks/view-edit-form';
+import { TaskQuickCapture, type TaskQuickCaptureHandle } from '@/components/tasks/task-quick-capture';
+import { useQuickCapture } from '@/components/tasks/quick-capture-provider';
+import { InboxFilterPopover } from '@/components/tasks/inbox-filter-popover';
 
 export default function InboxPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -33,7 +35,8 @@ export default function InboxPage() {
   const [source, setSource] = useState('all');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [sortBy, setSortBy] = useState<'priority' | 'deadline' | 'created_at'>('priority');
+  const [sortBy, setSortByRaw] = useState<SortKey>(() => loadInboxSort());
+  const setSortBy = (v: SortKey) => { setSortByRaw(v); saveInboxSort(v); };
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
@@ -50,7 +53,12 @@ export default function InboxPage() {
   const [collapsedViews, setCollapsedViews] = useState<Set<string>>(new Set());
   const [deleteViewId, setDeleteViewId] = useState<string | null>(null);
 
-  const allStatusOptions = useAllStatuses();
+  const captureRef = useRef<TaskQuickCaptureHandle>(null);
+  const { registerInlineFocus } = useQuickCapture();
+  useEffect(() => {
+    registerInlineFocus(() => captureRef.current?.focus());
+    return () => registerInlineFocus(null);
+  }, [registerInlineFocus]);
 
   const handleSearchChange = (value: string) => {
     setSearch(value);
@@ -111,7 +119,7 @@ export default function InboxPage() {
     };
   }, [fetchTasks]);
 
-  const handleStatusChange = async (taskId: string, newStatus: string) => {
+  const handleStatusChange = async (taskId: string, newStatus: TaskStatus) => {
     const before = tasks.find(t => t.id === taskId);
     setTasks(prev => prev.map(t =>
       t.id === taskId ? { ...t, status: newStatus, completed_at: newStatus === '완료' ? new Date().toISOString() : t.completed_at } : t
@@ -133,7 +141,7 @@ export default function InboxPage() {
 
   const handleComplete = async (taskId: string) => {
     const task = tasks.find(t => t.id === taskId);
-    const newStatus = task?.status === '완료' ? '대기' : '완료';
+    const newStatus: TaskStatus = task?.status === '완료' ? '등록' : '완료';
     await handleStatusChange(taskId, newStatus);
   };
 
@@ -160,14 +168,6 @@ export default function InboxPage() {
     } catch {
       fetchTasks();
     }
-  };
-
-  const toggleStatusFilter = (s: string) => {
-    setStatusFilter(prev => {
-      const next = prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s];
-      saveInboxFilter(next);
-      return next;
-    });
   };
 
   const handleAddView = (view: CustomTaskView) => {
@@ -251,74 +251,62 @@ export default function InboxPage() {
 
   return (
     <div className="space-y-4">
-      {/* Filters */}
-      <div className="flex items-center gap-4 flex-wrap">
-        <div className="flex-1 min-w-0">
-          <TaskFilters
-            priority={priority}
-            source={source}
-            search={search}
-            onPriorityChange={setPriority}
-            onSourceChange={setSource}
-            onSearchChange={handleSearchChange}
-            showStatusFilter={false}
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">정렬:</span>
-          <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
-            <SelectTrigger className="w-28 h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="priority">우선순위</SelectItem>
-              <SelectItem value="deadline">마감일</SelectItem>
-              <SelectItem value="created_at">생성일</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8"
-            onClick={() => { setEditingIssue(null); setAddingIssue(true); }}
-          >
-            <Plus className="h-3.5 w-3.5 mr-1" />
-            새 ISSUE
-          </Button>
-        </div>
-      </div>
+      {/* Quick capture composer (persistent inline) */}
+      <TaskQuickCapture
+        ref={captureRef}
+        surface="inline"
+        onCreated={(t) => setTasks(prev => [t, ...prev])}
+      />
 
-      {/* Status filter chips */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[11px] text-muted-foreground shrink-0">상태:</span>
-        {allStatusOptions.map(({ original, display, color }) => {
-          const active = statusFilter.includes(original);
-          return (
-            <button
-              key={original}
-              type="button"
-              onClick={() => toggleStatusFilter(original)}
-              className={cn(
-                'text-[11px] h-6 px-2.5 rounded-full border transition-all',
-                active
-                  ? 'font-semibold'
-                  : 'border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground'
-              )}
-              style={active ? { backgroundColor: `${color}20`, color, borderColor: color } : {}}
-            >
-              {display}
-            </button>
-          );
-        })}
-        {statusFilter.length > 0 && (
+      {/* Chrome: search + filter popover + sort label + new ISSUE */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-0 sm:max-w-xs">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" aria-hidden="true" />
+          <Input
+            placeholder="task 검색..."
+            aria-label="task 검색"
+            className="pl-8 pr-12"
+            value={search}
+            onChange={(e) => handleSearchChange(e.target.value)}
+          />
+          <kbd className="absolute right-2 top-1/2 -translate-y-1/2 hidden sm:inline-flex text-[10px] font-mono bg-muted text-muted-foreground px-1 py-0.5 rounded border pointer-events-none">⌘K</kbd>
+        </div>
+        <InboxFilterPopover
+          sort={sortBy}
+          priority={priority}
+          source={source}
+          statuses={statusFilter}
+          onSortChange={setSortBy}
+          onPriorityChange={setPriority}
+          onSourceChange={setSource}
+          onStatusesChange={(next) => { setStatusFilter(next); saveInboxFilter(next); }}
+        />
+        {(priority !== 'all' || source !== 'all' || statusFilter.length > 0) && (
           <button
             type="button"
-            onClick={() => { setStatusFilter([]); saveInboxFilter([]); }}
+            onClick={() => {
+              setPriority('all');
+              setSource('all');
+              setStatusFilter([]);
+              saveInboxFilter([]);
+            }}
             className="text-[11px] text-muted-foreground hover:text-foreground underline"
           >
             초기화
           </button>
         )}
+        <span className="text-[11px] text-muted-foreground hidden sm:inline">
+          정렬: {sortBy === 'priority' ? '우선순위' : sortBy === 'deadline' ? '마감일' : '최근 추가'}
+        </span>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-8 text-muted-foreground hover:text-foreground ml-auto"
+          onClick={() => { setEditingIssue(null); setAddingIssue(true); }}
+        >
+          <Plus className="h-3.5 w-3.5 mr-1" />
+          새 ISSUE
+        </Button>
       </div>
 
       {/* Main list (ISSUE → TASK → sub-TASK tree) */}
@@ -367,7 +355,7 @@ export default function InboxPage() {
             icon={Inbox}
             title="해당하는 task가 없습니다"
             description="다른 필터를 선택하거나 새 task를 추가하세요."
-            action={{ label: '새 task 등록', href: '/tasks/new' }}
+            action={{ label: '새 task 등록', onClick: () => captureRef.current?.focus() }}
           />
         ) : (
           <InboxTree
@@ -375,6 +363,7 @@ export default function InboxPage() {
             tasks={tasks}
             showCompleted={showCompleted}
             searchQuery={debouncedSearch}
+            sortBy={sortBy}
             taskHandlers={taskHandlers}
             onEditIssue={(i) => { setAddingIssue(false); setEditingIssue(i); }}
             onDeleteIssue={(i) => setDeletingIssue(i)}

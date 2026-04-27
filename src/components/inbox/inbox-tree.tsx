@@ -26,7 +26,8 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical } from 'lucide-react';
 import { Issue, Task } from '@/lib/types';
-import { buildTree, filterIncomplete, filterBySearch, countSubtasks } from '@/lib/hierarchy';
+import { buildTree, filterIncomplete, filterBySearch, countSubtasks, type Tree, type TaskNode } from '@/lib/hierarchy';
+import type { SortKey } from '@/lib/custom-views';
 import { lockedSiblings } from '@/lib/lock-state';
 import { IssueRow } from '@/components/issues/issue-row';
 import {
@@ -37,12 +38,14 @@ import {
 } from '@/components/tasks/task-branch';
 import { apiFetch } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 interface Props {
   issues: Issue[];
   tasks: Task[];
   showCompleted: boolean;
   searchQuery?: string;
+  sortBy?: SortKey;
   taskHandlers: TaskBranchHandlers;
   onEditIssue: (issue: Issue) => void;
   onDeleteIssue: (issue: Issue) => void;
@@ -52,6 +55,46 @@ interface Props {
   setTasks: React.Dispatch<React.SetStateAction<Task[]>>;
   editingTaskId: string | null;
   onCloseEdit: () => void;
+}
+
+const PRIORITY_ORDER: Record<string, number> = { '긴급': 0, '높음': 1, '보통': 2, '낮음': 3 };
+
+/**
+ * Sort top-level task siblings by user-selected key, with `position` as
+ * stable tie-breaker (so DnD reorder is still visible within the same key).
+ * Sub-tasks (TaskNode.children) keep position order — buildTree already does that.
+ */
+function sortNodes(nodes: TaskNode[], sortBy: SortKey): TaskNode[] {
+  const cmp = (a: TaskNode, b: TaskNode) => {
+    const ta = a.task, tb = b.task;
+    if (sortBy === 'priority') {
+      const pa = PRIORITY_ORDER[ta.priority] ?? 9;
+      const pb = PRIORITY_ORDER[tb.priority] ?? 9;
+      if (pa !== pb) return pa - pb;
+    } else if (sortBy === 'deadline') {
+      const da = ta.deadline ?? '￿';
+      const db = tb.deadline ?? '￿';
+      if (da !== db) return da < db ? -1 : 1;
+    } else {
+      // created_at desc — most recent first
+      if (ta.created_at !== tb.created_at) return ta.created_at < tb.created_at ? 1 : -1;
+    }
+    return ta.position - tb.position;
+  };
+  return [...nodes].sort(cmp);
+}
+
+function applySortToTree(tree: Tree, sortBy: SortKey, issues: Issue[]): Tree {
+  const issueById = new Map(issues.map(i => [i.id, i]));
+  return {
+    issues: tree.issues.map(node => {
+      const iss = issueById.get(node.issue.id);
+      // Sequential ISSUEs keep position-based order (queue semantics).
+      const sorted = iss?.sort_mode === 'sequential' ? node.tasks : sortNodes(node.tasks, sortBy);
+      return { ...node, tasks: sorted };
+    }),
+    independents: sortNodes(tree.independents, sortBy),
+  };
 }
 
 const ISSUE_SORT_PREFIX = 'iss:';
@@ -149,6 +192,7 @@ export function InboxTree({
   tasks,
   showCompleted,
   searchQuery = '',
+  sortBy = 'created_at',
   taskHandlers,
   onEditIssue,
   onDeleteIssue,
@@ -163,12 +207,13 @@ export function InboxTree({
     const built = buildTree(issues, tasks);
     const completionFiltered = showCompleted ? built : filterIncomplete(built);
     const search = filterBySearch(completionFiltered, searchQuery);
+    const sorted = applySortToTree(search.tree, sortBy, issues);
     return {
-      tree: search.tree,
+      tree: sorted,
       forceOpenIssueIds: search.forceOpenIssueIds,
       forceOpenTaskIds: search.forceOpenTaskIds,
     };
-  }, [issues, tasks, showCompleted, searchQuery]);
+  }, [issues, tasks, showCompleted, searchQuery, sortBy]);
 
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -208,33 +253,61 @@ export function InboxTree({
     if (a.kind === 'task') {
       const dragged = tasksById.get(a.id);
       if (!dragged) return;
+      const draggedIsSub = dragged.parent_task_id !== null;
 
-      // Drop on issue header → reparent to that issue (last position)
+      // Drop on issue header → reparent to that issue (last position).
+      // sub-TASK는 ISSUE 헤더로 옮기면 top-level로 승격되므로 거부.
       if (o.kind === 'issueDrop') {
+        if (draggedIsSub) {
+          toast('sub-TASK는 TASK로 승격할 수 없어요', {
+            description: '계층은 생성 시 결정되며 DnD로 바뀌지 않습니다.',
+          });
+          return;
+        }
         if (dragged.issue_id === o.id && !dragged.parent_task_id) return;
         reparentTaskToIssueLast(dragged, o.id);
         return;
       }
 
-      // Drop on unlinked → strip parents
+      // Drop on unlinked → strip parents.
+      // sub-TASK는 unlinked로 빼면 top-level이 되므로 거부.
       if (o.kind === 'unlinked') {
+        if (draggedIsSub) {
+          toast('sub-TASK는 독립 TASK로 분리할 수 없어요', {
+            description: '계층은 생성 시 결정되며 DnD로 바뀌지 않습니다.',
+          });
+          return;
+        }
         if (dragged.issue_id === null && dragged.parent_task_id === null) return;
         unlinkTask(dragged);
         return;
       }
 
-      // Drop on another sortable task → reorder (same parent) or reparent + insert
+      // Drop on another sortable task → reorder (same parent) or reparent + insert.
+      // 단, hierarchy depth(top-level vs sub)가 다르면 reparent 거부.
       if (o.kind === 'task' && o.id !== a.id) {
         const target = tasksById.get(o.id);
         if (!target) return;
+        const targetIsSub = target.parent_task_id !== null;
         const sameParent =
           dragged.issue_id === target.issue_id &&
           dragged.parent_task_id === target.parent_task_id;
         if (sameParent) {
           reorderTasksWithinParent(dragged, target);
-        } else {
-          reparentTaskAtTarget(dragged, target);
+          return;
         }
+        if (draggedIsSub !== targetIsSub) {
+          toast(
+            draggedIsSub
+              ? 'sub-TASK는 다른 sub-TASK 위로만 옮길 수 있어요'
+              : 'TASK는 다른 TASK 위로만 옮길 수 있어요',
+            {
+              description: '계층은 생성 시 결정되며 DnD로 바뀌지 않습니다.',
+            },
+          );
+          return;
+        }
+        reparentTaskAtTarget(dragged, target);
         return;
       }
     }
@@ -422,7 +495,10 @@ export function InboxTree({
   }
 
   const issueSortableIds = tree.issues.map(({ issue }) => issueSortId(issue.id));
-  const draggingTask = !!activeId && parseDndId(activeId).kind === 'task';
+  const activeParsed = activeId ? parseDndId(activeId) : null;
+  const draggingTask = activeParsed?.kind === 'task';
+  const draggedTask = draggingTask ? tasksById.get(activeParsed.id) : undefined;
+  const draggingTopLevelTask = !!draggedTask && draggedTask.parent_task_id === null;
 
   return (
     <DndContext
@@ -443,7 +519,7 @@ export function InboxTree({
               <SortableIssueItem
                 key={issue.id}
                 id={issue.id}
-                dropEnabled={draggingTask}
+                dropEnabled={draggingTopLevelTask}
               >
                 {(dragHandleSlot) => (
                   <IssueRow
@@ -510,7 +586,7 @@ export function InboxTree({
           </SortableContext>
         )}
 
-        {draggingTask && <DroppableUnlinked />}
+        {draggingTopLevelTask && <DroppableUnlinked />}
       </div>
     </DndContext>
   );
