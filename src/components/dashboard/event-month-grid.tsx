@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import {
@@ -14,12 +14,14 @@ import {
   isSameMonth,
   isWithinInterval,
   isToday,
+  getWeekOfMonth,
 } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import type { GCalEvent } from '@/lib/mock-gcal';
 import { useCalendarViewState } from '@/lib/calendar-view-state';
 import { MOCK_CALENDARS } from '@/lib/mock-calendars';
+import { getCalendarColor, getGCalConfig, GCAL_EMBED_EVENT, type GCalConfig } from '@/lib/gcal-embed';
 
 interface EventMonthGridProps {
   selectedDate: Date;
@@ -31,6 +33,8 @@ interface EventMonthGridProps {
   completedCountByDate?: Map<string, number>;
   searchHighlightDates?: Set<string>;
   readOnly?: boolean;
+  /** Optional today date string (yyyy-MM-dd). Defaults to today via date-fns isToday. */
+  today?: string;
 }
 
 const WEEKDAYS = ['월', '화', '수', '목', '금', '토', '일'];
@@ -45,8 +49,16 @@ export function EventMonthGrid({
   completedCountByDate,
   searchHighlightDates,
   readOnly,
+  today: todayProp,
 }: EventMonthGridProps) {
   const viewState = useCalendarViewState(MOCK_CALENDARS);
+
+  const [gcalConfig, setGcalConfig] = useState<GCalConfig>(() => getGCalConfig());
+  useEffect(() => {
+    const update = () => setGcalConfig(getGCalConfig());
+    window.addEventListener(GCAL_EMBED_EVENT, update);
+    return () => window.removeEventListener(GCAL_EMBED_EVENT, update);
+  }, []);
 
   const visibleEvents = useMemo(
     () => events.filter(ev => viewState[ev.calendarId]?.visible !== false),
@@ -80,7 +92,7 @@ export function EventMonthGrid({
   const selectedWeekEnd = endOfWeek(selectedDate, { weekStartsOn: 1 });
 
   return (
-    <div className="w-full max-w-[640px] select-none">
+    <div className="w-full select-none">
       {/* Month nav */}
       <div className="flex items-center justify-between mb-3">
         <Button variant="ghost" size="icon" className="h-8 w-8"
@@ -96,8 +108,9 @@ export function EventMonthGrid({
         </Button>
       </div>
 
-      {/* Weekday header */}
-      <div className="grid grid-cols-7 gap-px mb-1">
+      {/* Weekday header — 8-col grid: [week-handle | mon..sun] */}
+      <div className="grid grid-cols-[32px_repeat(7,1fr)] gap-px mb-1">
+        <div aria-hidden="true" />
         {WEEKDAYS.map((wd, i) => (
           <div key={wd} className={cn(
             'text-center text-[11px] font-medium text-muted-foreground py-1',
@@ -118,44 +131,47 @@ export function EventMonthGrid({
             end: selectedWeekEnd,
           });
 
-          const weekCells = week.map((day, di) => {
+          const weekCells = week.map((day) => {
             const dateStr = format(day, 'yyyy-MM-dd');
             const dayEvents = eventsByDate.get(dateStr) ?? [];
             const isCurrentMonth = isSameMonth(day, monthCursor);
-            const today = isToday(day);
-            const isWeekend = di === 5 || di === 6;
+            const today = todayProp ? dateStr === todayProp : isToday(day);
+            const isSelectedDay = format(selectedDate, 'yyyy-MM-dd') === dateStr;
 
+            const completedCount = completedCountByDate?.get(dateStr);
             const dayCellContent = (
               <>
-                {/* Date number — always at top */}
-                <div className="flex items-center justify-between mb-1 flex-shrink-0">
+                {/* Date number — top-left, on its own row */}
+                <div className="mb-1 flex-shrink-0">
                   <span className={cn(
                     'inline-flex items-center justify-center h-5 w-5 rounded-full text-[11px] font-medium tabular-nums',
-                    today && 'bg-primary text-primary-foreground',
-                    !today && isCurrentMonth && isWeekend && di === 6 && 'text-red-500',
-                    !today && isCurrentMonth && isWeekend && di === 5 && 'text-blue-500'
+                    // selected solid bg wins; when today AND selected, also keep a subtle inner ring so today still reads
+                    isSelectedDay && 'bg-primary text-primary-foreground',
+                    isSelectedDay && today && 'ring-1 ring-primary-foreground/70 ring-inset',
+                    !isSelectedDay && today && 'font-bold text-primary',
+                    !isSelectedDay && !today && isCurrentMonth && 'text-foreground',
+                    !isSelectedDay && !today && !isCurrentMonth && 'text-muted-foreground/60'
                   )}>
                     {format(day, 'd')}
                   </span>
-                  {completedCountByDate?.get(dateStr) ? (
-                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
-                      ● {completedCountByDate.get(dateStr)}
-                    </span>
-                  ) : null}
                 </div>
 
-                {/* Events (max 3) */}
+                {/* Events (max 3) — left rail shows time (or · for all-day) so columns align */}
                 <div className="space-y-0.5">
                   {dayEvents.slice(0, 3).map((ev) => {
-                    const evColor = viewState[ev.calendarId]?.color ?? '#6366F1';
+                    const evColor = viewState[ev.calendarId]?.color ?? getCalendarColor(ev.calendarId, gcalConfig);
+                    const start = ev.time?.slice(0, 5);
                     return (
                       <div
                         key={ev.id}
                         style={{ backgroundColor: `${evColor}1A`, color: evColor, borderLeft: `2px solid ${evColor}` }}
-                        className="text-[10px] leading-tight rounded px-1 py-0.5 truncate font-medium"
+                        className="text-[10px] leading-tight rounded px-1 py-0.5 font-medium flex items-center gap-1.5"
                         title={`${ev.time ?? ''} ${ev.title}${ev.location ? ` · ${ev.location}` : ''}`}
                       >
-                        {ev.title}
+                        <span className="tabular-nums opacity-60 shrink-0 w-7 text-[9px]">
+                          {start ?? '·'}
+                        </span>
+                        <span className="flex-1 truncate">{ev.title}</span>
                       </div>
                     );
                   })}
@@ -166,63 +182,104 @@ export function EventMonthGrid({
               </>
             );
 
+            const isSearchHit = !!searchHighlightDates?.has(dateStr);
+            // Visual signal priority: search hit > today/selected.
+            //   - search hit: dashed amber border (highest), today/selected ring fades via primaryAlpha
+            //   - today: inset primary box-shadow
+            //   - selected: outer primary box-shadow with 1px breathing gap
+            //   - today + selected: both stack (inset + outer) with breathing gap
+            // When search hits, build ring with reduced alpha so amber dashed dominates the cell edge.
+            const ringFade = isSearchHit ? 18 : 60; // primary alpha % (oklab)
+            const primaryAlpha = `color-mix(in oklab, var(--primary) ${ringFade}%, transparent)`;
+            const primarySolid = isSearchHit
+              ? 'color-mix(in oklab, var(--primary) 30%, transparent)'
+              : 'var(--primary)';
+            let boxShadow: string | undefined;
+            if (today && isSelectedDay) {
+              boxShadow = `inset 0 0 0 2px ${primaryAlpha}, 0 0 0 2px ${primarySolid}, 0 0 0 3px var(--background)`;
+            } else if (today) {
+              boxShadow = `inset 0 0 0 2px ${primaryAlpha}`;
+            } else if (isSelectedDay) {
+              boxShadow = `0 0 0 2px ${primarySolid}, 0 0 0 3px var(--background)`;
+            }
             return (
               <div
                 key={dateStr}
+                style={boxShadow ? { boxShadow } : undefined}
                 className={cn(
-                  'min-h-[76px] rounded-md border border-transparent p-1.5 text-left transition-colors',
-                  isCurrentMonth ? 'bg-background' : 'bg-muted/20',
-                  !isCurrentMonth && 'text-muted-foreground/50',
-                  searchHighlightDates?.has(dateStr) && 'ring-2 ring-primary ring-offset-1'
+                  'min-h-[84px] rounded-md border p-1.5 text-left transition-colors relative',
+                  // search match uses a separate visual channel: dashed amber border (highest priority)
+                  isSearchHit ? 'border-2 border-dashed border-amber-500/70' : 'border border-transparent',
+                  isCurrentMonth ? 'bg-background' : 'bg-muted/20'
                 )}
               >
                 {onDaySelect ? (
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); onDaySelect(day); }}
-                    className="w-full h-full text-left flex flex-col items-start justify-start"
-                    aria-label={`${format(day, 'M월 d일', { locale: ko })} 선택`}
+                    className={cn(
+                      'w-full h-full text-left flex flex-col items-start justify-start rounded-sm transition-colors cursor-pointer',
+                      'hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1'
+                    )}
+                    aria-label={`${format(day, 'M월 d일', { locale: ko })} 일별 보기`}
                   >
                     {dayCellContent}
                   </button>
                 ) : (
                   <>{dayCellContent}</>
                 )}
+                {/* Top-right absolute slot: 오늘 tag or completion count.
+                    Pulled out of the date-row to avoid wrap/overflow on narrow cells. */}
+                {(today || completedCount) ? (
+                  <span
+                    className={cn(
+                      'absolute top-1 right-1.5 text-[9px] font-semibold leading-none tabular-nums pointer-events-none',
+                      today ? 'text-primary' : 'text-emerald-600 dark:text-emerald-400'
+                    )}
+                  >
+                    {today && completedCount
+                      ? `오늘 · ${completedCount}`
+                      : today
+                        ? '오늘'
+                        : `● ${completedCount}`}
+                  </span>
+                ) : null}
               </div>
             );
           });
 
-          if (readOnly) {
-            return (
-              <div key={wi} className="grid grid-cols-7 gap-px w-full rounded-md p-0.5">
-                {weekCells}
-              </div>
-            );
-          }
+          // Week-handle button — replaces the prior whole-row click target.
+          // 8-col grid keeps day cells in their own click lane.
+          const weekLabel = `${format(weekStart, 'M월 d일', { locale: ko })} ~ ${format(week[6], 'M월 d일', { locale: ko })}`;
+          const weekHandle = readOnly ? (
+            <div aria-hidden="true" />
+          ) : (
+            <button
+              type="button"
+              onClick={() => onWeekSelect(weekStart)}
+              aria-label={`${weekLabel} 주 선택`}
+              aria-pressed={isSelectedWeek}
+              className={cn(
+                'flex items-center justify-center rounded text-[10px] tabular-nums transition-colors',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+                isSelectedWeek
+                  ? 'text-primary font-semibold bg-primary/10'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
+              )}
+            >
+              {getWeekOfMonth(weekStart, { weekStartsOn: 1 })}주
+            </button>
+          );
 
-          // Use div with role="button" to avoid nested <button> HTML error
           return (
             <div
               key={wi}
-              role="button"
-              tabIndex={0}
-              onClick={() => onWeekSelect(weekStart)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  onWeekSelect(weekStart);
-                }
-              }}
               className={cn(
-                'group/week grid grid-cols-7 gap-px w-full rounded-md p-0.5 transition-colors cursor-pointer',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                isSelectedWeek
-                  ? 'bg-primary/5 ring-1 ring-primary/30'
-                  : 'hover:bg-accent/50'
+                'grid grid-cols-[32px_repeat(7,1fr)] gap-px w-full rounded-md p-0.5 transition-colors',
+                isSelectedWeek && !readOnly && 'bg-primary/5 ring-1 ring-primary/30'
               )}
-              aria-label={`${format(weekStart, 'M월 d일', { locale: ko })} 주 선택`}
-              aria-pressed={isSelectedWeek}
             >
+              {weekHandle}
               {weekCells}
             </div>
           );
