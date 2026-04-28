@@ -1,55 +1,58 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Issue } from '@/lib/types';
-import { __issuesRef } from '../route';
-import { __tasksRef } from '@/app/api/tasks/route';
+import { createServerSupabaseClient } from '@/lib/supabase/server';
 
 interface Params { params: Promise<{ id: string }> }
 
 export async function GET(_req: NextRequest, { params }: Params) {
   const { id } = await params;
-  const issue = __issuesRef().find(i => i.id === id && !i.is_deleted);
-  if (!issue) return NextResponse.json({ error: 'not found' }, { status: 404 });
-  return NextResponse.json(issue);
+  const supabase = createServerSupabaseClient();
+  const { data, error } = await supabase
+    .from('issues')
+    .select('*')
+    .eq('id', id)
+    .eq('is_deleted', false)
+    .single();
+  if (error) return NextResponse.json({ error: 'not found' }, { status: 404 });
+  return NextResponse.json(data);
 }
 
 export async function PATCH(req: NextRequest, { params }: Params) {
   const { id } = await params;
-  const patch = await req.json() as Partial<Issue>;
-  const issues = __issuesRef();
-  const idx = issues.findIndex(i => i.id === id);
-  if (idx === -1) return NextResponse.json({ error: 'not found' }, { status: 404 });
-  const allowed: (keyof Issue)[] = ['name', 'deadline', 'sort_mode', 'position', 'notion_issue_id'];
+  const patch = await req.json();
+  const supabase = createServerSupabaseClient();
+  const allowed = ['name', 'deadline', 'sort_mode', 'position', 'notion_issue_id'];
+  const update: Record<string, unknown> = {};
   for (const key of allowed) {
-    if (key in patch) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (issues[idx] as any)[key] = (patch as any)[key];
-    }
+    if (key in patch) update[key] = patch[key];
   }
-  return NextResponse.json(issues[idx]);
+  const { data, error } = await supabase
+    .from('issues')
+    .update(update)
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data);
 }
 
-// DELETE supports a query param ?cascade=delete | detach (default detach)
 export async function DELETE(req: NextRequest, { params }: Params) {
   const { id } = await params;
   const cascade = new URL(req.url).searchParams.get('cascade') ?? 'detach';
-  const issues = __issuesRef();
-  const idx = issues.findIndex(i => i.id === id);
-  if (idx === -1) return NextResponse.json({ error: 'not found' }, { status: 404 });
-
-  const tasks = __tasksRef();
-  for (const t of tasks) {
-    if (t.issue_id === id && !t.is_deleted) {
-      if (cascade === 'delete') {
-        t.is_deleted = true;
-        // also cascade to sub-TASKs
-        for (const child of tasks) {
-          if (child.parent_task_id === t.id) child.is_deleted = true;
-        }
-      } else {
-        t.issue_id = null;
-      }
+  const supabase = createServerSupabaseClient();
+  if (cascade === 'delete') {
+    const { data: direct } = await supabase
+      .from('tasks')
+      .select('id')
+      .eq('issue_id', id)
+      .eq('is_deleted', false);
+    if (direct && direct.length > 0) {
+      const ids = direct.map((t: { id: string }) => t.id);
+      await supabase.from('tasks').update({ is_deleted: true }).in('parent_task_id', ids);
+      await supabase.from('tasks').update({ is_deleted: true }).in('id', ids);
     }
+  } else {
+    await supabase.from('tasks').update({ issue_id: null }).eq('issue_id', id);
   }
-  issues[idx].is_deleted = true;
+  await supabase.from('issues').update({ is_deleted: true }).eq('id', id);
   return NextResponse.json({ ok: true, cascade });
 }

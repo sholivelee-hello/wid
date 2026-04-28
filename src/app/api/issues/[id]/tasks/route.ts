@@ -1,18 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { __tasksRef } from '@/app/api/tasks/route';
+import { createServerSupabaseClient } from '@/lib/supabase/server';
 
 interface Params { params: Promise<{ id: string }> }
 
 export async function GET(_req: NextRequest, { params }: Params) {
   const { id } = await params;
-  const all = __tasksRef();
-  const live = all.filter(t => !t.is_deleted);
-  const directIds = new Set(
-    live.filter(t => t.issue_id === id).map(t => t.id),
-  );
-  const result = live.filter(t =>
-    t.issue_id === id ||
-    (t.parent_task_id != null && directIds.has(t.parent_task_id)),
-  );
-  return NextResponse.json(result);
+  const supabase = createServerSupabaseClient();
+  const { data: direct, error } = await supabase
+    .from('tasks')
+    .select('*')
+    .eq('issue_id', id)
+    .eq('is_deleted', false);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  const directIds = direct.map((t: { id: string }) => t.id);
+  const { data: subs } = directIds.length > 0
+    ? await supabase.from('tasks').select('*').in('parent_task_id', directIds).eq('is_deleted', false)
+    : { data: [] };
+  return NextResponse.json([...direct, ...(subs ?? [])]);
 }

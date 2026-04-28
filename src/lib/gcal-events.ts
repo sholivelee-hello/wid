@@ -6,7 +6,7 @@
  * localStorage via `gcal-embed.ts`; no backend proxy is involved.
  */
 
-import type { GCalEvent } from './mock-gcal';
+import type { GCalEvent } from './types';
 
 // ---------------------------------------------------------------------------
 // Internal types

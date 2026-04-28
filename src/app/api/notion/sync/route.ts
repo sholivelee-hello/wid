@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { isMockMode } from '@/lib/mock-data';
 import { Client } from '@notionhq/client';
 
 const ASSIGNEE_FILTER = '이신희';
@@ -60,10 +59,6 @@ async function ensureIssue(
 }
 
 export async function POST() {
-  if (isMockMode()) {
-    return NextResponse.json({ skipped: 'mock mode', created: 0, updated: 0, total: 0 });
-  }
-
   const notion = new Client({ auth: process.env.NOTION_API_KEY });
   const supabase = createServerSupabaseClient();
 

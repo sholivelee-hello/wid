@@ -5,9 +5,9 @@ import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import Link from 'next/link';
 import type { Task } from '@/lib/types';
-import type { GCalEvent } from '@/lib/mock-gcal';
+import type { GCalEvent } from '@/lib/types';
 import { useCalendarViewState } from '@/lib/calendar-view-state';
-import type { CalendarSubscription } from '@/lib/mock-calendars';
+import type { CalendarSubscription } from '@/lib/types';
 import { getGCalConfig, getCalendarColor, getCalendarLabel, GCAL_EMBED_EVENT, type GCalConfig } from '@/lib/gcal-embed';
 import { CalendarDays, CheckCircle2 } from 'lucide-react';
 

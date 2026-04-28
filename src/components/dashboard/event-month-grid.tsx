@@ -18,9 +18,9 @@ import {
 } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import type { GCalEvent } from '@/lib/mock-gcal';
+import type { GCalEvent } from '@/lib/types';
 import { useCalendarViewState } from '@/lib/calendar-view-state';
-import { MOCK_CALENDARS } from '@/lib/mock-calendars';
+
 import { getCalendarColor, getGCalConfig, GCAL_EMBED_EVENT, type GCalConfig } from '@/lib/gcal-embed';
 
 interface EventMonthGridProps {
@@ -51,7 +51,7 @@ export function EventMonthGrid({
   readOnly,
   today: todayProp,
 }: EventMonthGridProps) {
-  const viewState = useCalendarViewState(MOCK_CALENDARS);
+  const viewState = useCalendarViewState([]);
 
   const [gcalConfig, setGcalConfig] = useState<GCalConfig>(() => getGCalConfig());
   useEffect(() => {

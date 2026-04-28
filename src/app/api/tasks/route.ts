@@ -1,108 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { isMockMode, MOCK_TASKS } from '@/lib/mock-data';
-
-// In-memory mutable reference for the dev-mock backend (shared with sibling routes)
-const tasks: typeof MOCK_TASKS = [...MOCK_TASKS];
-export const __tasksRef = () => tasks;
-
-/**
- * Hierarchy invariant: ISSUE > TASK > sub-TASK only — at most 2 task levels.
- * Returns true when `parentId` references a top-level TASK (parent_task_id === null).
- */
-export function isValidTaskParent(taskList: typeof MOCK_TASKS, parentId: string): boolean {
-  const parent = taskList.find(t => t.id === parentId && !t.is_deleted);
-  if (!parent) return false;
-  return parent.parent_task_id === null;
-}
-
-/** True if any non-deleted task has this id as parent_task_id. */
-export function hasChildTasks(taskList: typeof MOCK_TASKS, id: string): boolean {
-  return taskList.some(t => t.parent_task_id === id && !t.is_deleted);
-}
-
-/**
- * One-time normalization: anything currently nested deeper than sub-TASK is
- * promoted so its parent becomes the topmost TASK ancestor. Runs once at
- * module load so dev-mode runtime state (e.g. items the user created before
- * the depth guard shipped) self-heals.
- */
-function normalizeDepth(taskList: typeof MOCK_TASKS) {
-  const byId = new Map(taskList.map(t => [t.id, t]));
-  for (const t of taskList) {
-    if (!t.parent_task_id) continue;
-    let cur = byId.get(t.parent_task_id);
-    let last: typeof t | undefined = cur;
-    while (cur?.parent_task_id) {
-      last = byId.get(cur.parent_task_id);
-      cur = last;
-    }
-    if (last && last.id !== t.parent_task_id) {
-      t.parent_task_id = last.id;
-    }
-  }
-}
-normalizeDepth(tasks);
-
-/**
- * One-time normalization: any task whose status falls outside TASK_STATUSES
- * (e.g. legacy '대기' from the old default) is reset to '등록' so it actually
- * appears in the Today/Inbox status groupings instead of becoming a ghost.
- */
-const ALLOWED_STATUSES = new Set(['등록', '진행중', '대기중', '완료', '위임', '취소']);
-for (const t of tasks) {
-  if (!ALLOWED_STATUSES.has(t.status)) {
-    t.status = '등록';
-  }
-}
 
 export async function GET(request: NextRequest) {
-  if (isMockMode()) {
-    const searchParams = request.nextUrl.searchParams;
-    const status = searchParams.get('status');
-    const priority = searchParams.get('priority');
-    const source = searchParams.get('source');
-    const from = searchParams.get('from');
-    const to = searchParams.get('to');
-    const dateField = searchParams.get('dateField');
-    const sort = searchParams.get('sort') ?? 'created_at';
-    const order = searchParams.get('order') ?? 'desc';
-    const showDeleted = searchParams.get('deleted') === 'true';
-    const issueId = searchParams.get('issue_id');
-    const parentId = searchParams.get('parent_task_id');
-    const independent = searchParams.get('independent') === 'true';
-
-    let result = tasks.filter((t) => t.is_deleted === showDeleted);
-    if (status) result = result.filter((t) => t.status === status);
-    if (priority) result = result.filter((t) => t.priority === priority);
-    if (source) result = result.filter((t) => t.source === source);
-    if (issueId) result = result.filter(t => t.issue_id === issueId);
-    if (parentId) result = result.filter(t => t.parent_task_id === parentId);
-    if (independent) result = result.filter(t => t.issue_id === null && t.parent_task_id === null);
-    if (from || to) {
-      result = result.filter((t) => {
-        const inRange = (iso: string | null | undefined) => {
-          if (!iso) return false;
-          if (from && iso < from) return false;
-          if (to && iso > `${to}T23:59:59.999Z`) return false;
-          return true;
-        };
-        if (dateField === 'either') {
-          return inRange(t.created_at) || inRange(t.completed_at);
-        }
-        return inRange(t.created_at);
-      });
-    }
-
-    result.sort((a, b) => {
-      const aVal = String((a as unknown as Record<string, unknown>)[sort] ?? '');
-      const bVal = String((b as unknown as Record<string, unknown>)[sort] ?? '');
-      return order === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-    });
-
-    return NextResponse.json(result);
-  }
-
   const supabase = createServerSupabaseClient();
   const searchParams = request.nextUrl.searchParams;
 
@@ -115,6 +14,9 @@ export async function GET(request: NextRequest) {
   const sort = searchParams.get('sort') ?? 'created_at';
   const order = searchParams.get('order') ?? 'desc';
   const showDeleted = searchParams.get('deleted') === 'true';
+  const issueId = searchParams.get('issue_id');
+  const parentId = searchParams.get('parent_task_id');
+  const independent = searchParams.get('independent') === 'true';
 
   let query = supabase
     .from('tasks')
@@ -124,6 +26,10 @@ export async function GET(request: NextRequest) {
   if (status) query = query.eq('status', status);
   if (priority) query = query.eq('priority', priority);
   if (source) query = query.eq('source', source);
+  if (issueId) query = query.eq('issue_id', issueId);
+  if (parentId) query = query.eq('parent_task_id', parentId);
+  if (independent) query = query.is('issue_id', null).is('parent_task_id', null);
+
   if (dateField === 'either' && from && to) {
     query = query.or(
       `and(created_at.gte.${from},created_at.lte.${to}T23:59:59.999Z),and(completed_at.gte.${from},completed_at.lte.${to}T23:59:59.999Z)`
@@ -136,56 +42,11 @@ export async function GET(request: NextRequest) {
   query = query.order(sort, { ascending: order === 'asc' });
 
   const { data, error } = await query;
-
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data);
 }
 
 export async function POST(request: NextRequest) {
-  if (isMockMode()) {
-    const body = await request.json();
-    const issueId = body.issue_id ?? null;
-    const parentId = body.parent_task_id ?? null;
-    if (parentId !== null && !isValidTaskParent(tasks, parentId)) {
-      return NextResponse.json(
-        { error: '계층은 ISSUE > TASK > sub-TASK 까지만 허용됩니다.', code: 'MAX_DEPTH' },
-        { status: 400 },
-      );
-    }
-    // Append to the same parent's sibling list so the new task lands at the end.
-    const siblings = tasks.filter(t =>
-      !t.is_deleted && t.issue_id === issueId && t.parent_task_id === parentId,
-    );
-    const nextPos = siblings.reduce((m, t) => Math.max(m, t.position), -1) + 1;
-    const newTask = {
-      id: `mock-${Date.now()}`,
-      title: body.title,
-      description: body.description ?? null,
-      priority: body.priority ?? '보통',
-      status: body.status ?? '등록',
-      source: body.source ?? 'manual',
-      requester: body.requester ?? null,
-      requested_at: body.requested_at ?? null,
-      created_at: new Date().toISOString(),
-      deadline: body.deadline ?? null,
-      completed_at: null,
-      notion_task_id: null,
-      slack_url: body.slack_url ?? null,
-      notion_issue: null,
-      slack_channel: body.slack_channel ?? null,
-      slack_sender: body.slack_sender ?? null,
-      delegate_to: null,
-      follow_up_note: null,
-      issue_id: issueId,
-      parent_task_id: parentId,
-      sort_mode: 'checklist' as const,
-      position: nextPos,
-      is_deleted: false,
-    };
-    tasks.push(newTask);
-    return NextResponse.json(newTask, { status: 201 });
-  }
-
   const supabase = createServerSupabaseClient();
   const body = await request.json();
 
@@ -203,6 +64,10 @@ export async function POST(request: NextRequest) {
       slack_url: body.slack_url ?? null,
       slack_channel: body.slack_channel ?? null,
       slack_sender: body.slack_sender ?? null,
+      issue_id: body.issue_id ?? null,
+      parent_task_id: body.parent_task_id ?? null,
+      sort_mode: body.sort_mode ?? 'checklist',
+      position: body.position ?? 0,
     })
     .select()
     .single();

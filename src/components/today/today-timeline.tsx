@@ -2,8 +2,8 @@
 
 import { useMemo } from 'react';
 import { useCalendarViewState } from '@/lib/calendar-view-state';
-import { MOCK_CALENDARS } from '@/lib/mock-calendars';
-import type { GCalEvent } from '@/lib/mock-gcal';
+
+import type { GCalEvent } from '@/lib/types';
 
 interface TodayTimelineProps {
   events: GCalEvent[];
@@ -20,7 +20,7 @@ function parseTime(t: string): number {
 }
 
 export function TodayTimeline({ events }: TodayTimelineProps) {
-  const viewState = useCalendarViewState(MOCK_CALENDARS);
+  const viewState = useCalendarViewState([]);
 
   const { timed, allDay } = useMemo(() => {
     const visible = events.filter(e => viewState[e.calendarId]?.visible !== false);
@@ -92,7 +92,7 @@ export function TodayTimeline({ events }: TodayTimelineProps) {
           const top = ((startMin / 60) - startHour) * HOUR_PIXELS;
           const height = Math.max(24, ((endMin - startMin) / 60) * HOUR_PIXELS);
           const color = viewState[ev.calendarId]?.color ?? '#6366F1';
-          const owner = MOCK_CALENDARS.find(c => c.id === ev.calendarId)?.name ?? '';
+          const owner = '';
           return (
             <div
               key={ev.id}

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { apiFetch } from '@/lib/api';
-import type { CalendarSubscription } from '@/lib/mock-calendars';
+import type { CalendarSubscription } from '@/lib/types';
 import {
   useCalendarViewState,
   setCalendarVisible,

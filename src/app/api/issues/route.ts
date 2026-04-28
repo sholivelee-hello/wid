@@ -1,37 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Issue } from '@/lib/types';
-import { MOCK_ISSUES } from '@/lib/mock-issues';
-
-// In-memory mutable copy for the dev-mock backend
-let issues: Issue[] = [...MOCK_ISSUES];
+import { createServerSupabaseClient } from '@/lib/supabase/server';
 
 export async function GET() {
-  const visible = issues
-    .filter(i => !i.is_deleted)
-    .sort((a, b) => a.position - b.position);
-  return NextResponse.json(visible);
+  const supabase = createServerSupabaseClient();
+  const { data, error } = await supabase
+    .from('issues')
+    .select('*')
+    .eq('is_deleted', false)
+    .order('position', { ascending: true });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data);
 }
 
 export async function POST(req: NextRequest) {
-  const body = await req.json() as Partial<Issue>;
+  const supabase = createServerSupabaseClient();
+  const body = await req.json();
   if (!body.name || typeof body.name !== 'string') {
     return NextResponse.json({ error: 'name required' }, { status: 400 });
   }
-  const maxPos = issues.reduce((m, i) => Math.max(m, i.position), -1);
-  const next: Issue = {
-    id: crypto.randomUUID(),
-    name: body.name,
-    deadline: body.deadline ?? null,
-    sort_mode: (body.sort_mode === 'sequential' ? 'sequential' : 'checklist'),
-    position: maxPos + 1,
-    notion_issue_id: body.notion_issue_id ?? null,
-    created_at: new Date().toISOString(),
-    is_deleted: false,
-  };
-  issues.push(next);
-  return NextResponse.json(next, { status: 201 });
+  const { data: last } = await supabase
+    .from('issues')
+    .select('position')
+    .eq('is_deleted', false)
+    .order('position', { ascending: false })
+    .limit(1)
+    .single();
+  const position = (last?.position ?? -1) + 1;
+  const { data, error } = await supabase
+    .from('issues')
+    .insert({
+      name: body.name,
+      deadline: body.deadline ?? null,
+      sort_mode: body.sort_mode ?? 'checklist',
+      position,
+      notion_issue_id: body.notion_issue_id ?? null,
+    })
+    .select()
+    .single();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data, { status: 201 });
 }
-
-// Helpers exposed for sibling routes (kept on the route module to share state in dev)
-export const __issuesRef = () => issues;
-export const __setIssues = (next: Issue[]) => { issues = next; };

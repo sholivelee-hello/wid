@@ -56,3 +56,22 @@ export interface NotionStatusMapping {
   wid_status: string;
 }
 
+export interface GCalEvent {
+  id: string;
+  calendarId: string;
+  title: string;
+  date: string;
+  time?: string;
+  endTime?: string;
+  location?: string;
+  attendees?: string[];
+  meetLink?: string;
+}
+
+export interface CalendarSubscription {
+  id: string;
+  name: string;
+  defaultColor: string;
+  role?: string;
+}
+

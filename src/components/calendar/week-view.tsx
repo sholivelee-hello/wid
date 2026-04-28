@@ -6,8 +6,8 @@ import { ko } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { X } from 'lucide-react';
 import { useCalendarViewState } from '@/lib/calendar-view-state';
-import { MOCK_CALENDARS } from '@/lib/mock-calendars';
-import type { GCalEvent } from '@/lib/mock-gcal';
+
+import type { GCalEvent } from '@/lib/types';
 
 interface WeekTimeGridProps {
   weekStart: Date;
@@ -93,7 +93,7 @@ interface TooltipInfo {
 }
 
 export function WeekView({ weekStart, events }: WeekTimeGridProps) {
-  const viewState = useCalendarViewState(MOCK_CALENDARS);
+  const viewState = useCalendarViewState([]);
   const [clickedEvent, setClickedEvent] = useState<TooltipInfo | null>(null);
 
   useEffect(() => {
@@ -244,7 +244,7 @@ export function WeekView({ weekStart, events }: WeekTimeGridProps) {
                 const widthPct = (1 / layout.totalLanes) * 100;
 
                 const color = viewState[ev.calendarId]?.color ?? '#6366F1';
-                const cal = MOCK_CALENDARS.find(c => c.id === ev.calendarId);
+                const cal = ([] as import('@/lib/types').CalendarSubscription[]).find(c => c.id === ev.calendarId);
 
                 return (
                   <div

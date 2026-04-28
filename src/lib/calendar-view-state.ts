@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { CalendarSubscription } from './mock-calendars';
+import type { CalendarSubscription } from './types';
 
 const STORAGE_KEY = 'wid-calendar-view-state';
 const EVENT_NAME = 'calendar-view-state-changed';
