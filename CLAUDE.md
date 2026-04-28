@@ -17,9 +17,10 @@
 - **프론트/백**: Next.js 16+ App Router, TypeScript, Tailwind CSS v4
 - **UI**: shadcn/ui v4 (base-ui 기반)
 - **상태관리**: Zustand (타이머), localStorage (캘린더 가시성, 사용자 뷰 등)
-- **데이터**: Supabase 미연결 — 현재 mock 데이터로 동작 중 (`src/lib/mock-data.ts`, `src/lib/mock-gcal.ts`, `src/lib/mock-calendars.ts`). Supabase 마이그레이션은 `supabase/migrations/`에 정의됨
-- **외부 연동**: Notion (TASK DB sync), Slack (webhook), Google Calendar — 모두 mock 또는 부분 연동
+- **데이터**: Supabase 실연결 완료 (2026-04-29). mock 파일 전부 삭제됨. 마이그레이션: `supabase/migrations/001_initial_schema.sql` + `002_hierarchy_and_issues.sql`
+- **외부 연동**: Slack 실연동 완료 (reaction_added → task 생성). Notion (부분 연동). Google Calendar — 미연동 (빈 상태)
 - **개발 명령어**: `npm run dev` (Turbopack), `npm run build`, `npm run lint`
+- **Slack 로컬 개발**: cloudflared로 터널 열어야 Slack webhook이 도달함. `cloudflared tunnel --url http://localhost:3000` 실행 후 나오는 `https://xxx.trycloudflare.com` URL을 Slack App → Event Subscriptions → Request URL에 등록. 터널 재시작하면 URL이 바뀌므로 그때마다 재등록 필요. 봇이 이모지 달린 채널에 멤버로 들어가있어야 reaction_added 이벤트를 받을 수 있음 (`/invite @TASK줍줍봇`).
 
 ## 디자인 시스템 v3 (현재 기준선)
 
