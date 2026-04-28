@@ -8,7 +8,7 @@ import type { Task } from '@/lib/types';
 import type { GCalEvent } from '@/lib/types';
 import { useCalendarViewState } from '@/lib/calendar-view-state';
 import type { CalendarSubscription } from '@/lib/types';
-import { getGCalConfig, getCalendarColor, getCalendarLabel, GCAL_EMBED_EVENT, type GCalConfig } from '@/lib/gcal-embed';
+import { getGCalConfig, getCalendarColor, getCalendarLabel, GCAL_EMBED_EVENT, DEFAULT_GCAL_CONFIG, type GCalConfig } from '@/lib/gcal-embed';
 import { CalendarDays, CheckCircle2 } from 'lucide-react';
 
 interface DayDetailPanelProps {
@@ -24,8 +24,10 @@ export function DayDetailPanel({
 }: DayDetailPanelProps) {
   const viewState = useCalendarViewState(subscriptions);
 
-  const [gcalConfig, setGcalConfig] = useState<GCalConfig>(() => getGCalConfig());
+  // SSR-safe: 초기값은 DEFAULT, 마운트 후 localStorage 값으로 덮는다.
+  const [gcalConfig, setGcalConfig] = useState<GCalConfig>(DEFAULT_GCAL_CONFIG);
   useEffect(() => {
+    setGcalConfig(getGCalConfig());
     const update = () => setGcalConfig(getGCalConfig());
     window.addEventListener(GCAL_EMBED_EVENT, update);
     return () => window.removeEventListener(GCAL_EMBED_EVENT, update);

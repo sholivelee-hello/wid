@@ -20,6 +20,7 @@ import {
   setGCalConfig,
   getCalendarColor,
   GCAL_EMBED_EVENT,
+  DEFAULT_GCAL_CONFIG,
   type GCalConfig,
 } from '@/lib/gcal-embed';
 import {
@@ -152,14 +153,19 @@ function HistorySparkline({ history }: { history: HistoryEntry[] }) {
 }
 
 export function GCalSettings() {
-  const [config, setConfig] = useState<GCalConfig>(() => getGCalConfig());
+  // SSR/hydration mismatch 방지: 서버는 DEFAULT, 클라는 localStorage값을 쓰면
+  // 첫 렌더에서 status icon이 달라진다. 초기값은 DEFAULT로 통일하고 마운트
+  // 직후 useEffect에서 실제 값을 채운다.
+  const [config, setConfig] = useState<GCalConfig>(DEFAULT_GCAL_CONFIG);
   const [loading, setLoading] = useState<LoadingState>('idle');
   const [error, setError] = useState<string | null>(null);
   const [lastFetch, setLastFetch] = useState<Date | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [now, setNow] = useState<number>(() => Date.now());
+  const [now, setNow] = useState<number>(0);
 
   useEffect(() => {
+    setConfig(getGCalConfig());
+    setNow(Date.now());
     const handler = () => setConfig(getGCalConfig());
     window.addEventListener(GCAL_EMBED_EVENT, handler);
     return () => window.removeEventListener(GCAL_EMBED_EVENT, handler);

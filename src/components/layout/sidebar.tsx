@@ -14,11 +14,14 @@ import { navItems } from '@/lib/nav-items';
 
 export function Sidebar() {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return localStorage.getItem('sidebar-collapsed') === 'true';
-  });
+  const [collapsed, setCollapsed] = useState(false);
   const [inboxCount, setInboxCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (localStorage.getItem('sidebar-collapsed') === 'true') {
+      setCollapsed(true);
+    }
+  }, []);
 
   useEffect(() => {
     async function fetchCount() {
