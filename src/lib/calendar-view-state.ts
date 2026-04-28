@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import type { CalendarSubscription } from './types';
 
+export const EMPTY_CALENDAR_SUBS: CalendarSubscription[] = [];
+
 const STORAGE_KEY = 'wid-calendar-view-state';
 const EVENT_NAME = 'calendar-view-state-changed';
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { useCalendarViewState } from '@/lib/calendar-view-state';
+import { useCalendarViewState, EMPTY_CALENDAR_SUBS } from '@/lib/calendar-view-state';
 
 import type { GCalEvent } from '@/lib/types';
 
@@ -20,7 +20,7 @@ function parseTime(t: string): number {
 }
 
 export function TodayTimeline({ events }: TodayTimelineProps) {
-  const viewState = useCalendarViewState([]);
+  const viewState = useCalendarViewState(EMPTY_CALENDAR_SUBS);
 
   const { timed, allDay } = useMemo(() => {
     const visible = events.filter(e => viewState[e.calendarId]?.visible !== false);

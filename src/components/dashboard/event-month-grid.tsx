@@ -19,7 +19,7 @@ import {
 import { ko } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import type { GCalEvent } from '@/lib/types';
-import { useCalendarViewState } from '@/lib/calendar-view-state';
+import { useCalendarViewState, EMPTY_CALENDAR_SUBS } from '@/lib/calendar-view-state';
 
 import { getCalendarColor, getGCalConfig, GCAL_EMBED_EVENT, type GCalConfig } from '@/lib/gcal-embed';
 
@@ -51,7 +51,7 @@ export function EventMonthGrid({
   readOnly,
   today: todayProp,
 }: EventMonthGridProps) {
-  const viewState = useCalendarViewState([]);
+  const viewState = useCalendarViewState(EMPTY_CALENDAR_SUBS);
 
   const [gcalConfig, setGcalConfig] = useState<GCalConfig>(() => getGCalConfig());
   useEffect(() => {

@@ -5,7 +5,7 @@ import { format, eachDayOfInterval, endOfWeek, isToday } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { X } from 'lucide-react';
-import { useCalendarViewState } from '@/lib/calendar-view-state';
+import { useCalendarViewState, EMPTY_CALENDAR_SUBS } from '@/lib/calendar-view-state';
 
 import type { GCalEvent } from '@/lib/types';
 
@@ -93,7 +93,7 @@ interface TooltipInfo {
 }
 
 export function WeekView({ weekStart, events }: WeekTimeGridProps) {
-  const viewState = useCalendarViewState([]);
+  const viewState = useCalendarViewState(EMPTY_CALENDAR_SUBS);
   const [clickedEvent, setClickedEvent] = useState<TooltipInfo | null>(null);
 
   useEffect(() => {
