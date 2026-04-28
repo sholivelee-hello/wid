@@ -25,7 +25,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical } from 'lucide-react';
-import { Issue, Task } from '@/lib/types';
+import { Issue, Task, isTaskDone } from '@/lib/types';
 import { buildTree, filterIncomplete, filterBySearch, countSubtasks, type Tree, type TaskNode } from '@/lib/hierarchy';
 import type { SortKey } from '@/lib/custom-views';
 import { lockedSiblings } from '@/lib/lock-state';
@@ -511,7 +511,7 @@ export function InboxTree({
         <SortableContext items={issueSortableIds} strategy={verticalListSortingStrategy}>
           {tree.issues.map(({ issue, tasks: nodes }) => {
             const total = nodes.length;
-            const done = nodes.filter(n => n.task.status === '완료').length;
+            const done = nodes.filter(n => isTaskDone(n.task.status)).length;
             const subCount = countSubtasks(nodes);
             const locked = lockedSiblings(nodes, issue.sort_mode);
             const taskItemIds = nodes.map(n => taskSortId(n.task.id));

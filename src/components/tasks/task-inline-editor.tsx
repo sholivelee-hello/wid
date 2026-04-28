@@ -10,7 +10,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { IssuePicker } from '@/components/issues/issue-picker';
 import { TaskChipButton } from '@/components/tasks/task-chip-button';
 import { DeadlinePopover } from '@/components/tasks/deadline-popover';
-import { Issue, Task, TASK_STATUSES } from '@/lib/types';
+import { Issue, Task, TASK_STATUSES, isTaskDone, isTaskStatus } from '@/lib/types';
 import { PRIORITIES } from '@/lib/constants';
 import { apiFetch } from '@/lib/api';
 import { promptNextInTodayIfNeeded } from '@/lib/today-tasks';
@@ -75,8 +75,8 @@ export function TaskInlineEditor({ task, onClose }: Props) {
       });
       window.dispatchEvent(new CustomEvent('task-updated'));
       setSavedAt(Date.now());
-      if (patch.status === '완료' && task.status !== '완료') {
-        promptNextInTodayIfNeeded({ ...task, status: '완료' });
+      if (isTaskStatus(patch.status) && isTaskDone(patch.status) && !isTaskDone(task.status)) {
+        promptNextInTodayIfNeeded({ ...task, status: patch.status });
       }
     } finally {
       setSaving(false);

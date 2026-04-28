@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { Issue, Task, TaskStatus } from '@/lib/types';
+import { Issue, Task, TaskStatus, isTaskDone } from '@/lib/types';
 import { TaskCard } from '@/components/tasks/task-card';
 import { TaskListSkeleton } from '@/components/loading/page-skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -34,6 +34,8 @@ export default function InboxPage() {
   const [loading, setLoading] = useState(true);
   const [priority, setPriority] = useState('all');
   const [source, setSource] = useState('all');
+  const [requester, setRequester] = useState('all');
+  const [delegate, setDelegate] = useState('all');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sortBy, setSortByRaw] = useState<SortKey>(() => loadInboxSort());
@@ -133,8 +135,9 @@ export default function InboxPage() {
         body: JSON.stringify({ status: newStatus }),
       });
       window.dispatchEvent(new CustomEvent('task-updated'));
-      if (newStatus === '완료' && before && before.status !== '완료') {
-        promptNextInTodayIfNeeded({ ...before, status: '완료' });
+      // 처리됨(완료/위임)으로 전이될 때 prompt-next 토스트 발동.
+      if (isTaskDone(newStatus) && before && !isTaskDone(before.status)) {
+        promptNextInTodayIfNeeded({ ...before, status: newStatus });
       }
     } catch {
       fetchTasks();
@@ -143,7 +146,8 @@ export default function InboxPage() {
 
   const handleComplete = async (taskId: string) => {
     const task = tasks.find(t => t.id === taskId);
-    const newStatus: TaskStatus = task?.status === '완료' ? '등록' : '완료';
+    // 위임도 처리됨으로 보므로 토글 시 등록으로 되돌림.
+    const newStatus: TaskStatus = task && isTaskDone(task.status) ? '등록' : '완료';
     await handleStatusChange(taskId, newStatus);
   };
 
@@ -210,17 +214,51 @@ export default function InboxPage() {
     return list;
   }, [debouncedSearch]);
 
+  // 요청자/위임자 필터: top-level TASK에만 값이 있는 게 대부분이라
+  // 부모가 매칭되면 그 자식까지 모두 통과시킨다 (3-level invariant 활용).
+  const treeFilteredTasks = useMemo(() => {
+    if (requester === 'all' && delegate === 'all') return tasks;
+    const matchedParentIds = new Set<string>();
+    for (const t of tasks) {
+      if (t.parent_task_id) continue;
+      const reqOk = requester === 'all' || (t.requester ?? '') === requester;
+      const delOk = delegate === 'all' || (t.delegate_to ?? '') === delegate;
+      if (reqOk && delOk) matchedParentIds.add(t.id);
+    }
+    return tasks.filter(t =>
+      t.parent_task_id ? matchedParentIds.has(t.parent_task_id) : matchedParentIds.has(t.id),
+    );
+  }, [tasks, requester, delegate]);
+
+  // 필터 chip 후보군은 실제 task에서 추출 (sub-task 포함).
+  const requesters = useMemo(() => {
+    const set = new Set<string>();
+    for (const t of tasks) {
+      const v = t.requester?.trim();
+      if (v) set.add(v);
+    }
+    return Array.from(set).sort();
+  }, [tasks]);
+  const delegatees = useMemo(() => {
+    const set = new Set<string>();
+    for (const t of tasks) {
+      const v = t.delegate_to?.trim();
+      if (v) set.add(v);
+    }
+    return Array.from(set).sort();
+  }, [tasks]);
+
   const treeVisibleCount = useMemo(() => {
-    const built = buildTree(issues, tasks);
+    const built = buildTree(issues, treeFilteredTasks);
     const view = showCompleted ? built : filterIncomplete(built);
     let n = 0;
     for (const issueNode of view.issues) n += issueNode.tasks.length;
     n += view.independents.length;
     return n;
-  }, [issues, tasks, showCompleted]);
+  }, [issues, treeFilteredTasks, showCompleted]);
 
   const getViewTasks = useCallback((view: CustomTaskView) => {
-    let list = applyBaseFilter(tasks);
+    let list = applyBaseFilter(treeFilteredTasks);
     if (view.statuses.length > 0) {
       list = list.filter(t => view.statuses.includes(t.status));
     }
@@ -249,12 +287,12 @@ export default function InboxPage() {
   // Inbox snapshot — only counts non-deleted, non-completed top-level work.
   const liveTasks = useMemo(() => tasks.filter(t => !t.is_deleted), [tasks]);
   const incompleteCount = useMemo(
-    () => liveTasks.filter(t => t.status !== '완료' && t.status !== '취소').length,
+    () => liveTasks.filter(t => !isTaskDone(t.status) && t.status !== '취소').length,
     [liveTasks],
   );
   const dueTodayCount = useMemo(() => {
     return liveTasks.filter(t =>
-      t.deadline?.slice(0, 10) === todayStr && t.status !== '완료' && t.status !== '취소',
+      t.deadline?.slice(0, 10) === todayStr && !isTaskDone(t.status) && t.status !== '취소',
     ).length;
   }, [liveTasks, todayStr]);
 
@@ -322,18 +360,26 @@ export default function InboxPage() {
           priority={priority}
           source={source}
           statuses={statusFilter}
+          requester={requester}
+          delegate={delegate}
+          requesters={requesters}
+          delegatees={delegatees}
           onSortChange={setSortBy}
           onPriorityChange={setPriority}
           onSourceChange={setSource}
           onStatusesChange={(next) => { setStatusFilter(next); saveInboxFilter(next); }}
+          onRequesterChange={setRequester}
+          onDelegateChange={setDelegate}
         />
-        {(priority !== 'all' || source !== 'all' || statusFilter.length > 0) && (
+        {(priority !== 'all' || source !== 'all' || statusFilter.length > 0 || requester !== 'all' || delegate !== 'all') && (
           <button
             type="button"
             onClick={() => {
               setPriority('all');
               setSource('all');
               setStatusFilter([]);
+              setRequester('all');
+              setDelegate('all');
               saveInboxFilter([]);
             }}
             className="text-[11px] text-muted-foreground hover:text-foreground underline"
@@ -414,7 +460,7 @@ export default function InboxPage() {
         ) : (
           <InboxTree
             issues={issues}
-            tasks={tasks}
+            tasks={treeFilteredTasks}
             showCompleted={showCompleted}
             searchQuery={debouncedSearch}
             sortBy={sortBy}

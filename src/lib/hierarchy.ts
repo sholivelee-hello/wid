@@ -1,4 +1,4 @@
-import { Issue, Task } from './types';
+import { Issue, Task, isTaskDone } from './types';
 
 export interface IssueNode {
   issue: Issue;
@@ -16,9 +16,16 @@ export interface Tree {
 
 export function buildTree(issues: Issue[], tasks: Task[]): Tree {
   const live = tasks.filter(t => !t.is_deleted);
+  // 고아 처리에 필요한 멤버십 셋. 복구된 task가 deleted 부모/ISSUE를
+  // 가리키면 트리 어디에도 안 들어가서 인박스에서 사라지는 문제를 막는다.
+  const liveTaskIds = new Set(live.map(t => t.id));
+  const liveIssueIds = new Set(
+    issues.filter(i => !i.is_deleted).map(i => i.id),
+  );
+
   const byParent = new Map<string, Task[]>();
   for (const t of live) {
-    if (t.parent_task_id) {
+    if (t.parent_task_id && liveTaskIds.has(t.parent_task_id)) {
       const arr = byParent.get(t.parent_task_id) ?? [];
       arr.push(t);
       byParent.set(t.parent_task_id, arr);
@@ -33,8 +40,9 @@ export function buildTree(issues: Issue[], tasks: Task[]): Tree {
   const tasksByIssue = new Map<string, Task[]>();
   const independents: TaskNode[] = [];
   for (const t of live) {
-    if (t.parent_task_id) continue;
-    if (t.issue_id) {
+    // 부모가 살아있으면 거기로. 부모가 죽었거나 없으면 자기 자신을 top-level로.
+    if (t.parent_task_id && liveTaskIds.has(t.parent_task_id)) continue;
+    if (t.issue_id && liveIssueIds.has(t.issue_id)) {
       const arr = tasksByIssue.get(t.issue_id) ?? [];
       arr.push(t);
       tasksByIssue.set(t.issue_id, arr);
@@ -50,13 +58,17 @@ export function buildTree(issues: Issue[], tasks: Task[]): Tree {
     .map(issue => ({
       issue,
       tasks: (tasksByIssue.get(issue.id) ?? []).sort(sortPos).map(buildNode),
-    }));
+    }))
+    // 매달린 active task가 0개인 ISSUE는 인박스 트리에서 숨긴다 — 모든 task가
+    // 휴지통으로 들어간 ISSUE가 빈 헤더로 떠다니지 않게. 신규 빈 ISSUE는
+    // IssuePicker에서는 여전히 선택 가능 (거기는 issues 목록을 직접 본다).
+    .filter(node => node.tasks.length > 0);
 
   return { issues: issueNodes, independents };
 }
 
 export function hasIncomplete(node: TaskNode): boolean {
-  if (node.task.status !== '완료') return true;
+  if (!isTaskDone(node.task.status)) return true;
   return node.children.some(hasIncomplete);
 }
 

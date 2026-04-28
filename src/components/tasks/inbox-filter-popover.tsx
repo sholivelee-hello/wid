@@ -27,10 +27,16 @@ interface Props {
   priority: string;        // 'all' | Priority
   source: string;          // 'all' | Source
   statuses: string[];      // multi
+  requester: string;       // 'all' | name
+  delegate: string;        // 'all' | name
+  requesters: string[];    // 선택 가능한 요청자 목록 (실제 task에서 추출)
+  delegatees: string[];    // 선택 가능한 위임 대상 목록
   onSortChange: (v: SortKey) => void;
   onPriorityChange: (v: string) => void;
   onSourceChange: (v: string) => void;
   onStatusesChange: (v: string[]) => void;
+  onRequesterChange: (v: string) => void;
+  onDelegateChange: (v: string) => void;
 }
 
 export function InboxFilterPopover({
@@ -38,22 +44,32 @@ export function InboxFilterPopover({
   priority,
   source,
   statuses,
+  requester,
+  delegate,
+  requesters,
+  delegatees,
   onSortChange,
   onPriorityChange,
   onSourceChange,
   onStatusesChange,
+  onRequesterChange,
+  onDelegateChange,
 }: Props) {
   const [open, setOpen] = useState(false);
 
   const activeCount =
     (priority !== 'all' ? 1 : 0) +
     (source !== 'all' ? 1 : 0) +
+    (requester !== 'all' ? 1 : 0) +
+    (delegate !== 'all' ? 1 : 0) +
     statuses.length;
 
   const reset = () => {
     onPriorityChange('all');
     onSourceChange('all');
     onStatusesChange([]);
+    onRequesterChange('all');
+    onDelegateChange('all');
   };
 
   const toggleStatus = (s: string) => {
@@ -151,6 +167,56 @@ export function InboxFilterPopover({
                 </Chip>
               ))}
             </ChipRow>
+          </Section>
+
+          <Separator />
+          <Section label="요청자">
+            {requesters.length === 0 ? (
+              <p className="text-[11px] text-muted-foreground/80">
+                요청자가 입력된 task가 아직 없어요. task 상세에서 채우면 여기 떠요.
+              </p>
+            ) : (
+              <ChipRow>
+                <Chip active={requester === 'all'} onClick={() => onRequesterChange('all')} ariaPressed>
+                  전체
+                </Chip>
+                {requesters.map(name => (
+                  <Chip
+                    key={name}
+                    active={requester === name}
+                    onClick={() => onRequesterChange(name)}
+                    ariaPressed
+                  >
+                    {name}
+                  </Chip>
+                ))}
+              </ChipRow>
+            )}
+          </Section>
+
+          <Separator />
+          <Section label="위임 대상">
+            {delegatees.length === 0 ? (
+              <p className="text-[11px] text-muted-foreground/80">
+                위임 대상이 입력된 task가 아직 없어요.
+              </p>
+            ) : (
+              <ChipRow>
+                <Chip active={delegate === 'all'} onClick={() => onDelegateChange('all')} ariaPressed>
+                  전체
+                </Chip>
+                {delegatees.map(name => (
+                  <Chip
+                    key={name}
+                    active={delegate === name}
+                    onClick={() => onDelegateChange(name)}
+                    ariaPressed
+                  >
+                    {name}
+                  </Chip>
+                ))}
+              </ChipRow>
+            )}
           </Section>
 
           {activeCount > 0 && (

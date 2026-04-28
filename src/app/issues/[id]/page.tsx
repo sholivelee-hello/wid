@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, use } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Issue, Task, TaskStatus } from '@/lib/types';
+import { Issue, Task, TaskStatus, isTaskDone } from '@/lib/types';
 import { apiFetch } from '@/lib/api';
 import { buildTree, filterIncomplete, countSubtasks } from '@/lib/hierarchy';
 import { promptNextInTodayIfNeeded } from '@/lib/today-tasks';
@@ -63,9 +63,9 @@ export default function IssueDetailPage({ params }: { params: Promise<{ id: stri
 
   const totals = useMemo(() => {
     const top = tasks.filter(t => !t.is_deleted && !t.parent_task_id);
-    const done = top.filter(t => t.status === '완료').length;
+    const done = top.filter(t => isTaskDone(t.status)).length;
     const subs = tasks.filter(t => !t.is_deleted && t.parent_task_id).length;
-    const subDone = tasks.filter(t => !t.is_deleted && t.parent_task_id && t.status === '완료').length;
+    const subDone = tasks.filter(t => !t.is_deleted && t.parent_task_id && isTaskDone(t.status)).length;
     return {
       taskTotal: top.length,
       taskDone: done,
@@ -98,15 +98,15 @@ export default function IssueDetailPage({ params }: { params: Promise<{ id: stri
         : t,
     ));
     patchTask(taskId, { status: newStatus }).then(() => {
-      if (newStatus === '완료' && before && before.status !== '완료') {
-        promptNextInTodayIfNeeded({ ...before, status: '완료' });
+      if (isTaskDone(newStatus) && before && !isTaskDone(before.status)) {
+        promptNextInTodayIfNeeded({ ...before, status: newStatus });
       }
     });
   };
 
   const handleComplete = (taskId: string) => {
     const t = tasks.find(x => x.id === taskId);
-    const next: TaskStatus = t?.status === '완료' ? '등록' : '완료';
+    const next: TaskStatus = t && isTaskDone(t.status) ? '등록' : '완료';
     handleStatusChange(taskId, next);
   };
 

@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import { Issue, Task, TaskStatus } from '@/lib/types';
+import { Issue, Task, TaskStatus, isTaskDone } from '@/lib/types';
 import { TaskBranch } from '@/components/tasks/task-branch';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -231,15 +231,15 @@ export default function TodayPage() {
         body: JSON.stringify({ status: newStatus }),
       });
       window.dispatchEvent(new CustomEvent('task-updated'));
-      if (newStatus === '완료' && before && before.status !== '완료') {
-        promptNextInTodayIfNeeded({ ...before, status: '완료' });
+      if (isTaskDone(newStatus) && before && !isTaskDone(before.status)) {
+        promptNextInTodayIfNeeded({ ...before, status: newStatus });
       }
     } catch { fetchAll(); }
   };
 
   const handleComplete = async (taskId: string) => {
     const t = tasks.find(x => x.id === taskId);
-    await handleStatusChange(taskId, t?.status === '완료' ? '등록' : '완료');
+    await handleStatusChange(taskId, t && isTaskDone(t.status) ? '등록' : '완료');
   };
 
   const handleDelete = async (taskId: string) => {
@@ -271,14 +271,15 @@ export default function TodayPage() {
 
   // Lightweight progress for the header summary so the page feels alive
   // even when the list is short.
-  const completedToday = todayTasks.filter(t => t.status === '완료').length;
+  // 위임도 본인 입장에서는 처리된 것으로 보므로 진행률에 포함.
+  const completedToday = todayTasks.filter(t => isTaskDone(t.status)).length;
   const remaining = todayTasks.length - completedToday;
   const progressPct = todayTasks.length > 0
     ? Math.round((completedToday / todayTasks.length) * 100)
     : 0;
 
   return (
-    <div className="space-y-4 max-w-4xl">
+    <div className="space-y-4">
       {/* 진행률 — 카드/큰 숫자 없이 한 줄. 토스 스타일: 핵심 지표 1개만, 작게. */}
       {todayTasks.length > 0 && (
         <div className="flex items-center gap-3">

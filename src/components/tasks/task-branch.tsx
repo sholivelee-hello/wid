@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { TaskNode } from '@/lib/hierarchy';
-import type { TaskStatus } from '@/lib/types';
+import { isTaskDone, type TaskStatus } from '@/lib/types';
 import { lockedSiblings, completionBlocked, incompleteChildCount } from '@/lib/lock-state';
 import { TaskCard } from '@/components/tasks/task-card';
 import { useCollapsed } from '@/lib/use-tree-collapsed';
@@ -219,7 +219,8 @@ export function TaskBranch({
     : onComplete;
   const handleStatusChange = blocked
     ? (id: string, status: TaskStatus) => {
-        if (status === '완료') return;
+        // 하위 task 미완료 상태에서 부모를 처리됨(완료/위임)으로 바꾸지 못하게.
+        if (isTaskDone(status)) return;
         onStatusChange(id, status);
       }
     : onStatusChange;

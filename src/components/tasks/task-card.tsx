@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { STATUS_ICONS } from '@/lib/constants';
-import { TASK_STATUSES, type TaskStatus } from '@/lib/types';
+import { TASK_STATUSES, type TaskStatus, isTaskDone } from '@/lib/types';
 import { Task } from '@/lib/types';
 import { formatDate, cn, getNotionPageUrl } from '@/lib/utils';
 import { toggleTodayTask, getTodayTaskIds } from '@/lib/today-tasks';
@@ -77,7 +77,7 @@ export function TaskCard({
     if (onSelect) onSelect(task.id);
     else window.location.href = `/tasks/${task.id}`;
   };
-  const isCompleted = task.status === '완료';
+  const isDone = isTaskDone(task.status);
 
   const [isTodayTask, setIsTodayTask] = useState(() => getTodayTaskIds().has(task.id));
   const [completePulse, setCompletePulse] = useState(0);
@@ -94,7 +94,7 @@ export function TaskCard({
     const d = new Date(task.deadline);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    if (d < today && task.status !== '완료') deadlineSuffix = ' · 기한 초과';
+    if (d < today && !isDone) deadlineSuffix = ' · 기한 초과';
     else if (d.toDateString() === today.toDateString()) deadlineSuffix = ' · 오늘';
   }
 
@@ -116,7 +116,7 @@ export function TaskCard({
         'group/card card-hover-lift relative bg-transparent rounded-md cursor-pointer select-none',
         'hover:bg-accent/70 dark:hover:bg-accent/40 active:bg-accent/90 dark:active:bg-accent/55',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-        isCompleted && 'opacity-55',
+        isDone && 'opacity-55',
         editing && 'bg-accent/60 dark:bg-accent/40',
       )}
       onClick={openDetail}
@@ -134,7 +134,7 @@ export function TaskCard({
         <div className="flex items-center gap-3">
           {/* Completion toggle */}
           {(() => {
-            const blocked = !onComplete && !isCompleted;
+            const blocked = !onComplete && !isDone;
             return (
               <button
                 type="button"
@@ -153,12 +153,12 @@ export function TaskCard({
                 title={
                   blocked
                     ? '하위 task가 모두 완료되어야 완료할 수 있어요'
-                    : isCompleted ? '완료 취소' : '완료 처리'
+                    : isDone ? '완료 취소' : '완료 처리'
                 }
                 aria-label={
                   blocked
                     ? '완료 불가 (하위 task 미완료)'
-                    : isCompleted ? '완료 취소' : '완료 처리'
+                    : isDone ? '완료 취소' : '완료 처리'
                 }
               >
                 {/* Unified wrapper for both states — keeps the button's
@@ -168,7 +168,7 @@ export function TaskCard({
                   className="relative inline-grid place-items-center h-[18px] w-[18px] align-middle"
                   aria-hidden
                 >
-                  {isCompleted ? (
+                  {isDone ? (
                     <>
                       {completePulse > 0 && (
                         <span
@@ -271,7 +271,7 @@ export function TaskCard({
                     : hasChildren
                       ? 'text-[14.5px] font-semibold text-foreground'
                       : 'text-[14px] font-medium text-foreground',
-                  isCompleted && 'line-through text-muted-foreground',
+                  isDone && 'line-through text-muted-foreground',
                 )}
                 title={task.title}
               >
