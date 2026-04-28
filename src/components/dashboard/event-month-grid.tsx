@@ -21,7 +21,7 @@ import { cn } from '@/lib/utils';
 import type { GCalEvent } from '@/lib/types';
 import { useCalendarViewState, EMPTY_CALENDAR_SUBS } from '@/lib/calendar-view-state';
 
-import { getCalendarColor, getGCalConfig, GCAL_EMBED_EVENT, type GCalConfig } from '@/lib/gcal-embed';
+import { getCalendarColor, getGCalConfig, GCAL_EMBED_EVENT, DEFAULT_GCAL_CONFIG, type GCalConfig } from '@/lib/gcal-embed';
 
 interface EventMonthGridProps {
   selectedDate: Date;
@@ -37,7 +37,8 @@ interface EventMonthGridProps {
   today?: string;
 }
 
-const WEEKDAYS = ['월', '화', '수', '목', '금', '토', '일'];
+// 주중 전용 (토/일 제외) — WID는 평일 업무용으로만 쓰는 캘린더.
+const WEEKDAYS = ['월', '화', '수', '목', '금'];
 
 export function EventMonthGrid({
   selectedDate,
@@ -53,8 +54,11 @@ export function EventMonthGrid({
 }: EventMonthGridProps) {
   const viewState = useCalendarViewState(EMPTY_CALENDAR_SUBS);
 
-  const [gcalConfig, setGcalConfig] = useState<GCalConfig>(() => getGCalConfig());
+  // SSR/hydration mismatch 방지: 서버는 DEFAULT, 클라는 localStorage값을 쓰면
+  // 첫 렌더에서 일정 색/이름이 달라진다. DEFAULT로 초기화하고 마운트 직후 동기화.
+  const [gcalConfig, setGcalConfig] = useState<GCalConfig>(DEFAULT_GCAL_CONFIG);
   useEffect(() => {
+    setGcalConfig(getGCalConfig());
     const update = () => setGcalConfig(getGCalConfig());
     window.addEventListener(GCAL_EMBED_EVENT, update);
     return () => window.removeEventListener(GCAL_EMBED_EVENT, update);
@@ -108,15 +112,11 @@ export function EventMonthGrid({
         </Button>
       </div>
 
-      {/* Weekday header — 8-col grid: [week-handle | mon..sun] */}
-      <div className="grid grid-cols-[32px_repeat(7,1fr)] gap-px mb-1">
+      {/* Weekday header — 6-col grid: [week-handle | mon..fri] */}
+      <div className="grid grid-cols-[32px_repeat(5,1fr)] gap-px mb-1">
         <div aria-hidden="true" />
-        {WEEKDAYS.map((wd, i) => (
-          <div key={wd} className={cn(
-            'text-center text-[11px] font-medium text-muted-foreground py-1',
-            i === 5 && 'text-blue-500',
-            i === 6 && 'text-red-500'
-          )}>
+        {WEEKDAYS.map(wd => (
+          <div key={wd} className="text-center text-[11px] font-medium text-muted-foreground py-1">
             {wd}
           </div>
         ))}
@@ -131,7 +131,9 @@ export function EventMonthGrid({
             end: selectedWeekEnd,
           });
 
-          const weekCells = week.map((day) => {
+          // 주중만 표시 — 토/일 (i=5,6) 제외.
+          const weekdays = week.slice(0, 5);
+          const weekCells = weekdays.map((day) => {
             const dateStr = format(day, 'yyyy-MM-dd');
             const dayEvents = eventsByDate.get(dateStr) ?? [];
             const isCurrentMonth = isSameMonth(day, monthCursor);
@@ -160,11 +162,14 @@ export function EventMonthGrid({
                 <div className="space-y-0.5 w-full min-w-0">
                   {dayEvents.slice(0, 3).map((ev) => {
                     const evColor = viewState[ev.calendarId]?.color ?? getCalendarColor(ev.calendarId, gcalConfig);
+                    // 텍스트는 항상 foreground로 — 캘린더 색이 옅은 노란/민트
+                    // 같은 경우 동일 색을 글자에 쓰면 읽히지 않는다. 색은
+                    // 좌측 보더 + 옅은 배경 틴트로만 표현한다.
                     return (
                       <div
                         key={ev.id}
-                        style={{ backgroundColor: `${evColor}1A`, color: evColor, borderLeft: `2px solid ${evColor}` }}
-                        className="text-[10px] leading-tight rounded px-1 py-0.5 font-medium truncate"
+                        style={{ backgroundColor: `${evColor}1A`, borderLeft: `2px solid ${evColor}` }}
+                        className="text-[10px] leading-tight rounded px-1 py-0.5 font-medium truncate text-foreground"
                         title={`${ev.time ?? ''} ${ev.title}${ev.location ? ` · ${ev.location}` : ''}`}
                       >
                         {ev.title}
@@ -248,7 +253,7 @@ export function EventMonthGrid({
 
           // Week-handle button — replaces the prior whole-row click target.
           // 8-col grid keeps day cells in their own click lane.
-          const weekLabel = `${format(weekStart, 'M월 d일', { locale: ko })} ~ ${format(week[6], 'M월 d일', { locale: ko })}`;
+          const weekLabel = `${format(weekStart, 'M월 d일', { locale: ko })} ~ ${format(week[4], 'M월 d일', { locale: ko })}`;
           const weekHandle = readOnly ? (
             <div aria-hidden="true" />
           ) : (
@@ -273,7 +278,7 @@ export function EventMonthGrid({
             <div
               key={wi}
               className={cn(
-                'grid grid-cols-[32px_repeat(7,1fr)] gap-px w-full rounded-md p-0.5 transition-colors',
+                'grid grid-cols-[32px_repeat(5,1fr)] gap-px w-full rounded-md p-0.5 transition-colors',
                 isSelectedWeek && !readOnly && 'bg-primary/5 ring-1 ring-primary/30'
               )}
             >

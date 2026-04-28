@@ -4,8 +4,6 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
-  Copy,
-  Check,
   Send,
   CheckCircle2,
   XCircle,
@@ -128,9 +126,6 @@ function HistorySparkline({ history }: { history: HistoryEntry[] }) {
 
 export function SlackSettings() {
   const triggerEmoji = process.env.NEXT_PUBLIC_SLACK_TRIGGER_EMOJI ?? 'send-away';
-  const completeEmoji = process.env.NEXT_PUBLIC_SLACK_COMPLETE_EMOJI ?? '완료';
-  const webhookUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/slack/webhook` : '/api/slack/webhook';
-  const [copied, setCopied] = useState(false);
   const [pinging, setPinging] = useState(false);
   const [lastPing, setLastPing] = useState<Date | null>(null);
   const [lastPingResult, setLastPingResult] = useState<PingResult | null>(null);
@@ -144,13 +139,25 @@ export function SlackSettings() {
       setLastPingResult(storedResult);
     }
     setHistory(loadHistory());
-  }, []);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(webhookUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+    // 마운트 시 자동으로 한 번 연결 확인. 사용자가 버튼 누르기 전에도
+    // 정확한 상태를 보여주기 위해. 결과는 그대로 핑 이력에 누적된다.
+    let cancelled = false;
+    fetch('/api/slack/test')
+      .then((r) => r.json())
+      .then((data: { ok: boolean }) => {
+        if (cancelled) return;
+        recordResult(data.ok ? 'success' : 'failed');
+      })
+      .catch(() => {
+        if (cancelled) return;
+        recordResult('failed');
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const recordResult = (result: PingResult) => {
     const now = new Date();
@@ -164,20 +171,17 @@ export function SlackSettings() {
   const handlePing = async () => {
     setPinging(true);
     try {
-      const res = await fetch('/api/slack/webhook', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ test: true, message: 'WID test ping' }),
-      });
-      if (res.ok) {
-        toast.success('테스트 전송 성공');
+      const res = await fetch('/api/slack/test');
+      const data = (await res.json()) as { ok: boolean; team?: string; bot?: string; error?: string };
+      if (data.ok) {
+        toast.success(`Slack 연결됨${data.team ? ` · ${data.team}` : ''}${data.bot ? ` (@${data.bot})` : ''}`);
         recordResult('success');
       } else {
-        toast.error(`테스트 전송 실패: ${res.status}`);
+        toast.error(`Slack 연결 실패: ${data.error ?? '알 수 없음'}`);
         recordResult('failed');
       }
     } catch {
-      toast.error('테스트 전송 실패: 네트워크 오류');
+      toast.error('Slack 연결 실패: 네트워크 오류');
       recordResult('failed');
     } finally {
       setPinging(false);
@@ -212,36 +216,18 @@ export function SlackSettings() {
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="text-sm space-y-2">
-          <p><strong>트리거 이모지:</strong> <code>:{triggerEmoji}:</code></p>
-          <p><strong>완료 이모지:</strong> <code>:{completeEmoji}:</code></p>
-          <p className="text-muted-foreground">
-            슬랙에서 가져온 task의 원본 메시지에 완료 이모지를 추가하면, WID에서 자동으로 완료 처리됩니다.
+        <div className="text-sm space-y-1.5">
+          <p>
+            <strong>트리거 이모지:</strong> <code>:{triggerEmoji}:</code>
           </p>
-          <div className="space-y-1.5">
-            <p><strong>웹훅 URL:</strong></p>
-            <div className="flex items-center gap-2 rounded-md border bg-muted/40 p-2.5">
-              <code className="flex-1 truncate font-mono text-xs text-muted-foreground">{webhookUrl}</code>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 shrink-0"
-                onClick={handleCopy}
-                aria-label="웹훅 URL 복사"
-              >
-                {copied ? <Check className="h-3.5 w-3.5 text-primary" /> : <Copy className="h-3.5 w-3.5" />}
-              </Button>
-            </div>
-          </div>
           <p className="text-muted-foreground">
-            Slack App 설정에서 Event Subscriptions의 Request URL에 위 웹훅 URL을 등록하고,
-            Subscribe to bot events에 <code>reaction_added</code>를 추가하세요.
+            슬랙 메시지에 위 이모지를 달면 WID 인박스에 자동으로 task가 만들어져요.
           </p>
         </div>
         <div className="pt-1">
           <Button variant="outline" size="sm" onClick={handlePing} disabled={pinging}>
             <Send className={`h-3.5 w-3.5 mr-1.5 ${pinging ? 'animate-pulse' : ''}`} />
-            {pinging ? '전송 중...' : '테스트 전송'}
+            {pinging ? '확인 중...' : '연결 확인'}
           </Button>
         </div>
       </CardContent>

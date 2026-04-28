@@ -281,7 +281,7 @@ export default function HistoryPage() {
 
 
   return (
-    <div className="space-y-4 max-w-7xl">
+    <div className="space-y-4">
       {/* 월 네비 + 컨트롤 — 한 줄. hero 없이 바로 시작. */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
 

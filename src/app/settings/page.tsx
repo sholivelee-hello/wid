@@ -53,7 +53,7 @@ export default function SettingsPage() {
   const activeIdx = SECTIONS.findIndex((s) => s.id === activeId);
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6">
       {/* Hero — same rhythm as Inbox / Today / History so the whole app
        * shares one first-impression pattern. */}
       <section className="animate-soft-rise">

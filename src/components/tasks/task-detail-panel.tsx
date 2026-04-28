@@ -184,6 +184,7 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated, onNavigate }: 
         }),
       });
       onTaskUpdated?.();
+      onClose();
     } catch {
     } finally {
       setSaving(false);
@@ -208,7 +209,9 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated, onNavigate }: 
           * long content scrolls inside the modal instead of pushing the page. */}
         <DialogContent className="!max-w-2xl w-full max-h-[85vh] overflow-y-auto p-5 gap-4">
           <DialogHeader>
-            <DialogTitle className="text-left text-[15px]">task 상세</DialogTitle>
+            <DialogTitle className="text-left text-[15px]">
+              {task?.parent_task_id ? 'sub-TASK 상세' : 'TASK 상세'}
+            </DialogTitle>
           </DialogHeader>
 
           {loading && !task ? (
@@ -519,8 +522,12 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated, onNavigate }: 
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
-        title="task 삭제"
-        description="이 task를 휴지통으로 이동합니다."
+        title={task?.parent_task_id ? 'sub-TASK 삭제' : 'TASK 삭제'}
+        description={
+          task?.parent_task_id
+            ? '이 sub-TASK를 휴지통으로 이동합니다.'
+            : '이 TASK를 휴지통으로 이동합니다.'
+        }
         confirmLabel="삭제"
         onConfirm={handleDelete}
       />
