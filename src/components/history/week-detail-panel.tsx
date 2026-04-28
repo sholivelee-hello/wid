@@ -95,7 +95,7 @@ export function WeekDetailPanel({
   return (
     <div className="space-y-5 overflow-y-auto">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-base font-semibold" style={{ fontFamily: 'var(--font-heading)' }}>
+        <h3 className="text-base font-bold tracking-[-0.022em]">
           {monthWeekLabel}
         </h3>
         {onWeekChange && (
@@ -195,7 +195,7 @@ export function WeekDetailPanel({
           {completedTasks.length > 0 && (
             <section className="space-y-3">
               <h4 className="text-xs font-semibold flex items-center gap-1.5 text-muted-foreground uppercase tracking-wider">
-                <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                <CheckCircle2 className="h-3 w-3 text-primary" />
                 완료한 task ({completedTasks.length})
               </h4>
               {days.map(day => {
@@ -230,7 +230,7 @@ export function WeekDetailPanel({
                           onClick={() => onTaskClick(t.id)}
                           className="w-full text-left px-3 py-2 rounded-md border bg-card hover:bg-accent/50 hover:border-foreground/20 transition-colors flex items-start gap-2"
                         >
-                          <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" aria-hidden="true" />
+                          <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" aria-hidden="true" />
                           <div className="flex-1 min-w-0 flex items-baseline gap-2">
                             {t.completed_at && (
                               <span className="font-mono tabular-nums text-xs text-muted-foreground shrink-0">

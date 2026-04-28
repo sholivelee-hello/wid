@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { isMockMode, MOCK_TASKS } from '@/lib/mock-data';
+import { isMockMode } from '@/lib/mock-data';
+import { __tasksRef } from '@/app/api/tasks/route';
 
 export async function POST(
   request: NextRequest,
@@ -9,9 +10,11 @@ export async function POST(
   const { id } = await params;
 
   if (isMockMode()) {
-    const task = MOCK_TASKS.find((t) => t.id === id);
-    if (!task) return NextResponse.json({ error: 'Task not found' }, { status: 404 });
-    return NextResponse.json({ ...task, is_deleted: false });
+    const tasks = __tasksRef();
+    const idx = tasks.findIndex((t) => t.id === id);
+    if (idx === -1) return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+    tasks[idx].is_deleted = false;
+    return NextResponse.json(tasks[idx]);
   }
 
   const supabase = createServerSupabaseClient();

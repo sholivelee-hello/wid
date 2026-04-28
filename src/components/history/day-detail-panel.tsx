@@ -63,7 +63,7 @@ export function DayDetailPanel({
   return (
     <div className="space-y-5">
       <div>
-        <h3 className="text-lg font-semibold" style={{ fontFamily: 'var(--font-heading)' }}>
+        <h3 className="text-lg font-bold tracking-[-0.025em]">
           {dateLabel}
         </h3>
       </div>
@@ -138,7 +138,7 @@ export function DayDetailPanel({
           {dayCompleted.length > 0 && (
             <section>
               <h4 className="text-xs font-semibold mb-2 flex items-center gap-1.5 text-muted-foreground uppercase tracking-wider">
-                <CheckCircle2 className="h-3 w-3 text-emerald-500" /> 완료한 task ({dayCompleted.length})
+                <CheckCircle2 className="h-3 w-3 text-primary" /> 완료한 task ({dayCompleted.length})
               </h4>
               <div className="space-y-1">
                 {dayCompleted.map(t => (
@@ -148,7 +148,7 @@ export function DayDetailPanel({
                     onClick={() => onTaskClick(t.id)}
                     className="w-full text-left flex items-start gap-3 px-3 py-2 rounded-md border bg-card hover:bg-accent/40 hover:border-foreground/20 transition-colors"
                   >
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" aria-hidden="true" />
+                    <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" aria-hidden="true" />
                     <span className="font-mono tabular-nums text-xs text-muted-foreground min-w-[64px] shrink-0 pt-0.5">
                       {t.completed_at ? format(new Date(t.completed_at), 'HH:mm') : '-'}
                     </span>

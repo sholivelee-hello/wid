@@ -99,7 +99,7 @@ export function EventMonthGrid({
           onClick={() => onMonthChange(addMonths(monthCursor, -1))} aria-label="이전 달">
           <ChevronLeft className="h-4 w-4" />
         </Button>
-        <h3 className="text-sm font-semibold" style={{ fontFamily: 'var(--font-heading)' }}>
+        <h3 className="text-sm font-bold tracking-[-0.018em]">
           {format(monthCursor, 'yyyy년 M월', { locale: ko })}
         </h3>
         <Button variant="ghost" size="icon" className="h-8 w-8"
@@ -156,22 +156,18 @@ export function EventMonthGrid({
                   </span>
                 </div>
 
-                {/* Events (max 3) — left rail shows time (or · for all-day) so columns align */}
-                <div className="space-y-0.5">
+                {/* Events (max 3) — title only; time lives in the right detail panel. */}
+                <div className="space-y-0.5 w-full min-w-0">
                   {dayEvents.slice(0, 3).map((ev) => {
                     const evColor = viewState[ev.calendarId]?.color ?? getCalendarColor(ev.calendarId, gcalConfig);
-                    const start = ev.time?.slice(0, 5);
                     return (
                       <div
                         key={ev.id}
                         style={{ backgroundColor: `${evColor}1A`, color: evColor, borderLeft: `2px solid ${evColor}` }}
-                        className="text-[10px] leading-tight rounded px-1 py-0.5 font-medium flex items-center gap-1.5"
+                        className="text-[10px] leading-tight rounded px-1 py-0.5 font-medium truncate"
                         title={`${ev.time ?? ''} ${ev.title}${ev.location ? ` · ${ev.location}` : ''}`}
                       >
-                        <span className="tabular-nums opacity-60 shrink-0 w-7 text-[9px]">
-                          {start ?? '·'}
-                        </span>
-                        <span className="flex-1 truncate">{ev.title}</span>
+                        {ev.title}
                       </div>
                     );
                   })}
@@ -184,11 +180,11 @@ export function EventMonthGrid({
 
             const isSearchHit = !!searchHighlightDates?.has(dateStr);
             // Visual signal priority: search hit > today/selected.
-            //   - search hit: dashed amber border (highest), today/selected ring fades via primaryAlpha
+            //   - search hit: dashed primary border (highest), today/selected ring fades via primaryAlpha
             //   - today: inset primary box-shadow
             //   - selected: outer primary box-shadow with 1px breathing gap
             //   - today + selected: both stack (inset + outer) with breathing gap
-            // When search hits, build ring with reduced alpha so amber dashed dominates the cell edge.
+            // When search hits, build ring with reduced alpha so primary dashed dominates the cell edge.
             const ringFade = isSearchHit ? 18 : 60; // primary alpha % (oklab)
             const primaryAlpha = `color-mix(in oklab, var(--primary) ${ringFade}%, transparent)`;
             const primarySolid = isSearchHit
@@ -207,9 +203,11 @@ export function EventMonthGrid({
                 key={dateStr}
                 style={boxShadow ? { boxShadow } : undefined}
                 className={cn(
-                  'min-h-[84px] rounded-md border p-1.5 text-left transition-colors relative',
-                  // search match uses a separate visual channel: dashed amber border (highest priority)
-                  isSearchHit ? 'border-2 border-dashed border-amber-500/70' : 'border border-transparent',
+                  // Fixed cell height so the calendar grid stays a true grid —
+                  // long titles or event-heavy days no longer push their row taller.
+                  'h-[96px] overflow-hidden rounded-md border p-1.5 text-left transition-colors relative',
+                  // search match uses a separate visual channel: dashed primary border (highest priority)
+                  isSearchHit ? 'border-2 border-dashed border-primary/70' : 'border border-transparent',
                   isCurrentMonth ? 'bg-background' : 'bg-muted/20'
                 )}
               >
@@ -218,7 +216,7 @@ export function EventMonthGrid({
                     type="button"
                     onClick={(e) => { e.stopPropagation(); onDaySelect(day); }}
                     className={cn(
-                      'w-full h-full text-left flex flex-col items-start justify-start rounded-sm transition-colors cursor-pointer',
+                      'w-full h-full text-left flex flex-col items-start justify-start rounded-sm transition-colors cursor-pointer overflow-hidden',
                       'hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1'
                     )}
                     aria-label={`${format(day, 'M월 d일', { locale: ko })} 일별 보기`}
@@ -234,7 +232,7 @@ export function EventMonthGrid({
                   <span
                     className={cn(
                       'absolute top-1 right-1.5 text-[9px] font-semibold leading-none tabular-nums pointer-events-none',
-                      today ? 'text-primary' : 'text-emerald-600 dark:text-emerald-400'
+                      today ? 'text-primary' : 'text-primary/70'
                     )}
                   >
                     {today && completedCount

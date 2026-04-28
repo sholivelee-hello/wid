@@ -26,6 +26,15 @@ export function toggleTodayTask(id: string): boolean {
   return !wasIn; // true = 추가됨
 }
 
+/** Idempotent — used by Today-page creation flows to auto-include a freshly
+ * captured task in today's list without requiring an extra Sun-icon click. */
+export function addTodayTask(id: string) {
+  const ids = getTodayTaskIds();
+  if (ids.has(id)) return;
+  ids.add(id);
+  saveTodayTaskIds(ids);
+}
+
 /**
  * Effective Today set = explicit ids ∪ all descendants (children, grandchildren…)
  * of those explicit ids. Adding a parent TASK to Today implicitly pulls its

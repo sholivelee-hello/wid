@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Plus_Jakarta_Sans } from "next/font/google";
-import { Noto_Sans_KR } from "next/font/google";
+import { Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
@@ -8,28 +8,23 @@ import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
 import { QuickCaptureProvider } from "@/components/tasks/quick-capture-provider";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
+// Mono — code-shaped UI (kbd, source-id snippets).
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
 
-const jakarta = Plus_Jakarta_Sans({
-  subsets: ['latin'],
-  weight: ['500', '600', '700', '800'],
-  display: 'swap',
-  variable: '--font-jakarta',
-});
-
-const notoSansKR = Noto_Sans_KR({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  display: 'swap',
-  variable: '--font-noto-sans-kr',
+// Body / UI — Pretendard Variable, self-hosted.
+// 한국 IT 업계 사실상 표준 (Toss·당근·채널톡·Line).
+// 100~900 전 weight, 한/영/숫자 동일 디자이너. variable font 단일 파일.
+// heading·display 포함 전체 위계를 Pretendard 단일 시스템으로 처리.
+// weight·tracking·optical scale로 만드는 위계가 serif보다 모던하고 단단.
+const pretendard = localFont({
+  src: "../../public/fonts/PretendardVariable.woff2",
+  variable: "--font-pretendard",
+  weight: "45 920",
+  display: "swap",
+  preload: true,
 });
 
 export const metadata: Metadata = {
@@ -45,7 +40,7 @@ export default function RootLayout({
   return (
     <html
       lang="ko"
-      className={`${geistSans.variable} ${geistMono.variable} ${notoSansKR.variable} ${jakarta.variable} h-full antialiased`}
+      className={`${pretendard.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">

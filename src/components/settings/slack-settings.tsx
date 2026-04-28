@@ -85,14 +85,14 @@ function getPingStatus(date: Date | null, result: PingResult | null): {
   const oneDay = 24 * 60 * 60 * 1000;
   if (diffMs > oneDay) {
     return {
-      pillClass: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
+      pillClass: 'bg-muted text-muted-foreground',
       Icon: Clock,
       label: '대기',
       state: 'stale',
     };
   }
   return {
-    pillClass: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+    pillClass: 'bg-primary/10 text-primary',
     Icon: CheckCircle2,
     label: '정상',
     state: 'connected',
@@ -115,7 +115,7 @@ function HistorySparkline({ history }: { history: HistoryEntry[] }) {
           key={h.ts}
           className={cn(
             'w-1.5 h-1.5 rounded-full',
-            h.result === 'success' ? 'bg-emerald-500' : 'bg-red-500',
+            h.result === 'success' ? 'bg-primary' : 'bg-red-500',
           )}
           title={`${format(new Date(h.ts), 'M월 d일 HH:mm', { locale: ko })} — ${
             h.result === 'success' ? '성공' : '실패'
@@ -127,8 +127,8 @@ function HistorySparkline({ history }: { history: HistoryEntry[] }) {
 }
 
 export function SlackSettings() {
-  const triggerEmoji = process.env.NEXT_PUBLIC_SLACK_TRIGGER_EMOJI ?? 'eyes';
-  const completeEmoji = process.env.NEXT_PUBLIC_SLACK_COMPLETE_EMOJI ?? 'white_check_mark';
+  const triggerEmoji = process.env.NEXT_PUBLIC_SLACK_TRIGGER_EMOJI ?? 'send-away';
+  const completeEmoji = process.env.NEXT_PUBLIC_SLACK_COMPLETE_EMOJI ?? '완료';
   const webhookUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/slack/webhook` : '/api/slack/webhook';
   const [copied, setCopied] = useState(false);
   const [pinging, setPinging] = useState(false);
@@ -229,7 +229,7 @@ export function SlackSettings() {
                 onClick={handleCopy}
                 aria-label="웹훅 URL 복사"
               >
-                {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                {copied ? <Check className="h-3.5 w-3.5 text-primary" /> : <Copy className="h-3.5 w-3.5" />}
               </Button>
             </div>
           </div>

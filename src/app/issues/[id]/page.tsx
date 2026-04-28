@@ -165,7 +165,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ id: stri
             <span className="inline-flex items-center justify-center text-[10px] font-semibold tracking-wide px-1.5 h-5 rounded-sm bg-primary/10 text-primary mt-1.5 flex-shrink-0">
               ISSUE
             </span>
-            <h1 className="text-2xl font-semibold leading-tight flex-1 min-w-0" style={{ fontFamily: 'var(--font-heading)' }}>
+            <h1 className="text-2xl font-bold leading-tight tracking-[-0.03em] flex-1 min-w-0">
               {issue.name}
             </h1>
             <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
@@ -190,7 +190,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ id: stri
               className={cn(
                 'inline-flex items-center gap-1 px-1.5 h-5 rounded-full border',
                 issue.sort_mode === 'sequential'
-                  ? 'border-amber-300 text-amber-700 dark:text-amber-400'
+                  ? 'border-primary/40 text-primary'
                   : 'border-border',
               )}
             >
@@ -219,7 +219,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ id: stri
       <Separator />
 
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider" style={{ fontFamily: 'var(--font-heading)' }}>
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
           {showCompleted ? '전체' : '미완료'}
           <span className="text-primary ml-1.5">
             ({topNodes.length}{subCount > 0 ? ` + sub ${subCount}` : ''})

@@ -92,14 +92,20 @@ export const TaskQuickCapture = forwardRef<TaskQuickCaptureHandle, TaskQuickCapt
         window.dispatchEvent(new CustomEvent('task-created'));
         if (surface === 'modal' && !opts.keepOpen) {
           onSubmittedClose?.();
+          // Toast destination follows the page the modal was opened on so the
+          // "이동" CTA actually goes somewhere useful — Today on /today, Inbox
+          // elsewhere. Same data, different shortcut.
+          const onToday = typeof window !== 'undefined' && window.location.pathname === '/today';
           toast.success('✓ task 추가됨', {
-            description: '인박스로 이동',
-            action: {
-              label: '이동',
-              onClick: () => {
-                if (typeof window !== 'undefined') window.location.href = '/';
-              },
-            },
+            description: onToday ? '오늘 할 일에 추가됨' : '인박스로 이동',
+            action: onToday
+              ? undefined
+              : {
+                  label: '이동',
+                  onClick: () => {
+                    if (typeof window !== 'undefined') window.location.href = '/';
+                  },
+                },
           });
         } else {
           inputRef.current?.focus();
@@ -137,8 +143,8 @@ export const TaskQuickCapture = forwardRef<TaskQuickCaptureHandle, TaskQuickCapt
     return (
       <div
         className={cn(
-          'rounded-lg border bg-card',
-          surface === 'inline' ? 'p-3' : 'p-0',
+          'rounded-xl border border-border bg-card transition-colors focus-within:border-primary/50',
+          surface === 'inline' ? 'px-4 py-3' : 'p-0',
         )}
       >
         <div className="flex items-center gap-2">
@@ -148,20 +154,26 @@ export const TaskQuickCapture = forwardRef<TaskQuickCaptureHandle, TaskQuickCapt
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="task 추가... (Enter 저장)"
+            placeholder="새 task 한 줄 적기 — Enter 누르면 저장돼요"
             disabled={saving}
-            className="border-0 shadow-none focus-visible:ring-0 px-1 text-sm"
+            className="border-0 shadow-none focus-visible:ring-0 px-1 text-[15px] h-10 placeholder:text-muted-foreground/60"
             aria-label="새 task 제목"
           />
           <button
             type="button"
             onClick={() => submit({ keepOpen: false })}
             disabled={saving || !title.trim()}
-            className="shrink-0 inline-flex items-center justify-center h-7 w-7 rounded text-muted-foreground hover:text-foreground hover:bg-accent disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+            className={cn(
+              'shrink-0 inline-flex items-center justify-center h-9 w-9 rounded-full transition-all duration-150',
+              'active:scale-[0.92] disabled:opacity-25 disabled:cursor-not-allowed',
+              !saving && title.trim()
+                ? 'bg-primary text-primary-foreground hover:opacity-90'
+                : 'bg-muted text-muted-foreground',
+            )}
             aria-label="저장"
             title="저장 (Enter)"
           >
-            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CornerDownLeft className="h-3.5 w-3.5" />}
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CornerDownLeft className="h-4 w-4" />}
           </button>
         </div>
 
@@ -213,7 +225,7 @@ export const TaskQuickCapture = forwardRef<TaskQuickCaptureHandle, TaskQuickCapt
               onClick={resetChips}
               className="ml-auto text-[11px] text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
             >
-              chip 초기화
+              선택 비우기
             </button>
           )}
         </div>

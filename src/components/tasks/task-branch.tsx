@@ -9,6 +9,7 @@ import { useCollapsed } from '@/lib/use-tree-collapsed';
 import { ChevronDown, Plus, GripVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiFetch } from '@/lib/api';
+import { addTodayTask } from '@/lib/today-tasks';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
@@ -46,9 +47,19 @@ interface Props extends TaskBranchHandlers {
   breadcrumb?: { issueName?: string | null; parentTaskTitle?: string | null };
   /** Drag handle slot passed from parent SortableTaskItem. */
   dragHandle?: HandleSlot;
+  /** When true, any task created via the inline AddSubTaskRow is auto-added
+   *  to today's list. Today page sets this so users don't need an extra
+   *  Sun-icon click after capturing a sub-task in the Today view. */
+  addToTodayOnCreate?: boolean;
 }
 
-function AddSubTaskRow({ parentId }: { parentId: string }) {
+function AddSubTaskRow({
+  parentId,
+  addToToday = false,
+}: {
+  parentId: string;
+  addToToday?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [busy, setBusy] = useState(false);
@@ -58,12 +69,16 @@ function AddSubTaskRow({ parentId }: { parentId: string }) {
     if (!t || busy) return;
     setBusy(true);
     try {
-      await apiFetch('/api/tasks', {
+      const created = await apiFetch<{ id: string }>('/api/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: t, parent_task_id: parentId, issue_id: null }),
+        // Explicit status — without this the mock-backend default used to
+        // create tasks with a status outside TASK_STATUSES, which then got
+        // silently filtered out of the Today page's status groups.
+        body: JSON.stringify({ title: t, parent_task_id: parentId, issue_id: null, status: '등록' }),
         suppressToast: true,
       });
+      if (addToToday && created?.id) addTodayTask(created.id);
       window.dispatchEvent(new CustomEvent('task-created'));
       setTitle('');
       setOpen(false);
@@ -78,9 +93,9 @@ function AddSubTaskRow({ parentId }: { parentId: string }) {
         type="button"
         onClick={(e) => { e.stopPropagation(); setOpen(true); }}
         onPointerDown={(e) => e.stopPropagation()}
-        className="text-[11px] text-muted-foreground/70 hover:text-foreground transition-colors inline-flex items-center gap-1 px-1.5 py-1 rounded"
+        className="text-[11px] text-muted-foreground/70 hover:text-foreground transition-colors inline-flex items-center gap-1 px-1.5 py-1 rounded-md hover:bg-accent/40"
       >
-        <Plus className="h-3 w-3" /> sub-TASK 추가
+        <Plus className="h-3 w-3" /> 하위 task 추가
       </button>
     );
   }
@@ -100,7 +115,7 @@ function AddSubTaskRow({ parentId }: { parentId: string }) {
           if (e.key === 'Enter') { e.preventDefault(); submit(); }
           else if (e.key === 'Escape') { e.preventDefault(); setOpen(false); setTitle(''); }
         }}
-        placeholder="sub-TASK 제목"
+        placeholder="하위 task 제목"
         className="h-7 text-xs"
       />
       <Button type="button" size="sm" onClick={submit} disabled={!title.trim() || busy} className="h-7 text-xs">
@@ -185,6 +200,7 @@ export function TaskBranch({
   onCloseEdit,
   breadcrumb,
   dragHandle,
+  addToTodayOnCreate = false,
   onStatusChange,
   onComplete,
   onDelete,
@@ -220,6 +236,7 @@ export function TaskBranch({
           enableSortable={false}
           editingTaskId={editingTaskId}
           onCloseEdit={onCloseEdit}
+          addToTodayOnCreate={addToTodayOnCreate}
           onStatusChange={onStatusChange}
           onComplete={onComplete}
           onDelete={onDelete}
@@ -241,6 +258,7 @@ export function TaskBranch({
                 enableSortable
                 editingTaskId={editingTaskId}
                 onCloseEdit={onCloseEdit}
+                addToTodayOnCreate={addToTodayOnCreate}
                 onStatusChange={onStatusChange}
                 onComplete={onComplete}
                 onDelete={onDelete}
@@ -254,8 +272,15 @@ export function TaskBranch({
     );
   };
 
+  // A top-level TASK (parent_task_id === null) is the only depth at which the
+  // 3-level invariant (ISSUE > TASK > sub-TASK) allows adding children. We key
+  // off the model state, not the recursive `depth`, because Today-style flat
+  // forests can hoist a sub-TASK to depth 0 — and we must NOT show "+ 하위
+  // task 추가" on a row that already has a parent (it would 422 on MAX_DEPTH).
+  const isTopLevelTask = node.task.parent_task_id === null;
+
   return (
-    <div>
+    <div className="group/branch">
       <div className="group/row flex items-start gap-1">
         {dragHandle ? (
           <DragHandle
@@ -293,19 +318,20 @@ export function TaskBranch({
             onComplete={handleComplete}
             onDelete={onDelete}
             onSelect={onSelect}
-            hierarchyLabel={node.task.parent_task_id ? 'sub-TASK' : 'TASK'}
+            isSubtask={!!node.task.parent_task_id}
+            hasChildren={hasChildren}
             editing={editingTaskId === node.task.id}
             onCloseEdit={onCloseEdit}
             breadcrumb={breadcrumb}
           />
           {blocked && (
-            <div className="text-[10px] text-amber-700 dark:text-amber-400 ml-3 mt-1">
-              🔒 sub-TASK {blockedCount}개 미완료 — 완료할 수 없음
+            <div className="text-[10px] text-muted-foreground ml-3 mt-1 inline-flex items-center gap-1">
+              <span aria-hidden>🔒</span> 하위 task {blockedCount}개를 먼저 끝내야 해요
             </div>
           )}
           {locked && !blocked && (
-            <div className="text-[10px] text-muted-foreground ml-3 mt-1">
-              🔒 이전 task 대기 중
+            <div className="text-[10px] text-muted-foreground ml-3 mt-1 inline-flex items-center gap-1">
+              <span aria-hidden>🔒</span> 앞 task가 끝나면 시작할 수 있어요
             </div>
           )}
           {hasChildren && (
@@ -315,9 +341,9 @@ export function TaskBranch({
               onPointerDown={(e) => e.stopPropagation()}
               className="text-[10px] text-muted-foreground/80 ml-3 mt-1 hover:text-foreground hover:underline underline-offset-2 cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded"
             >
-              ↳ sub-TASK {node.children.length}개
+              ↳ 하위 {node.children.length}개
               {node.task.sort_mode === 'sequential' ? ' · 순차' : ''}
-              {collapsed ? ' (펼치기)' : ' (접기)'}
+              {collapsed ? ' · 펼치기' : ' · 접기'}
             </button>
           )}
         </div>
@@ -330,20 +356,29 @@ export function TaskBranch({
           )}
         >
           <div className="overflow-hidden">
-            <div className="mt-2 ml-2 pl-4 border-l-2 border-border/50 space-y-2">
+            {/* Tree rail — deeper indent (24px → 32px) and a primary-tinted
+              * left rail in dark mode so the parent / child relationship is
+              * unmistakable. The rail color uses the primary token at low
+              * alpha so it reads as "this branch belongs together" without
+              * shouting. */}
+            <div className="mt-1 ml-3 pl-6 border-l-2 border-border dark:border-primary/35 divide-y divide-border/80">
               {renderChildren()}
-              {depth === 0 && (
-                <div className="pt-1">
-                  <AddSubTaskRow parentId={node.task.id} />
+              {/* Add-sub button at the end of the children list, but only on
+                * a real top-level TASK (not on a hoisted sub-TASK), and only
+                * visible when this branch is hovered or focused. */}
+              {isTopLevelTask && (
+                <div className="pt-1.5 opacity-0 group-hover/branch:opacity-100 group-focus-within/branch:opacity-100 transition-opacity">
+                  <AddSubTaskRow parentId={node.task.id} addToToday={addToTodayOnCreate} />
                 </div>
               )}
             </div>
           </div>
         </div>
       )}
-      {!hasChildren && depth === 0 && (
-        <div className="ml-[22px] mt-1">
-          <AddSubTaskRow parentId={node.task.id} />
+      {/* Same gating + hover-only visibility for childless top-level TASKs. */}
+      {!hasChildren && isTopLevelTask && (
+        <div className="ml-[22px] mt-1 opacity-0 group-hover/branch:opacity-100 group-focus-within/branch:opacity-100 transition-opacity">
+          <AddSubTaskRow parentId={node.task.id} addToToday={addToTodayOnCreate} />
         </div>
       )}
     </div>

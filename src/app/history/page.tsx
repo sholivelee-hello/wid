@@ -10,6 +10,7 @@ import { DayDetailPanel } from '@/components/history/day-detail-panel';
 import { WeekDetailPanel } from '@/components/history/week-detail-panel';
 import { SearchResults } from '@/components/history/search-results';
 import { TaskDetailPanel } from '@/components/tasks/task-detail-panel';
+import { cn } from '@/lib/utils';
 import { apiFetch } from '@/lib/api';
 import { searchTasks } from '@/lib/search';
 import { useCalendarViewState } from '@/lib/calendar-view-state';
@@ -278,14 +279,33 @@ export default function HistoryPage() {
     }
   }, [viewMode]);
 
+
   return (
     <div className="space-y-4 max-w-7xl">
-      {/* Compact header: title + mode toggle + search + quick chips on a single row at md+ */}
+      {/* 월 네비 + 컨트롤 — 한 줄. hero 없이 바로 시작. */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <div className="flex items-center gap-2 shrink-0">
-          <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--font-heading)' }}>
-            히스토리
-          </h1>
+
+        {/* 작은 월 네비게이터 */}
+        <div className="inline-flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={() => handleMonthChange(addMonths(monthCursor, -1))}
+            aria-label="이전 달"
+            className="h-7 w-7 rounded inline-flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden><path d="M9 11L5 7l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+          <span className="text-[13px] font-semibold tracking-[-0.01em] tabular-nums min-w-[72px] text-center">
+            {format(monthCursor, 'yyyy년 M월', { locale: ko })}
+          </span>
+          <button
+            type="button"
+            onClick={() => handleMonthChange(addMonths(monthCursor, 1))}
+            aria-label="다음 달"
+            className="h-7 w-7 rounded inline-flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden><path d="M5 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
         </div>
 
         <div className="inline-flex h-9 items-center rounded-md border bg-muted/30 p-0.5 shrink-0" role="group" aria-label="보기 모드">
@@ -457,6 +477,7 @@ export default function HistoryPage() {
         taskId={selectedTaskId}
         onClose={() => setSelectedTaskId(null)}
         onTaskUpdated={fetchAll}
+        onNavigate={(id) => setSelectedTaskId(id)}
       />
     </div>
   );

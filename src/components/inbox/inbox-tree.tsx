@@ -507,7 +507,7 @@ export function InboxTree({
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
     >
-      <div className="space-y-3">
+      <div className="space-y-1.5">
         <SortableContext items={issueSortableIds} strategy={verticalListSortingStrategy}>
           {tree.issues.map(({ issue, tasks: nodes }) => {
             const total = nodes.length;
@@ -564,7 +564,7 @@ export function InboxTree({
             items={tree.independents.map(n => taskSortId(n.task.id))}
             strategy={verticalListSortingStrategy}
           >
-            <div className="space-y-2">
+            <div className="divide-y divide-border">
               {tree.independents.map(n => (
                 <SortableTaskItem key={n.task.id} id={n.task.id}>
                   {(handle) => (

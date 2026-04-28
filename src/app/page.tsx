@@ -13,6 +13,7 @@ import { apiFetch } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { Inbox, ChevronDown, Plus, Pencil, Trash2, Search } from 'lucide-react';
 import { InboxTree } from '@/components/inbox/inbox-tree';
+import { TaskDetailPanel } from '@/components/tasks/task-detail-panel';
 import { IssueForm } from '@/components/issues/issue-form';
 import { IssueDeleteDialog } from '@/components/issues/issue-delete-dialog';
 import { buildTree, filterIncomplete } from '@/lib/hierarchy';
@@ -39,6 +40,7 @@ export default function InboxPage() {
   const setSortBy = (v: SortKey) => { setSortByRaw(v); saveInboxSort(v); };
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [selectedDetailTaskId, setSelectedDetailTaskId] = useState<string | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
   const [addingIssue, setAddingIssue] = useState(false);
   const [editingIssue, setEditingIssue] = useState<Issue | null>(null);
@@ -238,19 +240,62 @@ export default function InboxPage() {
     });
   }, [tasks, applyBaseFilter]);
 
+  // Capture wall-clock once on mount so today doesn't drift between renders.
+  // Must be declared before the early-return below to satisfy rules-of-hooks.
+  const [{ todayStr }] = useState(() => ({
+    todayStr: new Date().toISOString().slice(0, 10),
+  }));
+
+  // Inbox snapshot — only counts non-deleted, non-completed top-level work.
+  const liveTasks = useMemo(() => tasks.filter(t => !t.is_deleted), [tasks]);
+  const incompleteCount = useMemo(
+    () => liveTasks.filter(t => t.status !== '완료' && t.status !== '취소').length,
+    [liveTasks],
+  );
+  const dueTodayCount = useMemo(() => {
+    return liveTasks.filter(t =>
+      t.deadline?.slice(0, 10) === todayStr && t.status !== '완료' && t.status !== '취소',
+    ).length;
+  }, [liveTasks, todayStr]);
+
   const taskHandlers = {
     onStatusChange: handleStatusChange,
     onComplete: handleComplete,
     onDelete: (id: string) => setDeleteId(id),
-    onSelect: (id: string) =>
-      setEditingTaskId(prev => (prev === id ? null : id)),
+    // Click semantics unified with Today: opening the full TaskDetailPanel
+    // (center modal) gives parent / siblings / children context in one
+    // surface. The legacy inline editor still exists in TaskCard but is no
+    // longer reached from this list.
+    onSelect: (id: string) => setSelectedDetailTaskId(id),
   };
   const closeEdit = () => setEditingTaskId(null);
 
   if (loading && tasks.length === 0) return <TaskListSkeleton />;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      {/* Compact inbox summary — two inline counts, no hero. */}
+      <section className="flex items-center gap-3 text-[12px] text-muted-foreground tabular-nums">
+        <span>
+          진행 중{' '}
+          <strong className="font-semibold text-foreground tracking-[-0.01em]">
+            {incompleteCount}
+          </strong>
+        </span>
+        <span aria-hidden className="text-muted-foreground/40">·</span>
+        <span>
+          오늘 마감{' '}
+          <strong
+            className={cn(
+              'font-semibold tracking-[-0.01em]',
+              dueTodayCount > 0 ? 'text-primary' : 'text-foreground',
+            )}
+          >
+            {dueTodayCount}
+          </strong>
+        </span>
+      </section>
+
       {/* Quick capture composer (persistent inline) */}
       <TaskQuickCapture
         ref={captureRef}
@@ -258,8 +303,9 @@ export default function InboxPage() {
         onCreated={(t) => setTasks(prev => [t, ...prev])}
       />
 
-      {/* Chrome: search + filter popover + sort label + new ISSUE */}
-      <div className="flex items-center gap-3 flex-wrap">
+      {/* Chrome: search + filter popover + sort label + new ISSUE — sticky for long lists.
+        * Dark-first: stronger backdrop tint so it actually hides scrolled content. */}
+      <div className="sticky top-0 z-20 -mx-4 md:-mx-6 px-4 md:px-6 py-2.5 bg-background/85 dark:bg-background/90 backdrop-blur-md backdrop-saturate-150 border-b border-border flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 min-w-0 sm:max-w-xs">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" aria-hidden="true" />
           <Input
@@ -311,18 +357,22 @@ export default function InboxPage() {
 
       {/* Main list (ISSUE → TASK → sub-TASK tree) */}
       <div>
-        <div className="flex items-center gap-3 mb-3">
-          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider" style={{ fontFamily: 'var(--font-heading)' }}>
-            {showCompleted ? '전체' : '미완료'}
-            <span className="text-primary ml-1.5">({treeVisibleCount})</span>
-          </h3>
+        <div className="flex items-center gap-2 mb-3">
+          <h2
+            className="text-[13px] font-semibold tracking-[-0.01em] text-foreground"
+          >
+            {showCompleted ? '전체 task' : '진행 중'}
+          </h2>
+          <span className="text-[12px] font-medium text-muted-foreground tabular-nums px-1.5 h-5 inline-flex items-center rounded-md bg-muted/70">
+            {treeVisibleCount}
+          </span>
           <Button
             variant="ghost"
             size="sm"
-            className="text-xs text-muted-foreground hover:text-foreground"
+            className="ml-1 text-[11px] text-muted-foreground hover:text-foreground rounded-full px-2.5 h-6"
             onClick={() => setShowCompleted(v => !v)}
           >
-            {showCompleted ? '미완료만 보기' : '완료된 것도 보기'}
+            {showCompleted ? '진행 중만 보기' : '완료한 것도 보기'}
           </Button>
         </div>
 
@@ -353,9 +403,13 @@ export default function InboxPage() {
         {treeVisibleCount === 0 ? (
           <EmptyState
             icon={Inbox}
-            title="해당하는 task가 없습니다"
-            description="다른 필터를 선택하거나 새 task를 추가하세요."
-            action={{ label: '새 task 등록', onClick: () => captureRef.current?.focus() }}
+            title={debouncedSearch ? '검색 결과가 없어요' : '인박스가 비었어요'}
+            description={
+              debouncedSearch
+                ? '검색어를 바꿔보거나 필터를 초기화해 보세요.'
+                : '위 입력창에 한 줄로 적기만 해도 task가 생겨요.'
+            }
+            action={{ label: '새 task 등록하기', onClick: () => captureRef.current?.focus() }}
           />
         ) : (
           <InboxTree
@@ -405,7 +459,7 @@ export default function InboxPage() {
                       'h-4 w-4 text-muted-foreground transition-transform flex-shrink-0',
                       collapsed && '-rotate-90'
                     )} />
-                    <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wider truncate group-hover:text-foreground transition-colors" style={{ fontFamily: 'var(--font-heading)' }}>
+                    <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wider truncate group-hover:text-foreground transition-colors">
                       {view.name}
                     </span>
                     <span className="text-primary text-sm">({viewTasks.length})</span>
@@ -512,6 +566,14 @@ export default function InboxPage() {
         onDeleted={fetchTasks}
       />
 
+      {/* Detail center modal — same pattern as Today. Surfaces parent /
+        * siblings / children + full edit fields without leaving the page. */}
+      <TaskDetailPanel
+        taskId={selectedDetailTaskId}
+        onClose={() => setSelectedDetailTaskId(null)}
+        onTaskUpdated={fetchTasks}
+        onNavigate={(id) => setSelectedDetailTaskId(id)}
+      />
     </div>
   );
 }

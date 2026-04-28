@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { Issue, Task, TaskStatus } from '@/lib/types';
@@ -10,9 +10,69 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { apiFetch } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { TASK_STATUSES } from '@/lib/types';
-import { getTodayTaskIds, getEffectiveTodayTaskIds, promptNextInTodayIfNeeded } from '@/lib/today-tasks';
+import {
+  getTodayTaskIds,
+  getEffectiveTodayTaskIds,
+  promptNextInTodayIfNeeded,
+  addTodayTask,
+} from '@/lib/today-tasks';
 import type { TaskNode } from '@/lib/hierarchy';
-import { ChevronDown, Sun } from 'lucide-react';
+import { ChevronDown, Sun, GripVertical } from 'lucide-react';
+import { TaskQuickCapture, type TaskQuickCaptureHandle } from '@/components/tasks/task-quick-capture';
+import { TaskDetailPanel } from '@/components/tasks/task-detail-panel';
+import { loadStatusOrder, saveStatusOrder, STATUS_ORDER_EVENT } from '@/lib/today-status-order';
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import type { DraggableAttributes } from '@dnd-kit/core';
+import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities';
+
+interface StatusSectionHandle {
+  listeners: SyntheticListenerMap | undefined;
+  attributes: DraggableAttributes;
+  setActivatorNodeRef?: (n: HTMLElement | null) => void;
+}
+
+/**
+ * Sortable wrapper for a Today-page status section. Exposes the activator
+ * (grip) bindings via a render-prop so the section header can place the
+ * grip exactly where it belongs (left of the collapse toggle), while the
+ * outer wrapper handles transform/transition/dragging opacity.
+ */
+function SortableStatusSection({
+  id,
+  children,
+}: {
+  id: string;
+  children: (handle: StatusSectionHandle) => React.ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
+    useSortable({ id });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+  return (
+    <div ref={setNodeRef} style={style} className="group/section">
+      {children({ listeners, attributes, setActivatorNodeRef })}
+    </div>
+  );
+}
 
 export default function TodayPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -22,6 +82,39 @@ export default function TodayPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [todayIds, setTodayIds] = useState<Set<string>>(() => getTodayTaskIds());
+  const [statusOrder, setStatusOrder] = useState<TaskStatus[]>(() => loadStatusOrder());
+  const [selectedDetailTaskId, setSelectedDetailTaskId] = useState<string | null>(null);
+  const captureRef = useRef<TaskQuickCaptureHandle>(null);
+
+  // Cross-tab + same-tab sync of the saved order.
+  useEffect(() => {
+    const refresh = () => setStatusOrder(loadStatusOrder());
+    window.addEventListener(STATUS_ORDER_EVENT, refresh);
+    window.addEventListener('storage', refresh);
+    return () => {
+      window.removeEventListener(STATUS_ORDER_EVENT, refresh);
+      window.removeEventListener('storage', refresh);
+    };
+  }, []);
+
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const handleStatusGroupDragEnd = (e: DragEndEvent) => {
+    const activeId = e.active.id;
+    const overId = e.over?.id;
+    if (!overId || activeId === overId) return;
+    setStatusOrder(prev => {
+      const oldIndex = prev.indexOf(activeId as TaskStatus);
+      const newIndex = prev.indexOf(overId as TaskStatus);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+      const next = arrayMove(prev, oldIndex, newIndex);
+      saveStatusOrder(next);
+      return next;
+    });
+  };
 
   const today = new Date();
   const dateLabel = format(today, 'M월 d일 (EEEE)', { locale: ko });
@@ -169,22 +262,55 @@ export default function TodayPage() {
     onStatusChange: handleStatusChange,
     onComplete: handleComplete,
     onDelete: (id: string) => setDeleteId(id),
-    onSelect: (id: string) =>
-      setEditingTaskId(prev => (prev === id ? null : id)),
+    // Today-page click semantics differ from Inbox: opening the full
+    // TaskDetailPanel surfaces the parent / siblings / requester at once,
+    // which is the answer to "I see a sub-task here, where's the context?".
+    // Inline editing isn't lost — it just lives behind the detail panel now.
+    onSelect: (id: string) => setSelectedDetailTaskId(id),
   };
 
+  // Lightweight progress for the header summary so the page feels alive
+  // even when the list is short.
+  const completedToday = todayTasks.filter(t => t.status === '완료').length;
+  const remaining = todayTasks.length - completedToday;
+  const progressPct = todayTasks.length > 0
+    ? Math.round((completedToday / todayTasks.length) * 100)
+    : 0;
+
   return (
-    <div className="space-y-6 max-w-4xl">
-      <div>
-        <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--font-heading)' }}>
-          ☀️ 오늘, {dateLabel}
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {todayTasks.length > 0
-            ? `오늘 task ${todayTasks.length}건`
-            : '인박스에서 task를 "오늘에 추가"하면 여기에 표시됩니다.'}
-        </p>
-      </div>
+    <div className="space-y-4 max-w-4xl">
+      {/* 진행률 — 카드/큰 숫자 없이 한 줄. 토스 스타일: 핵심 지표 1개만, 작게. */}
+      {todayTasks.length > 0 && (
+        <div className="flex items-center gap-3">
+          <div
+            className="flex-1 h-[3px] rounded-full bg-muted overflow-hidden"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progressPct}
+            aria-label="오늘 진행률"
+          >
+            <div
+              className="h-full rounded-full bg-primary transition-[width] duration-500 ease-out"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+          <span className="text-[13px] font-medium tabular-nums text-muted-foreground whitespace-nowrap tracking-[-0.01em]">
+            {completedToday}/{todayTasks.length}
+            {remaining === 0 && <span className="ml-1.5 text-primary">완료</span>}
+          </span>
+        </div>
+      )}
+
+      <TaskQuickCapture
+        ref={captureRef}
+        surface="inline"
+        onCreated={(t) => {
+          addTodayTask(t.id);
+          setTodayIds(getTodayTaskIds());
+          setTasks(prev => [t, ...prev]);
+        }}
+      />
 
       {loading && todayTasks.length === 0 ? (
         <div className="space-y-2">
@@ -193,52 +319,92 @@ export default function TodayPage() {
       ) : todayTasks.length === 0 ? (
         <EmptyState
           icon={Sun}
-          title="오늘 할 task가 없습니다"
-          description="인박스에서 task 카드의 ⋯ 메뉴 → '오늘에 추가'로 task를 등록하세요."
+          title="오늘 할 일을 골라볼까요?"
+          description="위에 한 줄 적기만 해도 오늘 할 일로 등록돼요. 또는 인박스 카드의 해 아이콘을 눌러 가져오세요."
+          action={{ label: '여기서 바로 추가하기', onClick: () => captureRef.current?.focus() }}
         />
       ) : (
-        <div className="space-y-4">
-          {[...statusGroups.entries()].map(([status, groupRoots]) => {
-            const collapsed = collapsedGroups.has(status);
-            return (
-              <section key={status}>
-                <button
-                  type="button"
-                  onClick={() => toggleGroup(status)}
-                  aria-expanded={!collapsed}
-                  className="flex items-center gap-2 w-full text-left mb-3 group"
-                >
-                  <ChevronDown className={cn(
-                    'h-4 w-4 text-muted-foreground transition-transform flex-shrink-0',
-                    collapsed && '-rotate-90'
-                  )} />
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full border border-border/60 text-foreground">
-                    {status}
-                  </span>
-                  <span className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">
-                    ({groupRoots.length})
-                  </span>
-                </button>
-                {!collapsed && (
-                  <div className="space-y-2">
-                    {groupRoots.map(root => (
-                      <TaskBranch
-                        key={root.task.id}
-                        node={root}
-                        depth={0}
-                        lockedIds={new Set<string>()}
-                        editingTaskId={editingTaskId}
-                        onCloseEdit={() => setEditingTaskId(null)}
-                        breadcrumb={buildBreadcrumb(root.task)}
-                        {...taskHandlers}
-                      />
-                    ))}
-                  </div>
-                )}
-              </section>
-            );
-          })}
-        </div>
+        // Reorderable status groups. We render in user-saved order, falling
+        // through to TASK_STATUSES when missing. Empty groups are skipped so
+        // the user only ever sees / re-orders sections that actually exist.
+        (() => {
+          const orderedStatuses = statusOrder.filter(s => statusGroups.has(s));
+          return (
+            <DndContext
+              sensors={dndSensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleStatusGroupDragEnd}
+            >
+              <SortableContext items={orderedStatuses} strategy={verticalListSortingStrategy}>
+                <div className="space-y-4">
+                  {orderedStatuses.map(status => {
+                    const groupRoots = statusGroups.get(status)!;
+                    const collapsed = collapsedGroups.has(status);
+                    return (
+                      <SortableStatusSection key={status} id={status}>
+                        {(handle) => (
+                          <section>
+                            <div className="flex items-center gap-1.5 mb-3">
+                              {/* Grip handle — only visible on hover/focus so
+                                * the resting header stays clean. */}
+                              <button
+                                type="button"
+                                ref={handle.setActivatorNodeRef}
+                                {...handle.attributes}
+                                {...handle.listeners}
+                                aria-label={`${status} 그룹 순서 변경`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="cursor-grab active:cursor-grabbing p-1 -m-1 rounded text-muted-foreground/50 opacity-0 group-hover/section:opacity-100 focus-visible:opacity-100 hover:bg-accent/40 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              >
+                                <GripVertical className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => toggleGroup(status)}
+                                aria-expanded={!collapsed}
+                                className="flex items-center gap-2 flex-1 text-left group/toggle"
+                              >
+                                <ChevronDown
+                                  className={cn(
+                                    'h-4 w-4 text-muted-foreground transition-transform flex-shrink-0',
+                                    collapsed && '-rotate-90',
+                                  )}
+                                />
+                                <span className="text-xs font-semibold px-2 py-0.5 rounded-full border border-border/60 text-foreground">
+                                  {status}
+                                </span>
+                                <span className="text-sm text-muted-foreground group-hover/toggle:text-foreground transition-colors tabular-nums">
+                                  ({groupRoots.length})
+                                </span>
+                              </button>
+                            </div>
+                            {!collapsed && (
+                              <div className="divide-y divide-border">
+                                {groupRoots.map(root => (
+                                  <TaskBranch
+                                    key={root.task.id}
+                                    node={root}
+                                    depth={0}
+                                    lockedIds={new Set<string>()}
+                                    editingTaskId={editingTaskId}
+                                    onCloseEdit={() => setEditingTaskId(null)}
+                                    breadcrumb={buildBreadcrumb(root.task)}
+                                    addToTodayOnCreate
+                                    {...taskHandlers}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </section>
+                        )}
+                      </SortableStatusSection>
+                    );
+                  })}
+                </div>
+              </SortableContext>
+            </DndContext>
+          );
+        })()
       )}
 
       {(() => {
@@ -259,6 +425,16 @@ export default function TodayPage() {
           />
         );
       })()}
+
+      {/* Detail drawer — opened by clicking any row. Surfaces parent / siblings
+        * / children / requester all at once. `onNavigate` lets the user drill
+        * up to the parent without closing the drawer. */}
+      <TaskDetailPanel
+        taskId={selectedDetailTaskId}
+        onClose={() => setSelectedDetailTaskId(null)}
+        onTaskUpdated={fetchAll}
+        onNavigate={(id) => setSelectedDetailTaskId(id)}
+      />
     </div>
   );
 }

@@ -1,8 +1,10 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { TaskQuickCapture } from '@/components/tasks/task-quick-capture';
+import { addTodayTask } from '@/lib/today-tasks';
 
 interface QuickCaptureContextValue {
   registerInlineFocus: (fn: (() => void) | null) => void;
@@ -21,6 +23,12 @@ export function useQuickCapture(): QuickCaptureContextValue {
 export function QuickCaptureProvider({ children }: { children: React.ReactNode }) {
   const inlineFocusRef = useRef<(() => void) | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const pathname = usePathname();
+  // Today-page semantics: any task captured while we're on /today should be
+  // auto-included in today's list, whether the user typed inline or hit ⌘N
+  // and used the global modal. Mirrors the Today inline composer's behavior
+  // so the two entry points stay consistent.
+  const isTodayPage = pathname === '/today';
 
   const registerInlineFocus = useCallback((fn: (() => void) | null) => {
     inlineFocusRef.current = fn;
@@ -63,12 +71,15 @@ export function QuickCaptureProvider({ children }: { children: React.ReactNode }
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
-            <DialogTitle>새 task 추가</DialogTitle>
+            <DialogTitle>{isTodayPage ? '오늘 할 일 추가' : '새 task 추가'}</DialogTitle>
           </DialogHeader>
           {modalOpen && (
             <TaskQuickCapture
               surface="modal"
               autoFocus
+              onCreated={(t) => {
+                if (isTodayPage) addTodayTask(t.id);
+              }}
               onSubmittedClose={() => setModalOpen(false)}
             />
           )}

@@ -15,87 +15,106 @@ const SECTIONS = [
 export default function SettingsPage() {
   const [activeId, setActiveId] = useState<string>(SECTIONS[0].id);
 
+  // Scroll-based spy.  IntersectionObserver was misfiring when a short
+  // section (e.g. Notion) entered and exited inside the same callback batch
+  // along with the next section — entries.sort()[0] then resolved to the
+  // *wrong* id, so clicking "Notion" highlighted "Slack".  We now read every
+  // section's geometry directly on each scroll, which is O(N=3) and stable.
   useEffect(() => {
-    const targets = SECTIONS
-      .map((s) => document.getElementById(s.id))
-      .filter((el): el is HTMLElement => el !== null);
+    const scroller = document.getElementById('main-content');
+    type Resolved = { id: typeof SECTIONS[number]['id']; el: HTMLElement };
+    const sections: Resolved[] = SECTIONS
+      .map(s => ({ id: s.id, el: document.getElementById(s.id) }))
+      .filter((s): s is Resolved => s.el !== null);
+    if (sections.length === 0 || !scroller) return;
 
-    if (targets.length === 0) return;
+    // header(56) + sticky-nav(48) + breathing(8)
+    const offset = 112;
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        // pick the entry closest to the top that is currently intersecting
-        const visible = entries
-          .filter((e) => e.isIntersecting)
-          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-        if (visible[0]) {
-          setActiveId(visible[0].target.id);
-        }
-      },
-      {
-        // header(56px) + sticky(48px) ≈ 104px → top margin -112px
-        // bottom margin 완화: 마지막 짧은 섹션도 viewport 하단 30%만 들어가도 잡힘
-        rootMargin: '-112px 0px -30% 0px',
-        threshold: 0,
+    const recompute = () => {
+      let current = sections[0].id;
+      for (const s of sections) {
+        const rect = s.el.getBoundingClientRect();
+        if (rect.top - offset <= 0) current = s.id;
+        else break;
       }
-    );
+      setActiveId(current);
+    };
 
-    targets.forEach((el) => observer.observe(el));
-
+    recompute();
+    scroller.addEventListener('scroll', recompute, { passive: true });
+    window.addEventListener('resize', recompute);
     return () => {
-      observer.disconnect();
+      scroller.removeEventListener('scroll', recompute);
+      window.removeEventListener('resize', recompute);
     };
   }, []);
 
   const activeIdx = SECTIONS.findIndex((s) => s.id === activeId);
 
   return (
-    <div className="space-y-8 max-w-3xl">
-      <div>
-        <h1 className="text-2xl font-bold">설정</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          연동 서비스를 설정할 수 있습니다.
+    <div className="space-y-6 max-w-3xl">
+      {/* Hero — same rhythm as Inbox / Today / History so the whole app
+       * shares one first-impression pattern. */}
+      <section className="animate-soft-rise">
+        <p className="text-[10px] font-semibold tracking-[0.12em] uppercase text-muted-foreground/70 mb-2.5">
+          연결과 동기화
         </p>
-      </div>
+        <h1
+          className="text-[28px] sm:text-[36px] font-extrabold leading-[1.02] tracking-[-0.04em]"
+        >
+          설정
+        </h1>
+        <p className="text-[12.5px] sm:text-[13px] text-muted-foreground/80 mt-2 tracking-[-0.005em]">
+          외부 서비스 연동을 관리해요.
+        </p>
+      </section>
+
+      {/* Segmented section nav — Toss/한국 IT pill-segment style. Active pill
+       * gets card surface + ring; inactive stays muted. Sticky to the top of
+       * the scroll container so it's always reachable. */}
       <nav
-        className="!mt-0 sticky top-0 z-10 bg-background border-b h-12 flex items-center gap-1 text-sm"
+        className="sticky top-0 z-10 bg-background/85 dark:bg-background/85 backdrop-blur-md backdrop-saturate-150 -mx-4 md:-mx-6 px-4 md:px-6 py-2 border-b border-border/60 flex items-center gap-2"
         aria-label="설정 섹션 네비게이션"
       >
-        {SECTIONS.map((section) => {
-          const isActive = activeId === section.id;
-          return (
-            <a
-              key={section.id}
-              href={`#${section.id}`}
-              className={cn(
-                'relative px-3 py-1.5 rounded-md transition-colors hover:bg-accent',
-                isActive ? 'text-foreground font-medium' : 'text-muted-foreground'
-              )}
-              aria-current={isActive ? 'true' : undefined}
-            >
-              <span
-                aria-hidden="true"
+        <div className="inline-flex items-center gap-1 p-1 rounded-full bg-muted/70 dark:bg-muted/50">
+          {SECTIONS.map((section) => {
+            const isActive = activeId === section.id;
+            return (
+              <a
+                key={section.id}
+                href={`#${section.id}`}
+                onClick={() => setActiveId(section.id)}
+                aria-current={isActive ? 'true' : undefined}
                 className={cn(
-                  'absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 rounded-full bg-primary transition-opacity duration-150 ease-out',
-                  isActive ? 'opacity-100' : 'opacity-0'
+                  'inline-flex items-center justify-center px-3.5 h-8 rounded-full text-[12.5px] font-medium transition-all',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  'active:scale-[0.97]',
+                  isActive
+                    ? 'bg-background text-foreground border border-border'
+                    : 'text-muted-foreground hover:text-foreground',
                 )}
-              />
-              {section.label}
-            </a>
-          );
-        })}
-        <span className="ml-auto text-[10px] text-muted-foreground tabular-nums pr-1">
+              >
+                {section.label}
+              </a>
+            );
+          })}
+        </div>
+        <span className="ml-auto text-[11px] text-muted-foreground tabular-nums">
           {Math.max(activeIdx + 1, 1)} / {SECTIONS.length}
         </span>
       </nav>
-      <div id="gcal" className="scroll-mt-[104px]">
-        <GCalSettings />
-      </div>
-      <div id="notion" className="scroll-mt-[104px]">
-        <NotionMapping />
-      </div>
-      <div id="slack" className="scroll-mt-[104px]">
-        <SlackSettings />
+
+      <div className="space-y-6">
+        <div id="gcal" className="scroll-mt-[120px]">
+          <GCalSettings />
+        </div>
+        <div id="notion" className="scroll-mt-[120px]">
+          <NotionMapping />
+        </div>
+        <div id="slack" className="scroll-mt-[120px]">
+          <SlackSettings />
+        </div>
       </div>
     </div>
   );

@@ -47,8 +47,8 @@ export async function POST(request: NextRequest) {
 
   if (event.type !== 'reaction_added') return NextResponse.json({ ok: true });
 
-  const triggerEmoji = process.env.SLACK_TRIGGER_EMOJI ?? 'eyes';
-  const completeEmoji = process.env.SLACK_COMPLETE_EMOJI ?? 'white_check_mark';
+  const triggerEmoji = process.env.SLACK_TRIGGER_EMOJI ?? 'send-away';
+  const completeEmoji = process.env.SLACK_COMPLETE_EMOJI ?? '완료';
 
   // Handle completion emoji
   if (event.reaction === completeEmoji) {

@@ -1,9 +1,13 @@
 /*
- * WID Design System
- * Philosophy: Monochrome + 1 primary accent. Color used sparingly for semantic
- * meaning only (red = overdue/destructive, primary = active/selected).
- * Priority & status communicated through subtle dots/icons, not colored backgrounds.
- * Benchmarks: Linear, Height, Things 3.
+ * WID Design System v5
+ * Typography: Pretendard Variable 단일 시스템 (weight·tracking·scale로만 위계)
+ * Philosophy: serif 없이도 단단한 위계. 토스·당근의 실제 접근.
+ *   h1: 800w / -0.04em / lh 1.02 → 극단적 자간으로 디스플레이 텐션
+ *   h2: 700w / -0.03em
+ *   body: 400~500 / -0.01em / lh 1.6
+ * Color: periwinkle indigo (#7D74F8) 단일 키컬러 + 무채색 위계.
+ *   accent-vivid(mustard) 완전 제거. 단일 액센트 원칙.
+ * Benchmarks: Toss, 카카오뱅크, 채널톡, Linear.
  */
 @import "tailwindcss";
 @import "tw-animate-css";
@@ -14,9 +18,13 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-noto-sans-kr), var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  /* Pretendard Variable 단일 시스템 — heading·display도 전부 Pretendard.
+   * serif 없이 weight(800/700/500)·tracking(-0.04em~-0.01em)·
+   * optical scale로만 위계. 토스·당근의 실제 접근. */
+  --font-sans: var(--font-pretendard), -apple-system, 'Apple SD Gothic Neo', sans-serif;
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-jakarta), var(--font-noto-sans-kr), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-pretendard), -apple-system, 'Apple SD Gothic Neo', sans-serif;
+  --font-display: var(--font-pretendard), -apple-system, 'Apple SD Gothic Neo', sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -56,80 +64,142 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  /* WID v5 컬러 시스템 — "단일 키컬러 + 무채색 위계"
+   *
+   * 키컬러: #7D74F8 = oklch(0.63 0.191 282.6) — periwinkle indigo
+   * 원칙:
+   *   1. 화면당 단 하나의 유채색 → primary 하나만 사용
+   *   2. accent-vivid(mustard) 완전 폐기
+   *   3. secondary/muted/border는 모두 hue 282 방향의 극저채도
+   *   4. chart-2~5 → 거의 무채색 (chroma 0.04~0.06)
+   *   5. destructive(red)만 예외적으로 유지
+   * 벤치마크: 토스, 카카오뱅크
+   */
+  --background: oklch(0.994 0.002 80);
+  --foreground: oklch(0.14 0.016 245);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.55 0.28 275);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.932 0.032 264.376);
-  --accent-foreground: oklch(0.268 0.058 264.376);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.488 0.243 264.376);
-  /* Charts: monochrome-leaning palette with reduced chroma for subtlety */
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.6 0.15 160);
-  --chart-3: oklch(0.65 0.13 50);
-  --chart-4: oklch(0.55 0.17 310);
-  --chart-5: oklch(0.7 0.10 85);
-  --color-shadow: rgba(0, 0, 0, 0.08);
+  --card-foreground: oklch(0.14 0.016 245);
+  --popover: oklch(0.998 0.001 80);
+  --popover-foreground: oklch(0.14 0.016 245);
+  /* primary: #7D74F8 exact */
+  --primary: oklch(0.63 0.191 282.6);
+  --primary-foreground: oklch(0.98 0 0);
+  --secondary: oklch(0.955 0.006 282);
+  --secondary-foreground: oklch(0.20 0.016 245);
+  --muted: oklch(0.955 0.004 282);
+  --muted-foreground: oklch(0.50 0.012 240);
+  --accent: oklch(0.96 0.025 282);
+  --accent-foreground: oklch(0.40 0.18 282);
+  --destructive: oklch(0.52 0.22 25);
+  --border: oklch(0.88 0.008 282);
+  --input: oklch(0.88 0.008 282);
+  --ring: oklch(0.58 0.20 282);
+  --primary-glow: oklch(0.68 0.22 292 / 0.40);
+  /* chart-1: primary 계열, chart-2~5: 거의 무채색 */
+  --chart-1: oklch(0.63 0.191 282.6);
+  --chart-2: oklch(0.60 0.05 282);
+  --chart-3: oklch(0.70 0.04 282);
+  --chart-4: oklch(0.50 0.06 282);
+  --chart-5: oklch(0.78 0.04 282);
+  --color-shadow: rgba(20, 22, 30, 0.06);
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: oklch(0.974 0.004 282);
+  --sidebar-foreground: oklch(0.14 0.016 245);
+  --sidebar-primary: oklch(0.63 0.191 282.6);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --sidebar-accent: oklch(0.942 0.018 282);
+  --sidebar-accent-foreground: oklch(0.20 0.016 245);
+  --sidebar-border: oklch(0.88 0.008 282);
+  --sidebar-ring: oklch(0.58 0.20 282);
 }
 
 .dark {
-  --background: oklch(0.13 0.015 258);
-  --foreground: oklch(0.94 0.005 258);
-  --card: oklch(0.185 0.012 258);
-  --card-foreground: oklch(0.94 0.005 258);
-  --popover: oklch(0.19 0.012 258);
-  --popover-foreground: oklch(0.94 0.005 258);
-  --primary: oklch(0.72 0.22 268);
-  --primary-foreground: oklch(0.12 0.015 268);
-  --secondary: oklch(0.255 0.012 258);
-  --secondary-foreground: oklch(0.9 0.005 258);
-  --muted: oklch(0.235 0.01 258);
-  --muted-foreground: oklch(0.62 0.012 258);
-  --accent: oklch(0.265 0.04 265);
-  --accent-foreground: oklch(0.88 0.02 265);
-  --destructive: oklch(0.65 0.21 22);
+  /* Dark variant — periwinkle indigo 키컬러를 어두운 환경으로 이식.
+   * primary는 밝기 올려(0.73) 어두운 bg에서 대비 확보. */
+  --background: oklch(0.155 0.014 282);
+  --foreground: oklch(0.94 0.006 220);
+  --card: oklch(0.205 0.016 282);
+  --card-foreground: oklch(0.94 0.006 220);
+  --popover: oklch(0.215 0.016 282);
+  --popover-foreground: oklch(0.94 0.006 220);
+  --primary: oklch(0.73 0.17 282);
+  --primary-foreground: oklch(0.13 0.02 282);
+  --secondary: oklch(0.265 0.016 282);
+  --secondary-foreground: oklch(0.90 0.007 220);
+  --muted: oklch(0.248 0.014 282);
+  --muted-foreground: oklch(0.68 0.014 220);
+  --accent: oklch(0.29 0.055 282);
+  --accent-foreground: oklch(0.90 0.045 282);
+  --destructive: oklch(0.68 0.20 22);
   --border: oklch(1 0 0 / 13%);
-  --input: oklch(1 0 0 / 16%);
-  --ring: oklch(0.72 0.22 268);
-  --chart-1: oklch(0.72 0.18 268);
-  --chart-2: oklch(0.65 0.14 160);
-  --chart-3: oklch(0.7 0.12 50);
-  --chart-4: oklch(0.62 0.16 310);
-  --chart-5: oklch(0.75 0.09 85);
-  --color-shadow: rgba(0, 0, 0, 0.45);
-  --sidebar: oklch(0.155 0.018 260);
-  --sidebar-foreground: oklch(0.92 0.005 260);
-  --sidebar-primary: oklch(0.72 0.22 268);
-  --sidebar-primary-foreground: oklch(0.12 0.015 268);
-  --sidebar-accent: oklch(0.235 0.015 262);
-  --sidebar-accent-foreground: oklch(0.92 0.005 260);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.62 0.012 258);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.73 0.17 282);
+  --primary-glow: oklch(0.73 0.17 282 / 0.40);
+  --chart-1: oklch(0.73 0.17 282);
+  --chart-2: oklch(0.65 0.05 282);
+  --chart-3: oklch(0.72 0.04 282);
+  --chart-4: oklch(0.55 0.06 282);
+  --chart-5: oklch(0.78 0.04 282);
+  --color-shadow: rgba(0, 0, 0, 0.42);
+  --sidebar: oklch(0.148 0.020 282);
+  --sidebar-foreground: oklch(0.90 0.006 220);
+  --sidebar-primary: oklch(0.73 0.17 282);
+  --sidebar-primary-foreground: oklch(0.13 0.02 282);
+  --sidebar-accent: oklch(0.228 0.020 282);
+  --sidebar-accent-foreground: oklch(0.90 0.006 220);
+  --sidebar-border: oklch(1 0 0 / 9%);
+  --sidebar-ring: oklch(0.73 0.17 282);
 }
 
 @keyframes animate-in {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* Signature complete-pop — overshoot + slight rotation + ring expansion.
+ * 카카오페이 결제 confirm 톤. 0.34s → 0.52s 늘려 오버슈트 탄력이 보이게. */
+@keyframes task-complete-pop {
+  0%   { transform: scale(0.6) rotate(-8deg); opacity: 0; }
+  45%  { transform: scale(1.28) rotate(4deg); opacity: 1; }
+  68%  { transform: scale(0.92) rotate(-1deg); }
+  84%  { transform: scale(1.06) rotate(0deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+@keyframes task-complete-ring {
+  0%   { transform: scale(0.7); opacity: 0.55; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+
+@keyframes today-pulse {
+  0% { transform: scale(1); filter: drop-shadow(0 0 0 oklch(0.63 0.191 282.6 / 0)); }
+  50% { transform: scale(1.18); filter: drop-shadow(0 0 6px oklch(0.63 0.191 282.6 / 0.50)); }
+  100% { transform: scale(1); filter: drop-shadow(0 0 0 oklch(0.63 0.191 282.6 / 0)); }
+}
+
+@keyframes soft-rise {
+  from { opacity: 0; transform: translateY(8px) scale(0.99); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Sheet-enter spring — Toss/Apple-style strong-pull-soft-land curve.
+ * Replaces shadcn's default zoom-in-95 (which is dated). */
+@keyframes sheet-enter {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes sheet-exit {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(8px) scale(0.98); }
+}
+[data-slot="dialog-content"][data-state="open"] {
+  animation: sheet-enter 0.34s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+[data-slot="dialog-content"][data-state="closed"] {
+  animation: sheet-exit 0.18s cubic-bezier(0.4, 0, 1, 1) !important;
+}
+[data-slot="dialog-overlay"][data-state="open"] {
+  animation: soft-rise 0.24s ease-out;
 }
 
 @layer base {
@@ -138,14 +208,46 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* Pretendard 권장 설정:
+     * ss01 = 대체 문자 세트 / tnum = tabular numerics 기본 활성
+     * 한글은 kern이 기본이나 명시해 라틴 혼용 시에도 유지 */
+    font-feature-settings: 'ss01', 'kern';
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    /* 한글 자간: Pretendard는 라틴보다 약간 넓게 설계되어 있어
+     * -0.01em 정도 좁히면 단단해 보임 */
+    letter-spacing: -0.01em;
+    line-height: 1.6;
   }
   html {
     @apply font-sans;
   }
-  h1 { @apply text-2xl font-bold tracking-tight; font-family: var(--font-heading); }
-  h2 { @apply text-xl font-semibold tracking-tight; font-family: var(--font-heading); }
-  h3 { @apply text-lg font-semibold; font-family: var(--font-heading); }
-  h4 { @apply text-base font-medium; font-family: var(--font-heading); }
+
+  /* Pretendard 단일 위계 — weight·tracking·optical scale만으로 처리.
+   * 토스/당근의 실제 접근: serif 없이 800w + 극단 자간으로 충분히 강함.
+   * font-family 선언 불필요 — font-sans가 이미 Pretendard이므로 상속됨. */
+  h1 {
+    @apply font-extrabold;   /* 800 */
+    letter-spacing: -0.04em;
+    line-height: 1.02;
+  }
+  h2 {
+    @apply font-bold;        /* 700 */
+    letter-spacing: -0.03em;
+    line-height: 1.12;
+  }
+  h3 {
+    @apply font-semibold;    /* 600 */
+    letter-spacing: -0.018em;
+    line-height: 1.28;
+  }
+  h4 {
+    @apply font-medium;      /* 500 */
+    letter-spacing: -0.012em;
+  }
+  ::selection { background: oklch(0.82 0.12 282 / 0.35); }
 }
 
 @layer utilities {
@@ -155,9 +257,61 @@
   .animate-fade-in-slow {
     animation: animate-in 0.3s ease-out;
   }
+  .animate-soft-rise {
+    animation: soft-rise 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .animate-task-complete {
+    animation: task-complete-pop 0.52s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  /* Ring that expands outward when a task completes — pairs with the
+   * pop above. Use as an absolutely-positioned span behind the icon. */
+  .animate-task-ring {
+    animation: task-complete-ring 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  /* List-row hover — bg만 변화, 그림자 없음. 토스/당근 패턴. */
+  .card-hover-lift {
+    transition:
+      background-color 100ms ease;
+  }
+  .card-hover-lift:hover {
+    /* 그림자 제거 — border + bg 변화만으로 충분 */
+  }
+  .card-hover-lift:active {
+    transform: scale(0.998);
+    transition-duration: 60ms;
+  }
+  .animate-today-pulse {
+    /* No backout easing — keyframe already double-oscillates. */
+    animation: today-pulse 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  /* Staggered fade — used on hero metric grids so the row arrives like a
+   * sequence (Toss / Karrot pattern) instead of one heavy block. */
+  .animate-stagger > * {
+    animation: soft-rise 0.4s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+  .animate-stagger > *:nth-child(1) { animation-delay: 0ms; }
+  .animate-stagger > *:nth-child(2) { animation-delay: 60ms; }
+  .animate-stagger > *:nth-child(3) { animation-delay: 120ms; }
+  .animate-stagger > *:nth-child(4) { animation-delay: 180ms; }
   .tabular-nums {
     font-variant-numeric: tabular-nums;
     font-feature-settings: 'tnum';
+  }
+  /* surface-soft — 그림자 제거, border + 단색 bg만. 토스/당근 패턴. */
+  .surface-soft {
+    background: oklch(0.99 0 0);
+    border: 1px solid oklch(0.88 0.008 282);
+  }
+  .dark .surface-soft {
+    background: oklch(0.205 0.016 282);
+    border: 1px solid oklch(1 0 0 / 0.09);
+  }
+
+  .surface-soft:where(.is-hoverable):hover {
+    background: oklch(0.975 0.004 282);
+  }
+  .dark .surface-soft:where(.is-hoverable):hover {
+    background: oklch(0.225 0.016 282);
   }
 }
 

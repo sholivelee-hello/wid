@@ -122,7 +122,7 @@ export function TaskInlineEditor({ task, onClose }: Props) {
         <span className="text-xs text-muted-foreground">인라인 편집</span>
         <div className="flex items-center gap-2">
           {savedAt !== null && (
-            <span className="text-[11px] text-emerald-600 dark:text-emerald-400 inline-flex items-center gap-1 animate-in fade-in">
+            <span className="text-[11px] text-primary inline-flex items-center gap-1 animate-in fade-in">
               <Check className="h-3 w-3" /> 저장됨
             </span>
           )}

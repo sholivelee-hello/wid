@@ -9,7 +9,7 @@
 - **이름**: WID (work inbox / dashboard)
 - **목적**: 개인이 노션·슬랙·수동 입력으로 들어오는 일들을 한 인박스에서 처리하고, 시각적 타임라인과 히스토리로 회고하는 앱
 - **범위**: 1인 사용자(personal use). 다인용·SaaS 아님
-- **단계**: v2 구현 완료(`a33ce28` → 개인 메일 author 재작성으로 `ec6dafe`). 이후 인박스 UX 대수술 (드래그 reorder, 인라인 에디터, 색상 제거, 계층 표시, GCal 임베드, today prompt-next 등) 진행 — `feat/issue-task-hierarchy` 브랜치
+- **단계**: v2 구현 완료(`a33ce28` → 개인 메일 author 재작성으로 `ec6dafe`). 이후 인박스 UX 대수술(드래그 reorder, 인라인 에디터, 계층 표시, GCal 임베드, today prompt-next) + **디자인 시스템 v3** 마감 — `feat/issue-task-hierarchy` 브랜치
 - **상세 컨텍스트**: `docs/NEXT-SESSION.md`, `docs/architecture/` (도메인별 invariant·계약·패턴), `docs/superpowers/specs/`, `docs/superpowers/plans/`
 
 ## 기술 스택
@@ -20,6 +20,16 @@
 - **데이터**: Supabase 미연결 — 현재 mock 데이터로 동작 중 (`src/lib/mock-data.ts`, `src/lib/mock-gcal.ts`, `src/lib/mock-calendars.ts`). Supabase 마이그레이션은 `supabase/migrations/`에 정의됨
 - **외부 연동**: Notion (TASK DB sync), Slack (webhook), Google Calendar — 모두 mock 또는 부분 연동
 - **개발 명령어**: `npm run dev` (Turbopack), `npm run build`, `npm run lint`
+
+## 디자인 시스템 v3 (현재 기준선)
+
+토스/카카오뱅크의 "단일 강조 + 비워둔다" 원칙. 향후 작업은 이 기준선을 깎지 말고 다듬는 방향으로.
+
+- **타이포**: Pretendard Variable single-system (self-host, `public/fonts/PretendardVariable.woff2`). serif 디스플레이 폐기. 위계는 **weight × tracking**으로만 — h1 800w `-0.04em` `lh 1.02`, h2 700w `-0.03em`, body 400~500w `-0.01em`, 숫자는 `tabular-nums`. 토큰: `--font-sans`, `--font-heading`, `--font-display` 모두 Pretendard.
+- **컬러**: 단일 키컬러 `#7D74F8` (oklch light `0.63 0.191 282.6` / dark `0.73 0.17 282`). 한 화면 액센트 1개 원칙 — amber/emerald/mustard 잔재 없음. `destructive`(빨강)만 의미적 예외. chart-2~5는 chroma 0.04~0.06 무채색.
+- **표면**: 그림자 거의 0. border + `bg-card` / `bg-muted/40`로 위계. `card-hover-lift`는 bg 전환만, transform 없음.
+- **레이아웃**: 페이지 hero h1 안 씀. `/`는 인라인 한 줄 요약, `/today`는 미세 progress bar 한 줄, `/history`는 월 네비게이터만. 큰 숫자는 그 페이지의 단 하나의 핵심 지표에만.
+- **참고**: 디자인 결정 변경 시 이 섹션을 같이 갱신. 단순 색·자간 미세조정은 갱신 불필요.
 
 ## 인프라 / 계정 정보
 

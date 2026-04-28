@@ -78,14 +78,14 @@ function getSyncStatus(date: Date | null, result: SyncResult | null): {
   const oneDay = 24 * 60 * 60 * 1000;
   if (diffMs > oneDay) {
     return {
-      pillClass: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
+      pillClass: 'bg-muted text-muted-foreground',
       Icon: Clock,
       label: '대기',
       state: 'stale',
     };
   }
   return {
-    pillClass: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+    pillClass: 'bg-primary/10 text-primary',
     Icon: CheckCircle2,
     label: '정상',
     state: 'connected',
@@ -109,7 +109,7 @@ function HistorySparkline({ history }: { history: HistoryEntry[] }) {
           key={h.ts}
           className={cn(
             'w-1.5 h-1.5 rounded-full',
-            h.result === 'success' ? 'bg-emerald-500' : 'bg-red-500',
+            h.result === 'success' ? 'bg-primary' : 'bg-red-500',
           )}
           title={`${format(new Date(h.ts), 'M월 d일 HH:mm', { locale: ko })} — ${
             h.result === 'success' ? '성공' : '실패'
@@ -201,15 +201,17 @@ export function NotionMapping() {
           <p className="flex items-center gap-1">
             <span>• 동기화는 앱 시작 시 자동으로 실행됩니다</span>
             <Popover>
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="동기화 버튼 안내"
-                  className="inline-flex items-center text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
-                >
-                  <HelpCircle className="h-3.5 w-3.5" />
-                </button>
-              </PopoverTrigger>
+              <PopoverTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label="동기화 버튼 안내"
+                    className="inline-flex items-center text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                  >
+                    <HelpCircle className="h-3.5 w-3.5" />
+                  </button>
+                }
+              />
               <PopoverContent side="top" className="w-72 text-sm">
                 Notion API는 실시간 push를 지원하지 않아 앱에서 주기적으로 pull합니다. 아래 버튼으로 즉시 강제 동기화할 수 있습니다.
               </PopoverContent>
@@ -223,7 +225,7 @@ export function NotionMapping() {
             {syncing ? '동기화 중...' : 'Notion 동기화 실행'}
           </Button>
           {syncResult && (
-            <p className="text-sm text-emerald-600 dark:text-emerald-400">
+            <p className="text-sm text-primary">
               완료 — {syncResult.total}건 확인, {syncResult.created}건 새로 가져옴, {syncResult.updated}건 업데이트
             </p>
           )}

@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
 import {
   DropdownMenu,
@@ -25,6 +24,7 @@ import {
   User,
   CalendarDays,
   FileText,
+  FolderOpen,
   MessageSquare,
   Sun,
 } from 'lucide-react';
@@ -35,8 +35,17 @@ interface TaskCardProps {
   onComplete?: (taskId: string) => void;
   onDelete?: (taskId: string) => void;
   onSelect?: (taskId: string) => void;
-  /** Optional hierarchy label rendered as a small badge before the title. */
+  /** Optional hierarchy label rendered as a small badge before the title.
+   * Kept for legacy callers; new code should rely on `isSubtask` + indent for
+   * the hierarchy cue instead. Defaults to no badge. */
   hierarchyLabel?: 'TASK' | 'sub-TASK';
+  /** Sub-task styling: smaller title, slightly muted tone, leading connector
+   * glyph. Combined with the parent's indent/rail this makes the parent vs.
+   * child distinction unmistakable in dark mode. */
+  isSubtask?: boolean;
+  /** Hint that this row has children — used to bold the title so the parent
+   * reads as "container" rather than "peer". */
+  hasChildren?: boolean;
   /** Renders a small "ISSUE › 부모 TASK" breadcrumb above the title — useful in
    *  flat lists like Today, where the tree context is otherwise lost. */
   breadcrumb?: { issueName?: string | null; parentTaskTitle?: string | null };
@@ -58,6 +67,8 @@ export function TaskCard({
   onDelete,
   onSelect,
   hierarchyLabel,
+  isSubtask = false,
+  hasChildren = false,
   breadcrumb,
   editing = false,
   onCloseEdit,
@@ -69,6 +80,8 @@ export function TaskCard({
   const isCompleted = task.status === '완료';
 
   const [isTodayTask, setIsTodayTask] = useState(() => getTodayTaskIds().has(task.id));
+  const [completePulse, setCompletePulse] = useState(0);
+  const [todayPulse, setTodayPulse] = useState(0);
 
   useEffect(() => {
     const handler = () => setIsTodayTask(getTodayTaskIds().has(task.id));
@@ -92,22 +105,33 @@ export function TaskCard({
   };
 
   return (
-    <Card
+    <div
       tabIndex={0}
+      role="button"
       className={cn(
-        'group/card relative bg-card border border-border/60 rounded-xl shadow-sm transition-colors duration-150 cursor-pointer',
-        'hover:bg-accent/30',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-        isCompleted && 'opacity-60',
-        editing && 'ring-1 ring-primary/40',
+        // Korean-IT list-row idiom — divider on the parent, not card-per-row.
+        // card-hover-lift adds a 1px upward translate + soft shadow on hover
+        // so each row reads as a tactile object instead of dead text. Active
+        // returns to baseline + a sub-1% scale so press is felt.
+        'group/card card-hover-lift relative bg-transparent rounded-md cursor-pointer select-none',
+        'hover:bg-accent/70 dark:hover:bg-accent/40 active:bg-accent/90 dark:active:bg-accent/55',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        isCompleted && 'opacity-55',
+        editing && 'bg-accent/60 dark:bg-accent/40',
       )}
       onClick={openDetail}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') openDetail();
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          openDetail();
+        }
       }}
     >
-      <CardContent className="p-4">
-        <div className="flex items-center gap-3.5">
+      {editing && (
+        <span aria-hidden className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full bg-primary" />
+      )}
+      <div className={cn(isSubtask ? 'px-3 py-2' : 'px-3 py-3')}>
+        <div className="flex items-center gap-3">
           {/* Completion toggle */}
           {(() => {
             const blocked = !onComplete && !isCompleted;
@@ -121,30 +145,53 @@ export function TaskCard({
                     ? 'cursor-not-allowed opacity-50'
                     : 'hover:bg-muted',
                 )}
-                onClick={(e) => { e.stopPropagation(); onComplete?.(task.id); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!blocked) setCompletePulse(p => p + 1);
+                  onComplete?.(task.id);
+                }}
                 title={
                   blocked
-                    ? 'sub-TASK가 모두 완료되어야 완료할 수 있습니다'
+                    ? '하위 task가 모두 완료되어야 완료할 수 있어요'
                     : isCompleted ? '완료 취소' : '완료 처리'
                 }
                 aria-label={
                   blocked
-                    ? '완료 불가 (sub-TASK 미완료)'
+                    ? '완료 불가 (하위 task 미완료)'
                     : isCompleted ? '완료 취소' : '완료 처리'
                 }
               >
-                {isCompleted ? (
-                  <CheckCircle2 className="h-[18px] w-[18px] text-emerald-500" />
-                ) : (
-                  <Circle
-                    className={cn(
-                      'h-[18px] w-[18px]',
-                      blocked
-                        ? 'text-muted-foreground/40'
-                        : 'text-muted-foreground/50 hover:text-emerald-500 transition-colors',
-                    )}
-                  />
-                )}
+                {/* Unified wrapper for both states — keeps the button's
+                  * inline-content metrics stable across toggle so the row
+                  * doesn't drift up/down 1-2px when status flips. */}
+                <span
+                  className="relative inline-grid place-items-center h-[18px] w-[18px] align-middle"
+                  aria-hidden
+                >
+                  {isCompleted ? (
+                    <>
+                      {completePulse > 0 && (
+                        <span
+                          key={`ring-${completePulse}`}
+                          className="absolute h-[18px] w-[18px] rounded-full bg-primary/30 animate-task-ring pointer-events-none"
+                        />
+                      )}
+                      <CheckCircle2
+                        key={`done-${completePulse}`}
+                        className="h-[18px] w-[18px] text-primary animate-task-complete"
+                      />
+                    </>
+                  ) : (
+                    <Circle
+                      className={cn(
+                        'h-[18px] w-[18px] transition-colors',
+                        blocked
+                          ? 'text-muted-foreground/40'
+                          : 'text-muted-foreground/50 hover:text-primary',
+                      )}
+                    />
+                  )}
+                </span>
               </button>
             );
           })()}
@@ -152,54 +199,78 @@ export function TaskCard({
           {/* 1-tap "오늘 토글" */}
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); toggleTodayTask(task.id); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setTodayPulse(p => p + 1);
+              toggleTodayTask(task.id);
+            }}
             className={cn(
               'flex-shrink-0 -ml-2 -my-1.5 p-1.5 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
               isTodayTask
-                ? 'text-amber-500 hover:text-amber-600'
-                : 'text-muted-foreground/30 group-hover/card:text-muted-foreground hover:text-amber-500',
+                ? 'text-primary hover:text-primary/80'
+                : 'text-muted-foreground/30 group-hover/card:text-muted-foreground hover:text-primary',
             )}
             aria-pressed={isTodayTask}
             aria-label={isTodayTask ? '오늘에서 제거' : '오늘에 추가'}
-            title={isTodayTask ? '오늘에서 제거' : '오늘에 추가'}
+            title={isTodayTask ? '오늘 묶음에서 빼기' : '오늘 할 일로 등록'}
           >
-            <Sun className={cn('h-4 w-4', isTodayTask && 'fill-amber-400')} />
+            <Sun
+              key={`sun-${todayPulse}`}
+              className={cn(
+                'h-4 w-4',
+                isTodayTask && 'fill-primary',
+                todayPulse > 0 && 'animate-today-pulse',
+              )}
+            />
           </button>
 
           {/* Title + metadata */}
           <div className="flex-1 min-w-0 space-y-1.5">
             {breadcrumb && (breadcrumb.issueName || breadcrumb.parentTaskTitle) && (
-              <div className="text-[10px] text-muted-foreground/80 truncate flex items-center gap-1">
+              <div className="text-[11px] text-muted-foreground truncate flex items-center gap-1.5">
+                {/* When this row is a sub-TASK shown out of its tree (e.g.
+                  * Today flat list), prefix the breadcrumb with a clear
+                  * "하위" label so the type is identifiable without indent. */}
+                {isSubtask && (
+                  <span className="inline-flex items-center text-[10px] font-semibold tracking-wide px-1.5 h-[16px] rounded bg-primary/12 text-primary dark:bg-primary/20 dark:text-primary">
+                    하위
+                  </span>
+                )}
                 {breadcrumb.issueName && (
-                  <span className="bg-primary/10 text-primary px-1.5 py-0.5 rounded text-[10px] font-semibold">
-                    {breadcrumb.issueName}
+                  <span className="inline-flex items-center gap-1 text-muted-foreground/90">
+                    <FolderOpen className="h-3 w-3" aria-hidden />
+                    <span className="truncate font-medium">{breadcrumb.issueName}</span>
                   </span>
                 )}
                 {breadcrumb.issueName && breadcrumb.parentTaskTitle && (
-                  <span className="text-muted-foreground/60">›</span>
+                  <span className="text-muted-foreground/50">›</span>
                 )}
                 {breadcrumb.parentTaskTitle && (
-                  <span className="truncate">{breadcrumb.parentTaskTitle}</span>
+                  <span className="truncate text-muted-foreground/85">{breadcrumb.parentTaskTitle}</span>
                 )}
               </div>
             )}
             <div className="flex items-center gap-2">
-              {hierarchyLabel && (
+              {/* Sub-task connector glyph — sits flush before the title so the
+                * row reads as "└ child of the row above" without taking width
+                * with a label badge. Only shown for sub-tasks. */}
+              {isSubtask && (
                 <span
-                  className={cn(
-                    'inline-flex items-center justify-center text-[9px] font-semibold tracking-wide px-1.5 h-4 rounded-sm flex-shrink-0',
-                    hierarchyLabel === 'TASK'
-                      ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-                      : 'bg-sky-500/10 text-sky-700 dark:text-sky-400',
-                  )}
                   aria-hidden
+                  className="text-muted-foreground/50 dark:text-muted-foreground/40 select-none flex-shrink-0 -ml-0.5 leading-none"
+                  style={{ fontFeatureSettings: '"tnum"' }}
                 >
-                  {hierarchyLabel}
+                  ↳
                 </span>
               )}
               <span
                 className={cn(
-                  'font-medium text-sm leading-snug truncate',
+                  'leading-snug truncate tracking-[-0.012em]',
+                  isSubtask
+                    ? 'text-[13px] font-normal text-foreground/80'
+                    : hasChildren
+                      ? 'text-[14.5px] font-semibold text-foreground'
+                      : 'text-[14px] font-medium text-foreground',
                   isCompleted && 'line-through text-muted-foreground',
                 )}
                 title={task.title}
@@ -343,15 +414,14 @@ export function TaskCard({
           </div>
         </div>
         {editing && (
-          <div className="mt-4 pt-4 border-t border-border/40">
+          <div className="mt-3 pt-3 border-t border-border/40">
             <TaskInlineEditor
               task={task}
               onClose={() => onCloseEdit?.()}
             />
           </div>
         )}
-      </CardContent>
-
-    </Card>
+      </div>
+    </div>
   );
 }

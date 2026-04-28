@@ -110,14 +110,14 @@ function getGCalStatus(
   }
   if (activeCount === 0) {
     return {
-      pillClass: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
+      pillClass: 'bg-muted text-muted-foreground',
       Icon: Clock,
       label: '대기',
       state: 'stale',
     };
   }
   return {
-    pillClass: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+    pillClass: 'bg-primary/10 text-primary',
     Icon: CheckCircle2,
     label: '정상',
     state: 'connected',
@@ -140,7 +140,7 @@ function HistorySparkline({ history }: { history: HistoryEntry[] }) {
           key={h.ts}
           className={cn(
             'w-1.5 h-1.5 rounded-full',
-            h.result === 'success' ? 'bg-emerald-500' : 'bg-red-500',
+            h.result === 'success' ? 'bg-primary' : 'bg-red-500',
           )}
           title={`${format(new Date(h.ts), 'M월 d일 HH:mm', { locale: ko })} — ${
             h.result === 'success' ? '성공' : '실패'
@@ -188,7 +188,7 @@ export function GCalSettings() {
   const gcalStatus = getGCalStatus(oauthConfigured, isSignedIn, hasExpiredToken, activeCount);
   const StatusIcon = gcalStatus.Icon;
 
-  // 토큰 만료 임박 (30분 이내) → amber 보강 텍스트
+  // 토큰 만료 임박 (30분 이내) → muted-foreground 보강 텍스트
   const tokenExpiresAt = config.oauth?.expiresAt ?? null;
   const minutesUntilExpiry =
     tokenExpiresAt && isSignedIn ? Math.max(0, Math.round((tokenExpiresAt - now) / 60_000)) : null;
@@ -307,7 +307,7 @@ export function GCalSettings() {
               </span>
             )}
             {expiryWarning && minutesUntilExpiry !== null && (
-              <span className="text-xs text-amber-600 dark:text-amber-400">
+              <span className="text-xs text-muted-foreground">
                 · 토큰 만료까지 {minutesUntilExpiry}분
               </span>
             )}
@@ -331,7 +331,7 @@ export function GCalSettings() {
           </div>
         ) : isSignedIn ? (
           <div className="space-y-3">
-            <div className="flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400">
+            <div className="flex items-center gap-1.5 text-sm text-primary">
               <CheckCircle2 className="h-4 w-4" />
               <span>연동됨: {config.oauth?.email ?? '(이메일 없음)'}</span>
             </div>

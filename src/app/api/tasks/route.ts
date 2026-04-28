@@ -44,6 +44,18 @@ function normalizeDepth(taskList: typeof MOCK_TASKS) {
 }
 normalizeDepth(tasks);
 
+/**
+ * One-time normalization: any task whose status falls outside TASK_STATUSES
+ * (e.g. legacy '대기' from the old default) is reset to '등록' so it actually
+ * appears in the Today/Inbox status groupings instead of becoming a ghost.
+ */
+const ALLOWED_STATUSES = new Set(['등록', '진행중', '대기중', '완료', '위임', '취소']);
+for (const t of tasks) {
+  if (!ALLOWED_STATUSES.has(t.status)) {
+    t.status = '등록';
+  }
+}
+
 export async function GET(request: NextRequest) {
   if (isMockMode()) {
     const searchParams = request.nextUrl.searchParams;
@@ -150,7 +162,7 @@ export async function POST(request: NextRequest) {
       title: body.title,
       description: body.description ?? null,
       priority: body.priority ?? '보통',
-      status: body.status ?? '대기',
+      status: body.status ?? '등록',
       source: body.source ?? 'manual',
       requester: body.requester ?? null,
       requested_at: body.requested_at ?? null,
@@ -183,7 +195,7 @@ export async function POST(request: NextRequest) {
       title: body.title,
       description: body.description ?? null,
       priority: body.priority ?? '보통',
-      status: body.status ?? '대기',
+      status: body.status ?? '등록',
       source: body.source ?? 'manual',
       requester: body.requester ?? null,
       requested_at: body.requested_at ?? null,

@@ -40,7 +40,7 @@ export function Header() {
 
   return (
     <>
-      <header className="h-14 border-b flex items-center justify-between px-6">
+      <header className="sticky top-0 z-30 h-14 border-b border-border bg-background/90 dark:bg-background/85 backdrop-blur-md backdrop-saturate-150 flex items-center justify-between px-4 md:px-6">
         <div className="flex items-center gap-2">
           {/* Mobile menu trigger */}
           <Sheet>
@@ -55,7 +55,9 @@ export function Header() {
             </SheetTrigger>
             <SheetContent side="left" className="w-64 p-0">
               <SheetHeader className="p-4 border-b">
-                <SheetTitle style={{ fontFamily: 'var(--font-heading)' }}>WID</SheetTitle>
+                <SheetTitle className="font-black tracking-[-0.055em]">
+                  WID
+                </SheetTitle>
               </SheetHeader>
               <nav className="flex flex-col gap-1 p-4">
                 {navItems.map((item, idx) => {
@@ -83,7 +85,7 @@ export function Header() {
               </nav>
             </SheetContent>
           </Sheet>
-          <h2 className="text-lg font-semibold">{title}</h2>
+          <h2 className="text-[15px] font-semibold tracking-[-0.012em]">{title}</h2>
         </div>
         <div className="flex items-center gap-2">
           <Button
