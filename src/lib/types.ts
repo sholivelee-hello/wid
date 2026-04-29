@@ -44,6 +44,7 @@ export interface Task {
   deadline: string | null;
   completed_at: string | null;
   notion_task_id: string | null;
+  notion_url: string | null;
   slack_url: string | null;
   notion_issue: string | null;
   slack_channel: string | null;

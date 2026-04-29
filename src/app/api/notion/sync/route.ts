@@ -107,31 +107,46 @@ export async function POST() {
   };
 
   for (const dbId of dbIds) {
-    let hasMore = true;
-    let cursor: string | undefined;
+    // @notionhq/client v5+ replaced databases.query with dataSources.query.
+    // A database now exposes one or more data_sources; iterate them all.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const dbMeta: any = await notion.databases.retrieve({ database_id: dbId });
+    const dataSourceIds: string[] = Array.isArray(dbMeta?.data_sources)
+      ? dbMeta.data_sources
+          .map((d: { id?: string }) => d?.id)
+          .filter((id: string | undefined): id is string => Boolean(id))
+      : [];
 
-    while (hasMore) {
-      // @notionhq/client v5+ removed databases.query in favor of dataSources.query.
-      // This branch still uses the legacy call shape; the runtime only executes when
-      // NOTION_DATABASE_ID_* env vars are set, so dev/mock mode is unaffected.
-      // Proper migration to dataSources is tracked separately.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const response = await (notion.databases as any).query({
-        database_id: dbId,
-        start_cursor: cursor,
-        page_size: 100,
-      });
+    if (dataSourceIds.length === 0) continue;
 
-      for (const page of response.results) {
+    for (const dataSourceId of dataSourceIds) {
+      let hasMore = true;
+      let cursor: string | undefined;
+
+      while (hasMore) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const response: any = await notion.dataSources.query({
+          data_source_id: dataSourceId,
+          start_cursor: cursor,
+          page_size: 100,
+        });
+
+        for (const page of response.results) {
         if (!('properties' in page)) continue;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const props = (page as any).properties;
 
-        const title: string =
-          (props['이름'] ?? props['Name'] ?? props['제목'])?.type === 'title'
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            ? ((props['이름'] ?? props['Name'] ?? props['제목']) as any).title?.[0]?.plain_text ?? ''
-            : '';
+        // Title prop may be named 이름/Name/제목, or in some DBs something else
+        // entirely. Fall back to whichever property has type='title'.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const titleProp: any =
+          (props['이름']?.type === 'title' && props['이름']) ||
+          (props['Name']?.type === 'title' && props['Name']) ||
+          (props['제목']?.type === 'title' && props['제목']) ||
+          Object.values(props).find(
+            (p: unknown) => (p as { type?: string })?.type === 'title',
+          );
+        const title: string = titleProp?.title?.[0]?.plain_text ?? '';
 
         const deadline: string | null =
           (props['마감일'] ?? props['Due'] ?? props['Deadline'])?.type === 'date'
@@ -167,6 +182,21 @@ export async function POST() {
         if (!assignees.includes(ASSIGNEE_FILTER)) continue;
         total++;
 
+        // Requester comes from a separate property (요청자/Requester) — never the assignee.
+        const requesterProp = props['요청자'] ?? props['Requester'];
+        let requester: string | null = null;
+        if (requesterProp?.type === 'people') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const people = (requesterProp as any).people as { name?: string }[] | undefined;
+          requester = people?.[0]?.name ?? null;
+        } else if (requesterProp?.type === 'rich_text') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          requester = (requesterProp as any).rich_text?.[0]?.plain_text ?? null;
+        } else if (requesterProp?.type === 'select') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          requester = (requesterProp as any).select?.name ?? null;
+        }
+
         // Resolve the ISSUE relation to a local Issue id (create if needed)
         let localIssueId: string | null = null;
         if (issueRelationId) {
@@ -182,18 +212,25 @@ export async function POST() {
           }
         }
 
+        // Notion's canonical URL for this page — bare-id form fails for
+        // teamspace pages, so we store the official URL and prefer it on the
+        // client-side deep link.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const notionUrl: string | null = (page as any).url ?? null;
+
         const { data: existing } = await supabase
           .from('tasks')
-          .select('id, title, deadline, notion_issue, issue_id')
+          .select('id, title, deadline, issue_id, requester, notion_url')
           .eq('notion_task_id', page.id)
-          .single();
+          .maybeSingle();
 
         if (existing) {
           const updates: Record<string, unknown> = {};
           if (title && existing.title !== title) updates.title = title;
           if (existing.deadline !== deadline) updates.deadline = deadline;
-          if (existing.notion_issue !== notionIssueLabel) {
-            updates.notion_issue = notionIssueLabel;
+          if (existing.requester !== requester) updates.requester = requester;
+          if (notionUrl && existing.notion_url !== notionUrl) {
+            updates.notion_url = notionUrl;
           }
           // Only override issue_id when Notion provides a relation; preserve
           // the user's local linking otherwise.
@@ -203,26 +240,38 @@ export async function POST() {
           }
 
           if (Object.keys(updates).length > 0) {
-            await supabase.from('tasks').update(updates).eq('id', existing.id);
-            updated++;
+            const { error: updateErr } = await supabase
+              .from('tasks')
+              .update(updates)
+              .eq('id', existing.id);
+            if (updateErr) {
+              console.error('[notion/sync] update failed', existing.id, updateErr);
+            } else {
+              updated++;
+            }
           }
         } else {
-          await supabase.from('tasks').insert({
+          const { error: insertErr } = await supabase.from('tasks').insert({
             title: title || '(제목 없음)',
-            status: '대기',
+            status: '등록',
             source: 'notion',
             notion_task_id: page.id,
+            notion_url: notionUrl,
             deadline,
-            notion_issue: notionIssueLabel,
             issue_id: localIssueId,
-            requester: ASSIGNEE_FILTER,
+            requester,
           });
-          created++;
+          if (insertErr) {
+            console.error('[notion/sync] insert failed', page.id, insertErr);
+          } else {
+            created++;
+          }
         }
       }
 
-      hasMore = response.has_more;
-      cursor = response.next_cursor ?? undefined;
+        hasMore = response.has_more;
+        cursor = response.next_cursor ?? undefined;
+      }
     }
   }
 

@@ -34,5 +34,8 @@ export function minutesToHoursMinutes(minutes: number): string {
 }
 
 export function getNotionPageUrl(notionTaskId: string): string {
-  return `https://notion.so/${notionTaskId.replace(/-/g, '')}`;
+  // Use www.notion.so — bare notion.so doesn't reliably resolve workspace
+  // pages and can land on a 404, especially when the page lives in a
+  // teamspace.
+  return `https://www.notion.so/${notionTaskId.replace(/-/g, '')}`;
 }

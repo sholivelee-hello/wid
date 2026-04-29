@@ -307,7 +307,7 @@ export function TaskCard({
                 <>
                   <Dot />
                   <a
-                    href={getNotionPageUrl(task.notion_task_id)}
+                    href={task.notion_url ?? getNotionPageUrl(task.notion_task_id)}
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(e) => e.stopPropagation()}
