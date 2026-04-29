@@ -7,14 +7,17 @@ import { Button } from '@/components/ui/button';
 import { ChevronDown, SlidersHorizontal } from 'lucide-react';
 import { PRIORITIES, SOURCES } from '@/lib/constants';
 import { TASK_STATUSES } from '@/lib/types';
-import type { SortKey } from '@/lib/custom-views';
+import { SORT_LABEL, type SortKey } from '@/lib/custom-views';
 import { cn } from '@/lib/utils';
 
-const SORT_LABEL: Record<SortKey, string> = {
-  priority: '우선순위',
-  deadline: '마감일',
-  created_at: '최근 추가',
-};
+const SORT_OPTIONS: SortKey[] = [
+  'created_at',
+  'priority',
+  'deadline',
+  'title',
+  'requester',
+  'source',
+];
 
 const SOURCE_LABEL: Record<string, string> = {
   manual: 'WID',
@@ -100,7 +103,7 @@ export function InboxFilterPopover({
         <div className="space-y-3">
           <Section label="정렬">
             <ChipRow>
-              {(['created_at', 'priority', 'deadline'] as SortKey[]).map(k => (
+              {SORT_OPTIONS.map(k => (
                 <Chip
                   key={k}
                   active={sort === k}

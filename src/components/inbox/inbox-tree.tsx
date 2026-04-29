@@ -64,6 +64,16 @@ const PRIORITY_ORDER: Record<string, number> = { '긴급': 0, '높음': 1, '보�
  * stable tie-breaker (so DnD reorder is still visible within the same key).
  * Sub-tasks (TaskNode.children) keep position order — buildTree already does that.
  */
+// Korean-aware string compare; empty/null sorts last regardless of direction.
+function strCmp(a: string | null | undefined, b: string | null | undefined): number {
+  const av = a?.trim() ?? '';
+  const bv = b?.trim() ?? '';
+  if (!av && !bv) return 0;
+  if (!av) return 1;
+  if (!bv) return -1;
+  return av.localeCompare(bv, 'ko');
+}
+
 function sortNodes(nodes: TaskNode[], sortBy: SortKey): TaskNode[] {
   const cmp = (a: TaskNode, b: TaskNode) => {
     const ta = a.task, tb = b.task;
@@ -75,6 +85,15 @@ function sortNodes(nodes: TaskNode[], sortBy: SortKey): TaskNode[] {
       const da = ta.deadline ?? '￿';
       const db = tb.deadline ?? '￿';
       if (da !== db) return da < db ? -1 : 1;
+    } else if (sortBy === 'title') {
+      const r = strCmp(ta.title, tb.title);
+      if (r !== 0) return r;
+    } else if (sortBy === 'requester') {
+      const r = strCmp(ta.requester, tb.requester);
+      if (r !== 0) return r;
+    } else if (sortBy === 'source') {
+      const r = strCmp(ta.source, tb.source);
+      if (r !== 0) return r;
     } else {
       // created_at desc — most recent first
       if (ta.created_at !== tb.created_at) return ta.created_at < tb.created_at ? 1 : -1;

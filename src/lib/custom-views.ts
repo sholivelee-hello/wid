@@ -1,4 +1,32 @@
-export type SortKey = 'priority' | 'deadline' | 'created_at';
+export type SortKey =
+  | 'priority'
+  | 'deadline'
+  | 'created_at'
+  | 'title'
+  | 'requester'
+  | 'source';
+
+export const SORT_LABEL: Record<SortKey, string> = {
+  created_at: '최근 추가',
+  priority: '우선순위',
+  deadline: '마감일',
+  title: '이름',
+  requester: '요청자',
+  source: '출처',
+};
+
+const SORT_KEYS: SortKey[] = [
+  'created_at',
+  'priority',
+  'deadline',
+  'title',
+  'requester',
+  'source',
+];
+
+function isSortKey(v: string | null): v is SortKey {
+  return v != null && (SORT_KEYS as string[]).includes(v);
+}
 
 export interface CustomTaskView {
   id: string;
@@ -45,7 +73,7 @@ export function loadInboxSort(): SortKey {
   if (typeof window === 'undefined') return 'created_at';
   try {
     const raw = localStorage.getItem(INBOX_SORT_KEY);
-    if (raw === 'priority' || raw === 'deadline' || raw === 'created_at') return raw;
+    if (isSortKey(raw)) return raw;
   } catch {}
   return 'created_at';
 }

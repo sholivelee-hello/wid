@@ -20,7 +20,7 @@ import { buildTree, filterIncomplete } from '@/lib/hierarchy';
 import { promptNextInTodayIfNeeded } from '@/lib/today-tasks';
 import {
   loadViews, saveViews, loadInboxFilter, saveInboxFilter,
-  loadInboxSort, saveInboxSort,
+  loadInboxSort, saveInboxSort, SORT_LABEL,
   type CustomTaskView, type SortKey,
 } from '@/lib/custom-views';
 import { ViewEditForm } from '@/components/tasks/view-edit-form';
@@ -214,21 +214,32 @@ export default function InboxPage() {
     return list;
   }, [debouncedSearch]);
 
-  // 요청자/위임자 필터: top-level TASK에만 값이 있는 게 대부분이라
-  // 부모가 매칭되면 그 자식까지 모두 통과시킨다 (3-level invariant 활용).
+  // 모든 필터 (요청자/위임자/우선순위/출처/상태)는 top-level TASK 단위로
+  // 매칭하고, 매칭된 부모의 sub-task는 그대로 따라온다 (3-level invariant
+  // 활용 — sub-task는 보통 본인 priority/source/status가 부모와 다를 수 있어
+  // 그 단위로 거르면 트리가 깨진다).
+  const noFilters =
+    requester === 'all' &&
+    delegate === 'all' &&
+    priority === 'all' &&
+    source === 'all' &&
+    statusFilter.length === 0;
   const treeFilteredTasks = useMemo(() => {
-    if (requester === 'all' && delegate === 'all') return tasks;
+    if (noFilters) return tasks;
     const matchedParentIds = new Set<string>();
     for (const t of tasks) {
       if (t.parent_task_id) continue;
       const reqOk = requester === 'all' || (t.requester ?? '') === requester;
       const delOk = delegate === 'all' || (t.delegate_to ?? '') === delegate;
-      if (reqOk && delOk) matchedParentIds.add(t.id);
+      const prioOk = priority === 'all' || t.priority === priority;
+      const srcOk = source === 'all' || t.source === source;
+      const stOk = statusFilter.length === 0 || statusFilter.includes(t.status);
+      if (reqOk && delOk && prioOk && srcOk && stOk) matchedParentIds.add(t.id);
     }
     return tasks.filter(t =>
       t.parent_task_id ? matchedParentIds.has(t.parent_task_id) : matchedParentIds.has(t.id),
     );
-  }, [tasks, requester, delegate]);
+  }, [tasks, requester, delegate, priority, source, statusFilter, noFilters]);
 
   // 필터 chip 후보군은 실제 task에서 추출 (sub-task 포함).
   const requesters = useMemo(() => {
@@ -266,6 +277,14 @@ export default function InboxPage() {
       list = list.filter(t => view.priorities.includes(t.priority));
     }
     const sort = view.sortBy ?? 'priority';
+    const compareStr = (a: string | null | undefined, b: string | null | undefined) => {
+      const av = a?.trim() ?? '';
+      const bv = b?.trim() ?? '';
+      if (!av && !bv) return 0;
+      if (!av) return 1;
+      if (!bv) return -1;
+      return av.localeCompare(bv, 'ko');
+    };
     return list.sort((a, b) => {
       if (sort === 'priority') return (priorityOrder[a.priority] ?? 9) - (priorityOrder[b.priority] ?? 9);
       if (sort === 'deadline') {
@@ -274,6 +293,9 @@ export default function InboxPage() {
         if (!b.deadline) return -1;
         return a.deadline.localeCompare(b.deadline);
       }
+      if (sort === 'title') return compareStr(a.title, b.title);
+      if (sort === 'requester') return compareStr(a.requester, b.requester);
+      if (sort === 'source') return compareStr(a.source, b.source);
       return b.created_at.localeCompare(a.created_at);
     });
   }, [tasks, applyBaseFilter]);
@@ -388,7 +410,7 @@ export default function InboxPage() {
           </button>
         )}
         <span className="text-[11px] text-muted-foreground hidden sm:inline">
-          정렬: {sortBy === 'priority' ? '우선순위' : sortBy === 'deadline' ? '마감일' : '최근 추가'}
+          정렬: {SORT_LABEL[sortBy]}
         </span>
         <Button
           size="sm"

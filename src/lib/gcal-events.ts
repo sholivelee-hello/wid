@@ -247,5 +247,14 @@ export async function fetchEventsForRange(
     }
   }
 
-  return events;
+  // The same event id can arrive from multiple subscribed calendars when a
+  // user is invited and also subscribes to the host's calendar. React keys
+  // assume id uniqueness, so dedupe here at the source — first occurrence
+  // wins.
+  const seen = new Set<string>();
+  return events.filter(ev => {
+    if (seen.has(ev.id)) return false;
+    seen.add(ev.id);
+    return true;
+  });
 }

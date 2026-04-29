@@ -18,6 +18,26 @@ import { apiFetch } from '@/lib/api';
 import { IssuePicker } from '@/components/issues/issue-picker';
 import { Trash2, ExternalLink, ChevronDown, Save, X, FolderPlus, ArrowUpRight, CornerLeftUp, CheckCircle2, Circle } from 'lucide-react';
 
+// `<input type="datetime-local">` round-trip: the input wants a naive
+// "YYYY-MM-DDTHH:mm" string in the user's local timezone, and ISO strings
+// from the server are UTC. Convert both ways without dropping the user's
+// intent — opening the dialog should show the same wall-clock time the
+// user saw in history; saving should persist it as the same instant.
+function isoToLocalDateTime(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const tz = d.getTimezoneOffset() * 60000;
+  return new Date(d.getTime() - tz).toISOString().slice(0, 16);
+}
+
+function localDateTimeToIso(local: string): string | null {
+  if (!local) return null;
+  const d = new Date(local);
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
 interface TaskDetailPanelProps {
   taskId: string | null;
   onClose: () => void;
@@ -45,6 +65,7 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated, onNavigate }: 
   const [priority, setPriority] = useState('');
   const [delegateTo, setDelegateTo] = useState('');
   const [deadline, setDeadline] = useState('');
+  const [completedAt, setCompletedAt] = useState('');
   const [requester, setRequester] = useState('');
   const [followUpNote, setFollowUpNote] = useState('');
   const [saving, setSaving] = useState(false);
@@ -66,6 +87,7 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated, onNavigate }: 
       setPriority(taskData.priority);
       setDelegateTo(taskData.delegate_to ?? '');
       setDeadline(taskData.deadline?.slice(0, 10) ?? '');
+      setCompletedAt(isoToLocalDateTime(taskData.completed_at));
       setRequester(taskData.requester ?? '');
       setFollowUpNote(taskData.follow_up_note ?? '');
 
@@ -179,6 +201,7 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated, onNavigate }: 
           title, description: description || null,
           delegate_to: delegateTo || null,
           deadline: deadline || null,
+          completed_at: localDateTimeToIso(completedAt),
           requester: requester || null,
           follow_up_note: followUpNote || null,
         }),
@@ -251,7 +274,7 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated, onNavigate }: 
                   {task.source === 'notion' && <Badge className="bg-black text-white text-[10px] px-1.5 py-0 rounded">Notion</Badge>}
                   {task.source === 'slack' && <Badge className="bg-purple-600 text-white text-[10px] px-1.5 py-0 rounded">Slack</Badge>}
                   {task.source === 'notion' && task.notion_task_id && (
-                    <a href={getNotionPageUrl(task.notion_task_id)} target="_blank" rel="noopener noreferrer"
+                    <a href={task.notion_url ?? getNotionPageUrl(task.notion_task_id)} target="_blank" rel="noopener noreferrer"
                        className="text-xs text-primary hover:underline flex items-center gap-1">
                       <ExternalLink className="h-3 w-3" /> Notion에서 보기
                     </a>
@@ -455,21 +478,35 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated, onNavigate }: 
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label className="text-xs text-muted-foreground">위임 대상</Label>
-                  <Input value={delegateTo} onChange={(e) => setDelegateTo(e.target.value)} placeholder="담당자 이름" />
-                </div>
-                <div>
                   <Label className="text-xs text-muted-foreground">마감일</Label>
                   <Input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs text-muted-foreground">요청자</Label>
                   <Input value={requester} onChange={(e) => setRequester(e.target.value)} placeholder="요청자 없음" />
                 </div>
               </div>
+
+              {(status === '위임' || status === '완료') && (
+                <div className="grid grid-cols-2 gap-3">
+                  {status === '위임' && (
+                    <div>
+                      <Label className="text-xs text-muted-foreground">위임 대상</Label>
+                      <Input value={delegateTo} onChange={(e) => setDelegateTo(e.target.value)} placeholder="담당자 이름" />
+                    </div>
+                  )}
+                  {status === '완료' && (
+                    <div>
+                      <Label className="text-xs text-muted-foreground">완료일시</Label>
+                      <Input
+                        type="datetime-local"
+                        value={completedAt}
+                        onChange={(e) => setCompletedAt(e.target.value)}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
 
               <Separator />
 

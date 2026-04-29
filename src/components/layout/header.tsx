@@ -5,7 +5,8 @@ import { useTheme } from 'next-themes';
 import { buttonVariants } from '@/components/ui/button';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { Plus, Moon, Sun, Menu } from 'lucide-react';
+import { Plus, Moon, Sun, Menu, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
+import { broadcastTreeSetAll } from '@/lib/use-tree-collapsed';
 import {
   Sheet,
   SheetContent,
@@ -88,6 +89,24 @@ export function Header() {
           <h2 className="text-[15px] font-semibold tracking-[-0.012em]">{title}</h2>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => broadcastTreeSetAll(false)}
+            aria-label="전체 펼치기"
+            title="전체 펼치기"
+          >
+            <ChevronsUpDown className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => broadcastTreeSetAll(true)}
+            aria-label="전체 접기"
+            title="전체 접기"
+          >
+            <ChevronsDownUp className="h-4 w-4" />
+          </Button>
           <Button
             variant="ghost"
             size="icon"
