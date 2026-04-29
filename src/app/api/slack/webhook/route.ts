@@ -17,15 +17,16 @@ async function verifySlackSignature(request: NextRequest, body: string): Promise
 
 export async function POST(request: NextRequest) {
   const body = await request.text();
-
-  const isValid = await verifySlackSignature(request, body);
-  if (!isValid) return NextResponse.json({ error: 'Invalid signature' }, { status: 403 });
-
   const payload = JSON.parse(body);
 
+  // url_verification은 서명 검증 전에 먼저 처리 — Slack이 URL 등록 시
+  // 서명 없이 challenge를 보내는 경우에도 응답할 수 있어야 한다.
   if (payload.type === 'url_verification') {
     return NextResponse.json({ challenge: payload.challenge });
   }
+
+  const isValid = await verifySlackSignature(request, body);
+  if (!isValid) return NextResponse.json({ error: 'Invalid signature' }, { status: 403 });
 
   if (payload.type !== 'event_callback') {
     return NextResponse.json({ ok: true });
