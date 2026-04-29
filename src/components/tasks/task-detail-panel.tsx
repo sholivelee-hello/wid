@@ -265,11 +265,6 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated, onNavigate }: 
                   }}
                   className="text-lg font-bold tracking-[-0.025em] border border-transparent hover:border-border focus:border-border px-2 py-1 rounded transition-colors shadow-none focus-visible:ring-1"
                 />
-                {task.notion_issue && (
-                  <div className="text-xs text-muted-foreground/70 mt-0.5 truncate">
-                    {task.notion_issue}
-                  </div>
-                )}
                 <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
                   {task.source === 'notion' && <Badge className="bg-black text-white text-[10px] px-1.5 py-0 rounded">Notion</Badge>}
                   {task.source === 'slack' && <Badge className="bg-purple-600 text-white text-[10px] px-1.5 py-0 rounded">Slack</Badge>}

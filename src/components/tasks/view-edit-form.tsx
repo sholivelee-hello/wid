@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PRIORITIES, STATUS_COLORS } from '@/lib/constants';
 import { TASK_STATUSES } from '@/lib/types';
-import { makeViewId, type CustomTaskView } from '@/lib/custom-views';
+import { makeViewId, type CustomTaskView, type SortKey } from '@/lib/custom-views';
 import { cn } from '@/lib/utils';
 
 interface ViewEditFormProps {
@@ -19,7 +19,7 @@ export function ViewEditForm({ initial, onSave, onCancel }: ViewEditFormProps) {
   const [name, setName] = useState(initial?.name ?? '');
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>(initial?.statuses ?? []);
   const [selectedPriorities, setSelectedPriorities] = useState<string[]>(initial?.priorities ?? []);
-  const [sortBy, setSortBy] = useState<'priority' | 'deadline' | 'created_at'>(initial?.sortBy ?? 'priority');
+  const [sortBy, setSortBy] = useState<SortKey>(initial?.sortBy ?? 'priority');
 
   const toggleStatus = (original: string) =>
     setSelectedStatuses(prev =>
@@ -113,7 +113,7 @@ export function ViewEditForm({ initial, onSave, onCancel }: ViewEditFormProps) {
       {/* Sort */}
       <div className="flex items-center gap-2">
         <p className="text-[11px] text-muted-foreground shrink-0">정렬:</p>
-        <Select value={sortBy} onValueChange={v => setSortBy(v as typeof sortBy)}>
+        <Select value={sortBy} onValueChange={v => setSortBy(v as SortKey)}>
           <SelectTrigger className="h-7 text-xs w-36">
             <SelectValue />
           </SelectTrigger>

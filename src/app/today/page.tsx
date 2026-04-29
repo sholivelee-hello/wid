@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { Issue, Task, TaskStatus, isTaskDone } from '@/lib/types';
+import type { GCalEvent } from '@/lib/types';
 import { TaskBranch } from '@/components/tasks/task-branch';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -17,10 +18,21 @@ import {
   addTodayTask,
 } from '@/lib/today-tasks';
 import type { TaskNode } from '@/lib/hierarchy';
-import { ChevronDown, Sun, GripVertical } from 'lucide-react';
+import { ChevronDown, Sun, GripVertical, CalendarDays, Video, MapPin } from 'lucide-react';
 import { TaskQuickCapture, type TaskQuickCaptureHandle } from '@/components/tasks/task-quick-capture';
 import { TaskDetailPanel } from '@/components/tasks/task-detail-panel';
 import { loadStatusOrder, saveStatusOrder, STATUS_ORDER_EVENT } from '@/lib/today-status-order';
+import {
+  getGCalConfig,
+  getActiveCalendarIds,
+  getCalendarColor,
+  getCalendarLabel,
+  GCAL_EMBED_EVENT,
+  DEFAULT_GCAL_CONFIG,
+  type GCalConfig,
+} from '@/lib/gcal-embed';
+import { isTokenExpired } from '@/lib/gcal-oauth';
+import { fetchEventsForRange } from '@/lib/gcal-events';
 import {
   DndContext,
   KeyboardSensor,
@@ -84,7 +96,12 @@ export default function TodayPage() {
   const [todayIds, setTodayIds] = useState<Set<string>>(() => getTodayTaskIds());
   const [statusOrder, setStatusOrder] = useState<TaskStatus[]>(() => loadStatusOrder());
   const [selectedDetailTaskId, setSelectedDetailTaskId] = useState<string | null>(null);
+  const [gcalConfig, setGcalConfig] = useState<GCalConfig>(DEFAULT_GCAL_CONFIG);
+  const [gcalEvents, setGcalEvents] = useState<GCalEvent[]>([]);
   const captureRef = useRef<TaskQuickCaptureHandle>(null);
+
+  // Stable today string — captured once on mount so it never drifts mid-session.
+  const [todayStr] = useState(() => new Date().toISOString().slice(0, 10));
 
   // Cross-tab + same-tab sync of the saved order.
   useEffect(() => {
@@ -96,6 +113,44 @@ export default function TodayPage() {
       window.removeEventListener('storage', refresh);
     };
   }, []);
+
+  // GCal config — SSR-safe: default until mount, then localStorage value.
+  useEffect(() => {
+    setGcalConfig(getGCalConfig());
+    const handler = () => setGcalConfig(getGCalConfig());
+    window.addEventListener(GCAL_EMBED_EVENT, handler);
+    return () => window.removeEventListener(GCAL_EMBED_EVENT, handler);
+  }, []);
+
+  // Fetch today's GCal events. Runs once on mount and whenever the config
+  // changes (user connects/disconnects calendar in settings).
+  const fetchGCalEvents = useCallback(async () => {
+    const config = getGCalConfig();
+    const activeIds = getActiveCalendarIds(config);
+    const oauthValid = config.oauth !== null && !isTokenExpired(config.oauth);
+    if (!oauthValid || activeIds.length === 0) {
+      setGcalEvents([]);
+      return;
+    }
+    try {
+      const events = await fetchEventsForRange(
+        config.oauth!.accessToken,
+        activeIds,
+        todayStr,
+        todayStr,
+      );
+      setGcalEvents(events);
+    } catch {
+      setGcalEvents([]);
+    }
+  }, [todayStr]);
+
+  useEffect(() => {
+    fetchGCalEvents();
+    const handler = () => void fetchGCalEvents();
+    window.addEventListener(GCAL_EMBED_EVENT, handler);
+    return () => window.removeEventListener(GCAL_EMBED_EVENT, handler);
+  }, [fetchGCalEvents]);
 
   const dndSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -312,6 +367,60 @@ export default function TodayPage() {
           setTasks(prev => [t, ...prev]);
         }}
       />
+
+      {/* 오늘 GCal 일정 — 캘린더 연동 시에만 표시. */}
+      {gcalEvents.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-[10px] font-semibold tracking-[0.1em] uppercase text-muted-foreground/60 flex items-center gap-1">
+            <CalendarDays className="h-3 w-3" aria-hidden />
+            오늘 일정
+          </p>
+          <div className="space-y-0.5">
+            {[...gcalEvents]
+              .sort((a, b) => (a.time ?? '').localeCompare(b.time ?? ''))
+              .map(ev => {
+                const color = getCalendarColor(ev.calendarId, gcalConfig);
+                const calLabel = getCalendarLabel(ev.calendarId, gcalConfig);
+                return (
+                  <div
+                    key={ev.id}
+                    className="flex items-center gap-2 py-1 px-2 rounded-md hover:bg-muted/40 transition-colors text-[13px]"
+                    title={calLabel}
+                  >
+                    <span
+                      className="h-2 w-2 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: color }}
+                      aria-hidden
+                    />
+                    <span className="text-muted-foreground tabular-nums text-[12px] min-w-[72px] shrink-0">
+                      {ev.time
+                        ? ev.endTime
+                          ? `${ev.time} – ${ev.endTime}`
+                          : ev.time
+                        : '종일'}
+                    </span>
+                    <span className="truncate flex-1">{ev.title}</span>
+                    {ev.meetLink && (
+                      <a
+                        href={ev.meetLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="화상 회의 링크"
+                        className="text-primary hover:text-primary/80 transition-colors shrink-0"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <Video className="h-3.5 w-3.5" />
+                      </a>
+                    )}
+                    {ev.location && !ev.meetLink && (
+                      <MapPin className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" aria-label={ev.location} />
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
 
       {loading && todayTasks.length === 0 ? (
         <div className="space-y-2">

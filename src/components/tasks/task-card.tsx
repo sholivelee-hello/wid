@@ -279,12 +279,6 @@ export function TaskCard({
               </span>
             </div>
 
-            {task.notion_issue && (
-              <div className="text-xs text-muted-foreground/70 truncate">
-                {task.notion_issue}
-              </div>
-            )}
-
             <div className="flex items-center gap-x-2.5 gap-y-1 text-xs flex-wrap text-muted-foreground">
               {task.deadline && (
                 <span className="inline-flex items-center gap-1">
