@@ -35,20 +35,33 @@ export async function POST(request: NextRequest) {
   const eventId = payload.event_id;
 
   const supabase = createServerSupabaseClient();
-  const { data: existing } = await supabase
-    .from('slack_events')
-    .select('event_id')
-    .eq('event_id', eventId)
-    .single();
-
-  if (existing) return NextResponse.json({ ok: true });
-
-  await supabase.from('slack_events').insert({ event_id: eventId });
 
   if (event.type !== 'reaction_added') return NextResponse.json({ ok: true });
 
   const triggerEmoji = process.env.SLACK_TRIGGER_EMOJI ?? 'send-away';
   const completeEmoji = process.env.SLACK_COMPLETE_EMOJI ?? '완료';
+
+  // Only events we will actually act on (trigger or complete) reach the
+  // dedup table — keeps slack_events meaningful as a "did inbound deliver"
+  // signal in settings.
+  if (event.reaction !== triggerEmoji && event.reaction !== completeEmoji) {
+    return NextResponse.json({ ok: true });
+  }
+
+  const { data: existing } = await supabase
+    .from('slack_events')
+    .select('event_id')
+    .eq('event_id', eventId)
+    .maybeSingle();
+
+  if (existing) return NextResponse.json({ ok: true });
+
+  const { error: dedupErr } = await supabase
+    .from('slack_events')
+    .insert({ event_id: eventId });
+  if (dedupErr) {
+    console.error('[slack/webhook] dedup insert failed', eventId, dedupErr);
+  }
 
   // Handle completion emoji
   if (event.reaction === completeEmoji) {
@@ -59,20 +72,20 @@ export async function POST(request: NextRequest) {
       .from('tasks')
       .select('id, status')
       .eq('slack_url', slackUrl)
-      .single();
+      .maybeSingle();
 
     if (existingTask && existingTask.status !== '완료') {
-      await supabase
+      const { error: completeErr } = await supabase
         .from('tasks')
         .update({ status: '완료', completed_at: new Date().toISOString() })
         .eq('id', existingTask.id);
+      if (completeErr) {
+        console.error('[slack/webhook] complete update failed', existingTask.id, completeErr);
+      }
     }
 
     return NextResponse.json({ ok: true });
   }
-
-  // Handle trigger emoji
-  if (event.reaction !== triggerEmoji) return NextResponse.json({ ok: true });
 
   const botToken = process.env.SLACK_BOT_TOKEN!;
 
@@ -101,7 +114,7 @@ export async function POST(request: NextRequest) {
 
   const slackUrl = `https://slack.com/archives/${event.item.channel}/p${event.item.ts.replace('.', '')}`;
 
-  await supabase.from('tasks').insert({
+  const { error: insertErr } = await supabase.from('tasks').insert({
     title: message.text?.slice(0, 200) || '(슬랙 메시지)',
     source: 'slack',
     slack_url: slackUrl,
@@ -110,6 +123,9 @@ export async function POST(request: NextRequest) {
     requester: senderName,
     requested_at: new Date(parseFloat(message.ts) * 1000).toISOString(),
   });
+  if (insertErr) {
+    console.error('[slack/webhook] task insert failed', slackUrl, insertErr);
+  }
 
   return NextResponse.json({ ok: true });
 }
