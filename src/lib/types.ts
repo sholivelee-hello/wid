@@ -15,9 +15,9 @@ export function normalizeStatus(s: unknown): TaskStatus {
 
 // 인박스/오늘 등에서 "처리된 것"으로 간주할 상태. 시각 처리(line-through,
 // opacity)와 활성 카운트 제외 양쪽에 동일 기준을 쓰기 위한 헬퍼.
-// 위임은 본인이 더 진행하지 않아도 되는 상태이므로 완료와 동일 취급.
+// 위임/취소는 본인이 더 진행하지 않아도 되는 상태이므로 완료와 동일 취급.
 export function isTaskDone(status: TaskStatus): boolean {
-  return status === '완료' || status === '위임';
+  return status === '완료' || status === '위임' || status === '취소';
 }
 
 export interface Issue {

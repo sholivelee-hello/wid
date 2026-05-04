@@ -1,6 +1,6 @@
 import { toast } from 'sonner';
 import { apiFetch } from './api';
-import type { Task } from './types';
+import { isTaskDone, type Task } from './types';
 
 const KEY = 'wid-today-task-ids';
 
@@ -77,7 +77,7 @@ export function findNextSiblingTask(current: Task, allTasks: Task[]): Task | nul
       t.id !== current.id &&
       t.issue_id === current.issue_id &&
       t.parent_task_id === current.parent_task_id &&
-      t.status !== '완료' &&
+      !isTaskDone(t.status) &&
       t.position > current.position,
     )
     .sort((a, b) => a.position - b.position);

@@ -15,6 +15,59 @@ async function verifySlackSignature(request: NextRequest, body: string): Promise
   return crypto.timingSafeEqual(Buffer.from(mySignature), Buffer.from(slackSignature));
 }
 
+// Slack user.info → 한국어 display name 우선. real_name(영문) → username → ID 순.
+async function fetchSlackUserName(userId: string, botToken: string): Promise<string> {
+  try {
+    const res = await fetch(`https://slack.com/api/users.info?user=${userId}`, {
+      headers: { Authorization: `Bearer ${botToken}` },
+    });
+    const data = await res.json();
+    if (!data.ok) return userId;
+    const profile = data.user?.profile;
+    return (
+      profile?.display_name?.trim() ||
+      profile?.real_name?.trim() ||
+      data.user?.real_name ||
+      data.user?.name ||
+      userId
+    );
+  } catch {
+    return userId;
+  }
+}
+
+// Slack 메시지 텍스트의 markup을 사람이 읽을 수 있는 형태로 변환.
+// - <@U_ID> / <@U_ID|name> → 한국어 display name (users.info 조회)
+// - <#C_ID|channel> → #channel
+// - <!here> / <!channel> / <!everyone> → @here 등
+// - <!subteam^S_ID|@group> → @group
+// - <URL|text> → text, <URL> → URL
+async function resolveSlackText(text: string, botToken: string): Promise<string> {
+  if (!text) return text;
+  let result = text;
+
+  const userIds = new Set<string>();
+  for (const m of text.matchAll(/<@([UW][A-Z0-9]+)(?:\|[^>]*)?>/g)) {
+    userIds.add(m[1]);
+  }
+  const nameById = new Map<string, string>();
+  await Promise.all(
+    [...userIds].map(async id => {
+      nameById.set(id, await fetchSlackUserName(id, botToken));
+    }),
+  );
+  result = result.replace(/<@([UW][A-Z0-9]+)(?:\|[^>]*)?>/g, (_, id) => `@${nameById.get(id) ?? id}`);
+
+  result = result.replace(/<#[CG][A-Z0-9]+\|([^>]+)>/g, '#$1');
+  result = result.replace(/<!subteam\^[A-Z0-9]+\|@?([^>]+)>/g, '@$1');
+  result = result.replace(/<!(here|channel|everyone)>/g, '@$1');
+  result = result.replace(/<((?:https?:)?\/\/[^|>]+)\|([^>]+)>/g, '$2');
+  result = result.replace(/<((?:https?:)?\/\/[^>]+)>/g, '$1');
+  result = result.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+
+  return result;
+}
+
 export async function POST(request: NextRequest) {
   const body = await request.text();
   const payload = JSON.parse(body);
@@ -36,6 +89,38 @@ export async function POST(request: NextRequest) {
   const eventId = payload.event_id;
 
   const supabase = createServerSupabaseClient();
+
+  // Jira relay channel: bot messages forwarded via Workflow Builder
+  if (event.type === 'message' && event.bot_id) {
+    const relayChannel = process.env.SLACK_JIRA_RELAY_CHANNEL;
+    if (!relayChannel || event.channel !== relayChannel) return NextResponse.json({ ok: true });
+
+    const { data: existing } = await supabase
+      .from('slack_events')
+      .select('event_id')
+      .eq('event_id', eventId)
+      .maybeSingle();
+    if (existing) return NextResponse.json({ ok: true });
+    await supabase.from('slack_events').insert({ event_id: eventId });
+
+    const rawText: string = event.text || event.attachments?.[0]?.text || event.attachments?.[0]?.fallback || '(Jira 알림)';
+    const botToken = process.env.SLACK_BOT_TOKEN;
+    const resolvedText = botToken ? await resolveSlackText(rawText, botToken) : rawText;
+    const slackUrl = `https://slack.com/archives/${event.channel}/p${(event.ts as string).replace('.', '')}`;
+
+    const { error: insertErr } = await supabase.from('tasks').insert({
+      title: resolvedText.slice(0, 200),
+      source: 'slack',
+      slack_url: slackUrl,
+      slack_channel: 'jira-relay',
+      slack_sender: 'Jira',
+      requester: 'Jira',
+      requested_at: new Date(parseFloat(event.ts as string) * 1000).toISOString(),
+    });
+    if (insertErr) console.error('[slack/webhook] jira relay insert failed', slackUrl, insertErr);
+
+    return NextResponse.json({ ok: true });
+  }
 
   if (event.type !== 'reaction_added') return NextResponse.json({ ok: true });
 
@@ -106,17 +191,13 @@ export async function POST(request: NextRequest) {
   const channelData = await channelRes.json();
   const channelName = channelData.channel?.name ?? event.item.channel;
 
-  const userRes = await fetch(
-    `https://slack.com/api/users.info?user=${message.user}`,
-    { headers: { Authorization: `Bearer ${botToken}` } }
-  );
-  const userData = await userRes.json();
-  const senderName = userData.user?.real_name ?? userData.user?.name ?? message.user;
+  const senderName = await fetchSlackUserName(message.user, botToken);
+  const resolvedText = await resolveSlackText(message.text ?? '', botToken);
 
   const slackUrl = `https://slack.com/archives/${event.item.channel}/p${event.item.ts.replace('.', '')}`;
 
   const { error: insertErr } = await supabase.from('tasks').insert({
-    title: message.text?.slice(0, 200) || '(슬랙 메시지)',
+    title: resolvedText.slice(0, 200) || '(슬랙 메시지)',
     source: 'slack',
     slack_url: slackUrl,
     slack_channel: channelName,
