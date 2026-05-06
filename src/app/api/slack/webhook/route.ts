@@ -16,24 +16,45 @@ async function verifySlackSignature(request: NextRequest, body: string): Promise
 }
 
 // Slack user.info → 한국어 display name 우선. real_name(영문) → username → ID 순.
+// users.info 실패 시 (예: missing_scope) Vercel 로그에 원인을 남겨야 진단 가능.
 async function fetchSlackUserName(userId: string, botToken: string): Promise<string> {
   try {
     const res = await fetch(`https://slack.com/api/users.info?user=${userId}`, {
       headers: { Authorization: `Bearer ${botToken}` },
     });
     const data = await res.json();
-    if (!data.ok) return userId;
+    if (!data.ok) {
+      console.error('[slack/webhook] users.info failed', { userId, error: data.error, needed: data.needed });
+      return userId;
+    }
     const profile = data.user?.profile;
-    return (
+    const name =
       profile?.display_name?.trim() ||
       profile?.real_name?.trim() ||
       data.user?.real_name ||
       data.user?.name ||
-      userId
-    );
-  } catch {
+      '';
+    if (!name) {
+      console.error('[slack/webhook] users.info empty name', { userId, user: data.user });
+      return userId;
+    }
+    return name;
+  } catch (e) {
+    console.error('[slack/webhook] users.info threw', userId, e);
     return userId;
   }
+}
+
+// 메시지 객체에 이미 박혀있을 수 있는 user_profile fallback. conversations.history 응답에
+// 가끔 message.user_profile이 동봉돼 오므로 users.info 실패해도 여기서 건질 수 있다.
+function nameFromMessageProfile(message: {
+  user?: string;
+  user_profile?: { display_name?: string; real_name?: string; name?: string };
+}): string | null {
+  const p = message.user_profile;
+  if (!p) return null;
+  const name = p.display_name?.trim() || p.real_name?.trim() || p.name?.trim() || '';
+  return name || null;
 }
 
 // Slack 메시지 텍스트의 markup을 사람이 읽을 수 있는 형태로 변환.
@@ -191,7 +212,10 @@ export async function POST(request: NextRequest) {
   const channelData = await channelRes.json();
   const channelName = channelData.channel?.name ?? event.item.channel;
 
-  const senderName = await fetchSlackUserName(message.user, botToken);
+  // 1순위: 메시지에 user_profile이 동봉돼 있으면 그걸 그대로 (users.info 호출도 안 필요)
+  // 2순위: users.info 호출 (display_name 우선)
+  const senderName =
+    nameFromMessageProfile(message) ?? (await fetchSlackUserName(message.user, botToken));
   const resolvedText = await resolveSlackText(message.text ?? '', botToken);
 
   const slackUrl = `https://slack.com/archives/${event.item.channel}/p${event.item.ts.replace('.', '')}`;
