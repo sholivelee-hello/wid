@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { TaskNode } from '@/lib/hierarchy';
 import { isTaskDone, type TaskStatus } from '@/lib/types';
 import { lockedSiblings, completionBlocked, incompleteChildCount } from '@/lib/lock-state';
@@ -214,13 +215,21 @@ export function TaskBranch({
   const blockedCount = incompleteChildCount(node);
   const hasChildren = node.children.length > 0;
 
-  const handleComplete = blocked
-    ? () => {/* blocked: no-op */}
-    : onComplete;
+  // blocked일 때는 onComplete를 undefined로 넘겨서 TaskCard 자체의 disabled
+  // UX(opacity-50 + cursor-not-allowed + 툴팁)가 켜지게 한다. 빈 함수를 넘기면
+  // TaskCard가 disabled로 인식하지 못해서 동그라미가 클릭되는 듯 보이고 아무
+  // 일도 안 일어나 사용자가 혼란스러워했던 게 원인.
+  const handleComplete = blocked ? undefined : onComplete;
   const handleStatusChange = blocked
     ? (id: string, status: TaskStatus) => {
-        // 하위 task 미완료 상태에서 부모를 처리됨(완료/위임)으로 바꾸지 못하게.
-        if (isTaskDone(status)) return;
+        // 하위 task 미완료 상태에서 부모를 처리됨(완료/위임/취소)으로 바꾸지 못하게.
+        // silent fail 대신 toast로 이유를 알려서 사용자가 다음 액션을 알 수 있게.
+        if (isTaskDone(status)) {
+          toast(`하위 task ${blockedCount}개가 아직 안 끝났어요`, {
+            description: '하위를 모두 처리한 뒤 부모를 처리해 주세요.',
+          });
+          return;
+        }
         onStatusChange(id, status);
       }
     : onStatusChange;
