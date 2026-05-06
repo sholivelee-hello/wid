@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { TaskNode } from '@/lib/hierarchy';
-import { isTaskDone, type TaskStatus } from '@/lib/types';
+import { isTaskDone, type Task, type TaskStatus } from '@/lib/types';
 import { lockedSiblings, completionBlocked, incompleteChildCount } from '@/lib/lock-state';
 import { TaskCard } from '@/components/tasks/task-card';
 import { useCollapsed } from '@/lib/use-tree-collapsed';
@@ -70,13 +70,26 @@ function AddSubTaskRow({
     if (!t || busy) return;
     setBusy(true);
     try {
+      // Append after the parent's existing sub-tasks. Server defaults to 0,
+      // which would stack new sub-tasks at the top — opposite of what users
+      // expect for a checklist.
+      let nextPosition = 0;
+      try {
+        const siblings = await apiFetch<Task[]>(
+          `/api/tasks?parent_task_id=${parentId}&deleted=false`,
+          { suppressToast: true },
+        );
+        nextPosition = siblings.reduce((m, s) => Math.max(m, s.position), -1) + 1;
+      } catch {
+        // Fall through with position 0 — visual order is the only casualty.
+      }
       const created = await apiFetch<{ id: string }>('/api/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         // Explicit status — without this the mock-backend default used to
         // create tasks with a status outside TASK_STATUSES, which then got
         // silently filtered out of the Today page's status groups.
-        body: JSON.stringify({ title: t, parent_task_id: parentId, issue_id: null, status: '등록' }),
+        body: JSON.stringify({ title: t, parent_task_id: parentId, issue_id: null, status: '등록', position: nextPosition }),
         suppressToast: true,
       });
       if (addToToday && created?.id) addTodayTask(created.id);

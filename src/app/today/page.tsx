@@ -16,6 +16,8 @@ import {
   getEffectiveTodayTaskIds,
   promptNextInTodayIfNeeded,
   addTodayTask,
+  pruneStaleTodayIds,
+  saveTodayTaskIds,
 } from '@/lib/today-tasks';
 import type { TaskNode } from '@/lib/hierarchy';
 import { ChevronDown, Sun, GripVertical, CalendarDays, Video, MapPin } from 'lucide-react';
@@ -183,6 +185,13 @@ export default function TodayPage() {
       ]);
       setTasks(taskData);
       setIssues(issueData);
+      // Drop yesterday's done explicit ids so /today doesn't accumulate stale 완료 entries.
+      const explicit = getTodayTaskIds();
+      const pruned = pruneStaleTodayIds(explicit, taskData);
+      if (pruned !== explicit) {
+        saveTodayTaskIds(pruned);
+        setTodayIds(pruned);
+      }
     } catch {}
     finally { setLoading(false); }
   }, []);

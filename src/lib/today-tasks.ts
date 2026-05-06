@@ -35,6 +35,42 @@ export function addTodayTask(id: string) {
   saveTodayTaskIds(ids);
 }
 
+function localDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * Drop explicit ids whose task was completed *before* today (local date), or
+ * whose task no longer exists. Tasks completed today stay so the user still
+ * sees their 오늘 완료 tally. Pure — caller persists if the set changed.
+ *
+ * Why: explicit set lives in localStorage and never auto-clears; without this,
+ * yesterday's done tasks keep showing up in /today's 완료 section forever.
+ */
+export function pruneStaleTodayIds(
+  explicitIds: Set<string>,
+  tasks: Task[],
+): Set<string> {
+  if (explicitIds.size === 0) return explicitIds;
+  const todayStr = localDateStr(new Date());
+  const byId = new Map(tasks.map(t => [t.id, t] as const));
+  const out = new Set<string>();
+  let changed = false;
+  for (const id of explicitIds) {
+    const t = byId.get(id);
+    if (!t || t.is_deleted) { changed = true; continue; }
+    if (isTaskDone(t.status) && t.completed_at) {
+      const completedStr = localDateStr(new Date(t.completed_at));
+      if (completedStr < todayStr) { changed = true; continue; }
+    }
+    out.add(id);
+  }
+  return changed ? out : explicitIds;
+}
+
 /**
  * Effective Today set = explicit ids ∪ all descendants (children, grandchildren…)
  * of those explicit ids. Adding a parent TASK to Today implicitly pulls its
