@@ -2,7 +2,7 @@ export type Priority = '긴급' | '높음' | '보통' | '낮음';
 export type Source = 'manual' | 'notion' | 'slack';
 export type SortMode = 'checklist' | 'sequential';
 
-export const TASK_STATUSES = ['등록', '진행중', '대기중', '완료', '위임', '취소'] as const;
+export const TASK_STATUSES = ['등록', '완료', '위임', '취소'] as const;
 export type TaskStatus = typeof TASK_STATUSES[number];
 
 export function isTaskStatus(v: unknown): v is TaskStatus {

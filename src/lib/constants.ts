@@ -1,4 +1,4 @@
-import { Clock, PlayCircle, CheckCircle2, UserCheck, XCircle, PauseCircle, LucideIcon } from 'lucide-react';
+import { Clock, CheckCircle2, UserCheck, XCircle, LucideIcon } from 'lucide-react';
 import { TASK_STATUSES, type TaskStatus } from '@/lib/types';
 
 /** Canonical status list — same as TASK_STATUSES, re-exported for convenience. */
@@ -10,8 +10,6 @@ export const SOURCES = ['manual', 'notion', 'slack'] as const;
 
 export const STATUS_ICONS: Record<TaskStatus, LucideIcon> = {
   '등록': Clock,
-  '진행중': PlayCircle,
-  '대기중': PauseCircle,
   '완료': CheckCircle2,
   '위임': UserCheck,
   '취소': XCircle,
@@ -19,8 +17,6 @@ export const STATUS_ICONS: Record<TaskStatus, LucideIcon> = {
 
 export const STATUS_COLORS: Record<TaskStatus, string> = {
   '등록': '#6B7280',
-  '진행중': '#3B82F6',
-  '대기중': '#F59E0B',
   '완료': '#10B981',
   '위임': '#8B5CF6',
   '취소': '#9CA3AF',
