@@ -1,4 +1,4 @@
-export type Source = 'manual' | 'notion' | 'slack';
+export type Source = 'manual' | 'notion' | 'slack' | 'jira';
 export type SortMode = 'checklist' | 'sequential';
 
 // 상태값은 등록(기본) · 완료 · 취소 3개로 단순화. 위임은 status가 아니라
@@ -56,6 +56,7 @@ export interface Task {
   sort_mode: SortMode;
   position: number;
   pending_at: string | null;
+  name_locked: boolean;
   is_deleted: boolean;
 }
 
