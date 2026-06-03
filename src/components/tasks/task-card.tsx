@@ -25,6 +25,7 @@ import { formatDate, cn, getNotionPageUrl } from '@/lib/utils';
 import { toggleTodayTask, getTodayTaskIds } from '@/lib/today-tasks';
 import { TaskInlineEditor } from '@/components/tasks/task-inline-editor';
 import { getTaskWeight } from '@/lib/task-weight';
+import { sourceOpenUrl } from '@/components/tasks/source-icon';
 import {
   Circle,
   CheckCircle2,
@@ -137,8 +138,18 @@ export function TaskCard({
   // 우클릭 컨텍스트 메뉴 — 카드가 이미 가진 액션만 그대로 노출(새 로직 없음).
   // 인라인 에디터가 열려 있을 때는 렌더하지 않아 텍스트 입력 중 브라우저 기본
   // 우클릭(맞춤법 등)이 그대로 동작한다.
+  const openUrl = sourceOpenUrl(task);
   const contextMenuContent = (
     <ContextMenuContent>
+      {openUrl && (
+        <>
+          <ContextMenuItem onClick={() => window.open(openUrl, '_blank', 'noopener,noreferrer')}>
+            <ExternalLink />
+            원본 열기
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+        </>
+      )}
       <ContextMenuItem
         disabled={completeBlocked}
         onClick={() => {
