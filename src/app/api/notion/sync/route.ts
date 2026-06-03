@@ -124,6 +124,36 @@ export async function POST() {
     if (dataSourceIds.length === 0) continue;
 
     for (const dataSourceId of dataSourceIds) {
+      // Resolve which status options Notion counts as "done" from the data
+      // source schema: every option in the canonical 'Complete' group (e.g.
+      // 완료, 임시조치 완료). Falls back to literal '완료' if the schema
+      // fetch fails or the DB has no status property.
+      let statusPropName: string | null = null;
+      const doneStatusNames = new Set<string>();
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const dsMeta: any = await notion.dataSources.retrieve({
+          data_source_id: dataSourceId,
+        });
+        for (const [name, prop] of Object.entries(dsMeta?.properties ?? {})) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const p: any = prop;
+          if (p?.type !== 'status') continue;
+          statusPropName = name;
+          const completeIds = new Set<string>(
+            (p.status?.groups ?? [])
+              .filter((g: { name?: string }) => g?.name === 'Complete')
+              .flatMap((g: { option_ids?: string[] }) => g?.option_ids ?? []),
+          );
+          for (const o of p.status?.options ?? []) {
+            if (completeIds.has(o?.id)) doneStatusNames.add(o?.name);
+          }
+          break;
+        }
+      } catch {
+        // schema fetch failure → name-based fallback below
+      }
+
       let hasMore = true;
       let cursor: string | undefined;
 
@@ -186,6 +216,22 @@ export async function POST() {
         if (!assignees.includes(ASSIGNEE_FILTER)) continue;
         total++;
 
+        // Notion 상태가 Complete 그룹이면 WID에서도 완료로 본다.
+        const statusProp =
+          (statusPropName ? props[statusPropName] : undefined) ??
+          props['상태'] ?? props['Status'];
+        let notionDone = false;
+        if (statusProp?.type === 'status') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const statusName: string = (statusProp as any).status?.name ?? '';
+          notionDone = doneStatusNames.size > 0
+            ? doneStatusNames.has(statusName)
+            : statusName === '완료';
+        }
+        // Notion이 완료 시점을 따로 주지 않으므로 마지막 수정 시각으로 근사
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const notionEditedAt: string | null = (page as any).last_edited_time ?? null;
+
         // Requester comes from a separate property (요청자/Requester) — never the assignee.
         const requesterProp = props['요청자'] ?? props['Requester'];
         let requester: string | null = null;
@@ -224,7 +270,7 @@ export async function POST() {
 
         const { data: existing } = await supabase
           .from('tasks')
-          .select('id, title, deadline, issue_id, requester, notion_url')
+          .select('id, title, deadline, issue_id, requester, notion_url, status')
           .eq('notion_task_id', page.id)
           .maybeSingle();
 
@@ -235,6 +281,13 @@ export async function POST() {
           if (existing.requester !== requester) updates.requester = requester;
           if (notionUrl && existing.notion_url !== notionUrl) {
             updates.notion_url = notionUrl;
+          }
+          // Notion에서 완료된 task는 WID에서도 자동 완료. one-way 동기화:
+          // Notion이 다시 미완료가 되어도 WID 완료를 되돌리지 않고,
+          // 이미 위임/취소된 task도 건드리지 않는다 (등록 → 완료만 전이).
+          if (notionDone && existing.status === '등록') {
+            updates.status = '완료';
+            updates.completed_at = notionEditedAt ?? new Date().toISOString();
           }
           // Only override issue_id when Notion provides a relation; preserve
           // the user's local linking otherwise.
@@ -255,9 +308,12 @@ export async function POST() {
             }
           }
         } else {
+          // 이미 Notion에서 완료된 task는 처음부터 완료 상태로 들여온다
+          // (인박스에 죽은 할 일이 활성으로 쌓이는 것 방지).
           const { error: insertErr } = await supabase.from('tasks').insert({
             title: title || '(제목 없음)',
-            status: '등록',
+            status: notionDone ? '완료' : '등록',
+            completed_at: notionDone ? notionEditedAt : null,
             source: 'notion',
             notion_task_id: page.id,
             notion_url: notionUrl,
