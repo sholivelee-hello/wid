@@ -71,7 +71,9 @@ export default function RootLayout({
               <div className="flex-1 flex flex-col overflow-hidden">
                 <Header />
                 <main id="main-content" className="flex-1 overflow-y-auto">
-                  <div className="px-4 md:px-6 py-4 md:py-6 animate-fade-in">
+                  {/* 콘텐츠 컬럼 720px 중앙 정렬 — 한국어 가독 폭(한 줄 40~50자).
+                    * 전폭 ERP 레이아웃 탈피, "비워둔다" 원칙 (spec 2026-06-03). */}
+                  <div className="mx-auto w-full max-w-[720px] px-4 md:px-6 py-4 md:py-6 animate-fade-in">
                     {children}
                   </div>
                 </main>
