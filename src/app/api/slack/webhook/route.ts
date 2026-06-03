@@ -15,9 +15,16 @@ async function verifySlackSignature(request: NextRequest, body: string): Promise
   return crypto.timingSafeEqual(Buffer.from(mySignature), Buffer.from(slackSignature));
 }
 
+// Module-level cache: 같은 유저를 반복 조회하지 않도록 ID→이름 매핑을 보관.
+// 성공적으로 해석된 이름만 캐시한다 (실패 시 ID를 반환하지만 캐시하지 않아,
+// users:read scope이 나중에 부여되면 다음 호출에서 다시 시도된다).
+const userNameCache = new Map<string, string>();
+
 // Slack user.info → 한국어 display name 우선. real_name(영문) → username → ID 순.
 // users.info 실패 시 (예: missing_scope) Vercel 로그에 원인을 남겨야 진단 가능.
 async function fetchSlackUserName(userId: string, botToken: string): Promise<string> {
+  const cached = userNameCache.get(userId);
+  if (cached) return cached;
   try {
     const res = await fetch(`https://slack.com/api/users.info?user=${userId}`, {
       headers: { Authorization: `Bearer ${botToken}` },
@@ -38,6 +45,7 @@ async function fetchSlackUserName(userId: string, botToken: string): Promise<str
       console.error('[slack/webhook] users.info empty name', { userId, user: data.user });
       return userId;
     }
+    userNameCache.set(userId, name);
     return name;
   } catch (e) {
     console.error('[slack/webhook] users.info threw', userId, e);
