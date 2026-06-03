@@ -5,12 +5,13 @@
  *  - light : 마감 없음 또는 7일 초과 → 작고 흐리게
  * 처리된(완료/위임/취소) task는 기존 line-through 처리가 우선이므로
  * 호출부에서 isTaskDone일 때 'normal'로 고정해 무게 스타일을 끈다.
+ * now는 호출부에서 mount 시점에 고정해 주입한다 (자정 넘김 시 카드 간 불일치 방지).
  */
 export type TaskWeight = 'heavy' | 'normal' | 'light';
 
-export function getTaskWeight(deadline: string | null): TaskWeight {
+export function getTaskWeight(deadline: string | null, now: Date = new Date()): TaskWeight {
   if (!deadline) return 'light';
-  const today = new Date();
+  const today = new Date(now);
   today.setHours(0, 0, 0, 0);
   const d = new Date(deadline);
   d.setHours(0, 0, 0, 0);

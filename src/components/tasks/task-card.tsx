@@ -83,9 +83,11 @@ export function TaskCard({
     if (onSelect) onSelect(task.id);
     else window.location.href = `/tasks/${task.id}`;
   };
+  // page.tsx의 todayStr 고정 패턴과 동일 — 자정 넘김 시 렌더마다 무게가 바뀌지 않게.
+  const [weightNow] = useState(() => new Date());
   const isDone = isTaskDone(task.status);
   // 마감일 기반 무게 — 처리된 task는 line-through가 우선이므로 normal 고정.
-  const weight = isDone ? 'normal' : getTaskWeight(task.deadline);
+  const weight = isDone ? 'normal' : getTaskWeight(task.deadline, weightNow);
 
   const [isTodayTask, setIsTodayTask] = useState(() => getTodayTaskIds().has(task.id));
   const [completePulse, setCompletePulse] = useState(0);

@@ -932,12 +932,13 @@ git commit -m "feat: 보류함 페이지 + 사이드바 메뉴"
  *  - light : 마감 없음 또는 7일 초과 → 작고 흐리게
  * 처리된(완료/위임/취소) task는 기존 line-through 처리가 우선이므로
  * 호출부에서 isTaskDone일 때 'normal'로 고정해 무게 스타일을 끈다.
+ * now는 호출부에서 mount 시점에 고정해 주입한다 (자정 넘김 시 카드 간 불일치 방지).
  */
 export type TaskWeight = 'heavy' | 'normal' | 'light';
 
-export function getTaskWeight(deadline: string | null): TaskWeight {
+export function getTaskWeight(deadline: string | null, now: Date = new Date()): TaskWeight {
   if (!deadline) return 'light';
-  const today = new Date();
+  const today = new Date(now);
   today.setHours(0, 0, 0, 0);
   const d = new Date(deadline);
   d.setHours(0, 0, 0, 0);
@@ -952,12 +953,20 @@ export function getTaskWeight(deadline: string | null): TaskWeight {
 
 `src/components/tasks/task-card.tsx`:
 
+적용 범위: TaskCard 공용 — 인박스 트리·/today·커스텀 뷰 모두 동일 적용 (구현 시 결정 2026-06-03: 카드 컴포넌트가 공용이라 화면별 분기보다 일관 적용이 단순·일관적).
+
 1. import 추가: `import { getTaskWeight } from '@/lib/task-weight';`
-2. `const isDone = isTaskDone(task.status);` 아래에:
+2. state 선언부에 mount 시점 고정 시계 추가 (자정 넘김 시 렌더마다 무게가 바뀌지 않게):
+
+```ts
+  const [weightNow] = useState(() => new Date());
+```
+
+3. `const isDone = isTaskDone(task.status);` 아래에:
 
 ```ts
   // 마감일 기반 무게 — 처리된 task는 line-through가 우선이므로 normal 고정.
-  const weight = isDone ? 'normal' : getTaskWeight(task.deadline);
+  const weight = isDone ? 'normal' : getTaskWeight(task.deadline, weightNow);
 ```
 
 3. heavy 왼쪽 키컬러 라인 — 기존 editing 인디케이터(131행)를 다음으로 교체:
