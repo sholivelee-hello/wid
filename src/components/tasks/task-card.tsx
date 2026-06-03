@@ -14,6 +14,7 @@ import { Task } from '@/lib/types';
 import { formatDate, cn, getNotionPageUrl } from '@/lib/utils';
 import { toggleTodayTask, getTodayTaskIds } from '@/lib/today-tasks';
 import { TaskInlineEditor } from '@/components/tasks/task-inline-editor';
+import { getTaskWeight } from '@/lib/task-weight';
 import {
   Circle,
   CheckCircle2,
@@ -83,6 +84,8 @@ export function TaskCard({
     else window.location.href = `/tasks/${task.id}`;
   };
   const isDone = isTaskDone(task.status);
+  // 마감일 기반 무게 — 처리된 task는 line-through가 우선이므로 normal 고정.
+  const weight = isDone ? 'normal' : getTaskWeight(task.deadline);
 
   const [isTodayTask, setIsTodayTask] = useState(() => getTodayTaskIds().has(task.id));
   const [completePulse, setCompletePulse] = useState(0);
@@ -132,7 +135,7 @@ export function TaskCard({
         }
       }}
     >
-      {editing && (
+      {(editing || (weight === 'heavy' && !isSubtask)) && (
         <span aria-hidden className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full bg-primary" />
       )}
       <div className={cn(isSubtask ? 'px-3 py-2' : 'px-3 py-3')}>
@@ -273,9 +276,13 @@ export function TaskCard({
                   'leading-snug truncate tracking-[-0.012em]',
                   isSubtask
                     ? 'text-[13px] font-normal text-foreground/80'
-                    : hasChildren
-                      ? 'text-[14.5px] font-semibold text-foreground'
-                      : 'text-[14px] font-medium text-foreground',
+                    : weight === 'heavy'
+                      ? 'text-[15px] font-bold text-foreground'
+                      : weight === 'light'
+                        ? 'text-[13px] font-normal text-foreground/60'
+                        : hasChildren
+                          ? 'text-[14.5px] font-semibold text-foreground'
+                          : 'text-[14px] font-medium text-foreground',
                   isDone && 'line-through text-muted-foreground',
                 )}
                 title={task.title}
@@ -286,7 +293,12 @@ export function TaskCard({
 
             <div className="flex items-center gap-x-2.5 gap-y-1 text-xs flex-wrap text-muted-foreground">
               {task.deadline && (
-                <span className="inline-flex items-center gap-1">
+                <span
+                  className={cn(
+                    'inline-flex items-center gap-1',
+                    weight === 'heavy' && !isDone && 'text-primary font-medium',
+                  )}
+                >
                   <CalendarDays className="h-3 w-3" aria-hidden="true" />
                   {formatDate(task.deadline, 'M월 d일')}{deadlineSuffix}
                 </span>
