@@ -44,7 +44,7 @@ export function IssuePicker({ open, onClose, currentIssueId, onPick, onCreate }:
       .catch(() => {});
   }, [open]);
 
-  // 한 ISSUE의 top-level task가 1개 이상이고 모두 처리됨(완료/위임)이면
+  // 한 ISSUE의 top-level task가 1개 이상이고 모두 처리됨(완료/취소)이면
   // close 상태로 본다. task가 없는 신규 ISSUE는 close가 아니다.
   const closedIssueIds = useMemo(() => {
     const tasksByIssue = new Map<string, Task[]>();

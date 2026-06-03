@@ -8,6 +8,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 import { STATUS_ICONS } from '@/lib/constants';
 import { TASK_STATUSES, type TaskStatus, isTaskDone } from '@/lib/types';
 import { Task } from '@/lib/types';
@@ -19,7 +29,6 @@ import {
   Circle,
   CheckCircle2,
   MoreHorizontal,
-  UserPlus,
   Trash2,
   ExternalLink,
   User,
@@ -29,6 +38,8 @@ import {
   MessageSquare,
   Sun,
   PauseCircle,
+  ListChecks,
+  Pencil,
 } from 'lucide-react';
 
 interface TaskCardProps {
@@ -59,6 +70,10 @@ interface TaskCardProps {
   editing?: boolean;
   /** Called by the inline editor when the user closes it (e.g. clicks 닫기). */
   onCloseEdit?: () => void;
+  /** Marks WHY this row appears where it does. 'deadline' = auto-included in
+   *  오늘 because its due date is today/past (spec 결정 4). Renders a small
+   *  "마감" pill before the title. */
+  reasonBadge?: 'deadline';
 }
 
 function Dot() {
@@ -78,6 +93,7 @@ export function TaskCard({
   breadcrumb,
   editing = false,
   onCloseEdit,
+  reasonBadge,
 }: TaskCardProps) {
   const openDetail = () => {
     if (onSelect) onSelect(task.id);
@@ -114,7 +130,95 @@ export function TaskCard({
     onStatusChange?.(task.id, val as TaskStatus);
   };
 
-  return (
+  // 완료 토글 가드 — completion 버튼과 동일 규칙: 핸들러가 없고 아직 미완료면
+  // (하위 task 미완료) 완료가 막힌다.
+  const completeBlocked = !onComplete && !isDone;
+
+  // 우클릭 컨텍스트 메뉴 — 카드가 이미 가진 액션만 그대로 노출(새 로직 없음).
+  // 인라인 에디터가 열려 있을 때는 렌더하지 않아 텍스트 입력 중 브라우저 기본
+  // 우클릭(맞춤법 등)이 그대로 동작한다.
+  const contextMenuContent = (
+    <ContextMenuContent>
+      <ContextMenuItem
+        disabled={completeBlocked}
+        onClick={() => {
+          if (completeBlocked) return;
+          setCompletePulse((p) => p + 1);
+          onComplete?.(task.id);
+        }}
+      >
+        {isDone ? (
+          <Circle className="text-muted-foreground" />
+        ) : (
+          <CheckCircle2 className="text-primary" />
+        )}
+        {isDone ? '완료 취소' : '완료'}
+      </ContextMenuItem>
+      <ContextMenuItem
+        onClick={() => {
+          setTodayPulse((p) => p + 1);
+          toggleTodayTask(task.id);
+        }}
+      >
+        <Sun className={cn(isTodayTask && 'fill-primary text-primary')} />
+        {isTodayTask ? '오늘에서 빼기' : '오늘로 보내기'}
+      </ContextMenuItem>
+
+      {onStatusChange && (
+        <ContextMenuSub>
+          <ContextMenuSubTrigger>
+            <ListChecks />
+            상태 변경
+          </ContextMenuSubTrigger>
+          <ContextMenuSubContent>
+            {TASK_STATUSES.map((s) => {
+              const Icon = STATUS_ICONS[s];
+              return (
+                <ContextMenuItem
+                  key={s}
+                  onClick={() => onStatusChange?.(task.id, s)}
+                >
+                  {Icon && <Icon className="text-muted-foreground" />}
+                  {s}
+                </ContextMenuItem>
+              );
+            })}
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+      )}
+
+      {onPend && (
+        <ContextMenuItem onClick={() => onPend(task.id)}>
+          <PauseCircle />
+          보류
+        </ContextMenuItem>
+      )}
+
+      <ContextMenuItem onClick={openDetail}>
+        <Pencil />
+        상세 열기
+      </ContextMenuItem>
+
+      {task.slack_url && (
+        <ContextMenuItem onClick={() => window.open(task.slack_url!, '_blank')}>
+          <ExternalLink />
+          Slack 보기
+        </ContextMenuItem>
+      )}
+
+      {onDelete && (
+        <>
+          <ContextMenuSeparator />
+          <ContextMenuItem variant="destructive" onClick={() => onDelete(task.id)}>
+            <Trash2 />
+            휴지통으로 이동
+          </ContextMenuItem>
+        </>
+      )}
+    </ContextMenuContent>
+  );
+
+  const card = (
     <div
       tabIndex={0}
       role="button"
@@ -144,7 +248,7 @@ export function TaskCard({
         <div className="flex items-center gap-3">
           {/* Completion toggle */}
           {(() => {
-            const blocked = !onComplete && !isDone;
+            const blocked = completeBlocked;
             return (
               <button
                 type="button"
@@ -271,6 +375,14 @@ export function TaskCard({
                   style={{ fontFeatureSettings: '"tnum"' }}
                 >
                   ↳
+                </span>
+              )}
+              {reasonBadge === 'deadline' && !isDone && (
+                <span
+                  className="inline-flex items-center flex-shrink-0 text-[10px] font-semibold tracking-wide px-1.5 h-[16px] rounded bg-primary/12 text-primary dark:bg-primary/20"
+                  title="마감일이 오늘이거나 지나서 자동으로 오늘에 포함됐어요"
+                >
+                  마감
                 </span>
               )}
               <span
@@ -400,15 +512,6 @@ export function TaskCard({
                 <MoreHorizontal className="h-4 w-4" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onStatusChange?.(task.id, '위임');
-                  }}
-                >
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  위임
-                </DropdownMenuItem>
                 {onPend && (
                   <DropdownMenuItem
                     onClick={(e) => { e.stopPropagation(); onPend(task.id); }}
@@ -444,5 +547,16 @@ export function TaskCard({
         )}
       </div>
     </div>
+  );
+
+  // 인라인 에디터가 열려 있으면 우클릭 메뉴를 끼우지 않는다 — 텍스트 필드에서
+  // 브라우저 기본 우클릭(맞춤법/복사 등)이 자연스럽게 뜨도록.
+  if (editing) return card;
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger render={card} />
+      {contextMenuContent}
+    </ContextMenu>
   );
 }

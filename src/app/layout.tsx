@@ -28,13 +28,16 @@ const pretendard = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "WID — What I Do",
+  // 창 제목은 군더더기 없이 "WID"만 — 미션 컨트롤/탭 라벨이 곧 식별자.
+  // (🟣 마커·"What I Do" 꼬리표는 사용자 결정으로 제거, 2026-06-03)
+  title: "WID",
   description: "개인 업무일지 시스템",
   // iOS 홈 화면 추가 시 앱 이름 (아이콘은 apple-icon.png 파일 컨벤션)
   appleWebApp: { title: "WID" },
 };
 
-// Safari 15+ 탭바·모바일 주소창을 키컬러로 틴트 — 탭 단위 식별 보조.
+// 설치형 웹앱 타이틀바 / Safari 탭바 / 모바일 주소창을 키컬러로 틴트.
+// 앱은 다크 전용이므로 단일 값.
 export const viewport: Viewport = {
   themeColor: "#7D74F8",
 };
@@ -51,7 +54,9 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+        {/* 다크 전용 앱 — 사용자 결정 (2026-06-03, 100% 다크모드 사용).
+          * forcedTheme로 항상 .dark 고정, 라이트 전환 경로 없음. */}
+        <ThemeProvider attribute="class" forcedTheme="dark" disableTransitionOnChange>
           <QuickCaptureProvider>
             <a
               href="#main-content"

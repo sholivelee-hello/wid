@@ -134,7 +134,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ id: stri
     return (
       <div className="p-6 space-y-3">
         <p className="text-sm text-muted-foreground">존재하지 않는 ISSUE입니다.</p>
-        <Link href="/" className="text-sm text-primary hover:underline">← 인박스로 돌아가기</Link>
+        <Link href="/inbox" className="text-sm text-primary hover:underline">← 인박스로 돌아가기</Link>
       </div>
     );
   }
@@ -147,7 +147,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ id: stri
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Link href="/" className="inline-flex items-center gap-1 hover:text-foreground transition-colors">
+        <Link href="/inbox" className="inline-flex items-center gap-1 hover:text-foreground transition-colors">
           <ChevronLeft className="h-3 w-3" />
           인박스
         </Link>
@@ -261,7 +261,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ id: stri
         onClose={() => setDeleting(false)}
         onDeleted={() => {
           setDeleting(false);
-          router.push('/');
+          router.push('/inbox');
         }}
       />
 

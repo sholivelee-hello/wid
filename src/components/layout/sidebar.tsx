@@ -7,9 +7,9 @@ import { cn } from '@/lib/utils';
 import {
   PanelLeftClose,
   PanelLeftOpen,
+  Settings,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
 import { navItems } from '@/lib/nav-items';
 
 export function Sidebar() {
@@ -51,31 +51,36 @@ export function Sidebar() {
     });
   };
 
+  const settingsActive = pathname.startsWith('/settings');
+
   return (
-    // 키컬러 기둥 — 웹앱(독립 창)으로 쓸 때 미션 컨트롤 썸네일에서
-    // "왼쪽 보라 기둥 = WID"로 즉시 식별되는 브랜드 표면 (사용자 결정 2026-06-03).
-    // v3 "한 화면 액센트 1개"의 그 1개가 사이드바 전체로 승격된 형태.
+    // 무채색 면 + hairline border (사용자 결정 2026-06-03, 보라 통판 폐기).
+    // 다크 100% 사용 기준 — 사이드바는 본문과 거의 같은 어두운 무채색 표면
+    // (--sidebar)으로 가라앉히고, 오른쪽 border만으로 본문과 구분한다.
+    // 브랜드 식별은 통판이 아니라 로고 옆 키컬러 dot 한 점이 담당. 그림자 0(v3).
     <aside
       className={cn(
-        'bg-primary p-4 flex flex-col gap-1 transition-all duration-200',
+        'bg-sidebar border-r border-sidebar-border text-sidebar-foreground p-4 flex flex-col gap-1 transition-all duration-200',
         collapsed ? 'w-16' : 'w-60'
       )}
     >
       {/* Logo + toggle */}
       <div className={cn('flex items-center justify-between px-2 py-3', collapsed && 'justify-center')}>
         {!collapsed && (
-          <Link href="/" aria-label="홈" className="group/logo inline-flex items-baseline gap-1 outline-none">
+          <Link href="/today" aria-label="홈 (오늘)" className="group/logo inline-flex items-baseline gap-1 outline-none">
             {/* Pretendard 900 + 극단 자간. serif 없이 단단한 wordmark.
-              * 키컬러 기둥 위라 흰색 반전. */}
+              * 워드마크 자체가 키컬러 — 미션 컨트롤 썸네일에서 좌상단 보라
+              * "WID" 글자가 창 식별 앵커 (top bar·🟣 제목 마커 폐기 후의
+              * 식별 장치, 사용자 결정 2026-06-03). */}
             <span
-              className="font-black text-[21px] leading-none tracking-[-0.055em] text-primary-foreground"
+              className="font-black text-[21px] leading-none tracking-[-0.055em] text-primary"
             >
               WID
             </span>
-            {/* 점은 배경과 같은 키컬러 대신 흰색 — 기둥 위에서의 시그니처. */}
+            {/* 키컬러 dot — 워드마크와 같은 톤의 마침표. */}
             <span
               aria-hidden
-              className="inline-block h-[6px] w-[6px] rounded-full translate-y-[-1px] bg-primary-foreground"
+              className="inline-block h-[6px] w-[6px] rounded-full translate-y-[-1px] bg-primary"
             />
           </Link>
         )}
@@ -83,48 +88,65 @@ export function Sidebar() {
           variant="ghost"
           size="icon"
           onClick={toggleCollapsed}
-          className="h-8 w-8 text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary-foreground/10"
+          className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
           aria-label={collapsed ? '사이드바 펼치기' : '사이드바 접기'}
         >
           {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
         </Button>
       </div>
       <nav className="flex flex-col gap-1 flex-1">
-        {navItems.map((item, idx) => {
-          if (item.separator) return <Separator key={`sep-${idx}`} className="my-2 bg-primary-foreground/20" />;
-          const isActive = item.href === '/'
-            ? pathname === '/'
-            : pathname.startsWith(item.href!);
+        {navItems.map((item) => {
+          const isActive = pathname.startsWith(item.href);
           return (
-            <div key={item.href}>
-              <Link
-                href={item.href!}
-                title={collapsed ? item.label : undefined}
-                className={cn(
-                  // 키컬러 기둥 위 — 위계는 흰색 불투명도로만: 활성 = 반투명 흰 배경
-                  // + 흰 레일, 비활성 = 70% 흰 글자. 라이트/다크 동일 (배경이 이미 brand).
-                  'relative flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-foreground/60',
-                  collapsed && 'justify-center px-0',
-                  isActive
-                    ? 'bg-primary-foreground/15 text-primary-foreground font-semibold'
-                    : 'hover:bg-primary-foreground/10 text-primary-foreground/70 hover:text-primary-foreground'
-                )}
-              >
-                {isActive && !collapsed && (
-                  <span aria-hidden className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full bg-primary-foreground" />
-                )}
-                {item.icon && <item.icon className="h-4 w-4 flex-shrink-0" />}
-                {!collapsed && item.label}
-                {!collapsed && item.label === '인박스' && inboxCount != null && inboxCount > 0 && (
-                  <span className="ml-auto text-[11px] font-semibold bg-primary-foreground text-primary rounded-full px-1.5 py-0.5 min-w-[20px] text-center tabular-nums">
-                    {inboxCount}
-                  </span>
-                )}
-              </Link>
-            </div>
+            <Link
+              key={item.href}
+              href={item.href}
+              title={collapsed ? item.label : undefined}
+              className={cn(
+                // 위계: 활성 = 은은한 pill(bg-sidebar-accent) + 흰 글자 + 3px 키컬러 레일.
+                // 컬러는 "현재 위치"를 가리키는 레일 한 줄에만 — 면은 무채색을 유지한다.
+                // 비활성 = muted-foreground, hover 시 미묘한 bg.
+                'relative flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                collapsed && 'justify-center px-0',
+                isActive
+                  ? 'bg-sidebar-accent text-foreground font-semibold'
+                  : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground'
+              )}
+            >
+              {isActive && !collapsed && (
+                <span aria-hidden className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full bg-primary" />
+              )}
+              <item.icon className={cn('h-4 w-4 flex-shrink-0', isActive && 'text-primary')} />
+              {!collapsed && item.label}
+              {!collapsed && item.label === '전체' && inboxCount != null && inboxCount > 0 && (
+                <span className="ml-auto text-[11px] font-semibold bg-primary/15 text-primary rounded-full px-1.5 py-0.5 min-w-[20px] text-center tabular-nums">
+                  {inboxCount}
+                </span>
+              )}
+            </Link>
           );
         })}
       </nav>
+
+      {/* 설정 — 글자 메뉴에서 빠지고 하단 고정 톱니바퀴 아이콘으로 (collapsed에서도 동일 위치). */}
+      <Link
+        href="/settings"
+        title="설정"
+        aria-label="설정"
+        className={cn(
+          'mt-auto relative flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          collapsed ? 'justify-center px-0' : '',
+          settingsActive
+            ? 'bg-sidebar-accent text-foreground font-semibold'
+            : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground'
+        )}
+      >
+        {settingsActive && !collapsed && (
+          <span aria-hidden className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full bg-primary" />
+        )}
+        <Settings className={cn('h-4 w-4 flex-shrink-0', settingsActive && 'text-primary')} />
+        {!collapsed && '설정'}
+      </Link>
     </aside>
   );
 }

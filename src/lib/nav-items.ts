@@ -2,26 +2,19 @@ import {
   Inbox,
   Sun,
   History,
-  Settings,
-  PauseCircle,
-  Trash2,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export type NavItem = {
-  href?: string;
-  label?: string;
-  icon?: LucideIcon;
-  separator?: boolean;
+  href: string;
+  label: string;
+  icon: LucideIcon;
 };
 
+// IA 단순화 (spec 2026-06-03): 메뉴 3개. 보류함·휴지통은 /inbox 보기 칩으로,
+// 설정은 사이드바 하단 톱니바퀴로 흡수.
 export const navItems: NavItem[] = [
-  { href: '/', label: '인박스', icon: Inbox },
   { href: '/today', label: '오늘', icon: Sun },
-  { separator: true },
-  { href: '/history', label: '히스토리', icon: History },
-  { href: '/settings', label: '설정', icon: Settings },
-  { separator: true },
-  { href: '/pending', label: '보류함', icon: PauseCircle },
-  { href: '/tasks/trash', label: '휴지통', icon: Trash2 },
+  { href: '/inbox', label: '전체', icon: Inbox },
+  { href: '/history', label: '돌아보기', icon: History },
 ];

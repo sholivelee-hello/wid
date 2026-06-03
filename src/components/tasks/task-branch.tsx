@@ -47,6 +47,9 @@ interface Props extends TaskBranchHandlers {
   /** Optional breadcrumb forwarded to TaskCard. Only the root TaskBranch in a
    *  flat list (e.g. Today) sets this; recursion does not propagate it. */
   breadcrumb?: { issueName?: string | null; parentTaskTitle?: string | null };
+  /** Reason this row appears where it does — forwarded to TaskCard. Set by the
+   *  Today page on deadline-auto roots; not propagated through recursion. */
+  reasonBadge?: 'deadline';
   /** Drag handle slot passed from parent SortableTaskItem. */
   dragHandle?: HandleSlot;
   /** When true, any task created via the inline AddSubTaskRow is auto-added
@@ -214,6 +217,7 @@ export function TaskBranch({
   editingTaskId,
   onCloseEdit,
   breadcrumb,
+  reasonBadge,
   dragHandle,
   addToTodayOnCreate = false,
   onStatusChange,
@@ -237,7 +241,7 @@ export function TaskBranch({
   const handleComplete = blocked ? undefined : onComplete;
   const handleStatusChange = blocked
     ? (id: string, status: TaskStatus) => {
-        // 하위 task 미완료 상태에서 부모를 처리됨(완료/위임/취소)으로 바꾸지 못하게.
+        // 하위 task 미완료 상태에서 부모를 처리됨(완료/취소)으로 바꾸지 못하게.
         // silent fail 대신 toast로 이유를 알려서 사용자가 다음 액션을 알 수 있게.
         if (isTaskDone(status)) {
           toast(`하위 task ${blockedCount}개가 아직 안 끝났어요`, {
@@ -351,6 +355,7 @@ export function TaskBranch({
             editing={editingTaskId === node.task.id}
             onCloseEdit={onCloseEdit}
             breadcrumb={breadcrumb}
+            reasonBadge={reasonBadge}
           />
           {blocked && (
             <div className="text-[10px] text-muted-foreground ml-3 mt-1 inline-flex items-center gap-1">

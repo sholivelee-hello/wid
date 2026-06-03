@@ -1,11 +1,10 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { useTheme } from 'next-themes';
 import { buttonVariants } from '@/components/ui/button';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { Plus, Moon, Sun, Menu, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
+import { Plus, Menu, ChevronsDownUp, ChevronsUpDown, Settings } from 'lucide-react';
 import { broadcastTreeSetAll } from '@/lib/use-tree-collapsed';
 import {
   Sheet,
@@ -15,27 +14,24 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
-import { Separator } from '@/components/ui/separator';
 import { navItems } from '@/lib/nav-items';
 import { useQuickCapture } from '@/components/tasks/quick-capture-provider';
 
 const pageTitles: Record<string, string> = {
-  '/': '인박스',
+  '/inbox': '전체',
   '/today': '오늘',
-  '/history': '히스토리',
+  '/history': '돌아보기',
   '/settings': '설정',
-  '/tasks/trash': '휴지통',
 };
 
 const getTitle = (path: string) => {
   if (pageTitles[path]) return pageTitles[path];
-  if (path.startsWith('/tasks/') && path !== '/tasks/trash') return 'task 상세';
+  if (path.startsWith('/tasks/')) return 'task 상세';
   return 'WID';
 };
 
 export function Header() {
   const pathname = usePathname();
-  const { setTheme, resolvedTheme } = useTheme();
   const { openModal } = useQuickCapture();
   const title = getTitle(pathname);
 
@@ -56,31 +52,36 @@ export function Header() {
             </SheetTrigger>
             <SheetContent side="left" className="w-64 p-0">
               <SheetHeader className="p-4 border-b">
-                <SheetTitle className="font-black tracking-[-0.055em]">
+                <SheetTitle className="inline-flex items-baseline gap-1 font-black tracking-[-0.055em]">
                   WID
+                  {/* 키컬러 dot — 사이드바와 동일한 브랜드 시그니처. */}
+                  <span
+                    aria-hidden
+                    className="inline-block h-[6px] w-[6px] rounded-full translate-y-[-1px] bg-primary"
+                  />
                 </SheetTitle>
               </SheetHeader>
               <nav className="flex flex-col gap-1 p-4">
-                {navItems.map((item, idx) => {
-                  if (item.separator) return <Separator key={`sep-${idx}`} className="my-2" />;
-                  const isActive = item.href === '/'
-                    ? pathname === '/'
-                    : pathname.startsWith(item.href!);
+                {[...navItems, { href: '/settings', label: '설정', icon: Settings }].map((item) => {
+                  const isActive = pathname.startsWith(item.href);
                   return (
-                    <div key={item.href}>
-                      <Link
-                        href={item.href!}
-                        className={cn(
-                          'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                          isActive
-                            ? 'bg-sidebar-accent font-medium'
-                            : 'hover:bg-sidebar-accent/50 text-sidebar-foreground/60'
-                        )}
-                      >
-                        {item.icon && <item.icon className="h-4 w-4" />}
-                        {item.label}
-                      </Link>
-                    </div>
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={cn(
+                        // 사이드바와 동일 언어: 활성 = pill + 3px 키컬러 레일 + 키컬러 아이콘.
+                        'relative flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                        isActive
+                          ? 'bg-sidebar-accent text-foreground font-semibold'
+                          : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground'
+                      )}
+                    >
+                      {isActive && (
+                        <span aria-hidden className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full bg-primary" />
+                      )}
+                      <item.icon className={cn('h-4 w-4', isActive && 'text-primary')} />
+                      {item.label}
+                    </Link>
                   );
                 })}
               </nav>
@@ -107,16 +108,7 @@ export function Header() {
           >
             <ChevronsDownUp className="h-4 w-4" />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
-            aria-label="테마 전환"
-          >
-            <Sun className="h-4 w-4 hidden dark:block" />
-            <Moon className="h-4 w-4 block dark:hidden" />
-          </Button>
-          {!pathname.startsWith('/settings') && pathname !== '/' && (
+          {!pathname.startsWith('/settings') && (
             <Button size="sm" variant="ghost" onClick={openModal} title="새 task 추가 (Ctrl+N)">
               <Plus className="h-4 w-4 mr-1" />
               새 task

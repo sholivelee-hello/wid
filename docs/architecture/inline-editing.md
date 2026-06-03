@@ -11,6 +11,9 @@ TaskCard 클릭 → 카드 안에서 에디터가 펼쳐짐. 오른쪽 슬라이
 | `↳ sub-TASK N개 (펼치기/접기)` 버튼 | 펼침 토글 (큰 hit area, 단일 always-visible 밴드) |
 | Grip 클릭 | 드래그 시작 (sortable, 카드 클릭과 분리) |
 | 제목 텍스트 | 단순 텍스트 + `title=` native tooltip (긴 제목용) |
+| 우클릭 (카드 영역) | 액션 컨텍스트 메뉴 (완료/오늘/상태/보류/상세/휴지통) — 마우스 이동 거리 최소화용. 인라인 에디터 열림 시(`editing`)에는 ContextMenu를 끼우지 않아 텍스트 필드에서 브라우저 기본 우클릭이 그대로 뜬다. |
+
+우클릭 메뉴는 `src/components/ui/context-menu.tsx`(base-ui `@base-ui/react/context-menu`, dropdown-menu와 동일 스타일)를 쓰고, TaskCard가 이미 가진 핸들러(`onComplete`/`onStatusChange`/`onPend`/`onDelete`/`onSelect`)와 `toggleTodayTask`를 그대로 재사용한다 (새 로직 없음). 컨텍스트 분기는 `⋯` 드롭다운과 동일하게 prop 유무로만 — `onStatusChange` 없으면 상태 변경 숨김, `onPend` 없으면 보류 숨김, `onDelete` 없으면 휴지통 숨김. `ContextMenuTrigger render={card}` 로 카드 div에 머지(추가 DOM 없음) — `divide-y` 레이아웃·grip·인라인 버튼의 `stopPropagation`과 충돌하지 않는다 (우클릭=contextmenu 이벤트는 별개 경로).
 
 이전 패턴 (R1까지): 자식 있는 TASK는 카드 클릭 = 펼침, 제목 클릭 = 에디터. R2에서 충돌이 UX 평가의 HIGH 블로커로 지적되어 카드 클릭 = 항상 에디터로 통합.
 

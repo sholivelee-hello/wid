@@ -5,9 +5,18 @@
 | Set | 정의 | 어디에 |
 |---|---|---|
 | **Explicit** | 사용자가 직접 "오늘에 추가" 한 task ID들 | `localStorage[wid-today-task-ids]` |
-| **Effective** | explicit ∪ 그 자손 전부 | `getEffectiveTodayTaskIds(explicit, allTasks)` |
+| **Deadline-auto** | 마감일(due date)이 오늘이거나 지난, 미완료·미보류·미삭제 task | `getDeadlineTodayTaskIds(allTasks, todayStr)` (파생, 저장 안 함) |
+| **Effective** | (explicit ∪ deadline-auto) ∪ 그 자손 전부 | `getEffectiveTodayTaskIds(explicit, allTasks, todayStr)` |
 
-Explicit set이 단일 진실. Effective set은 매 렌더마다 계산. 부모 TASK를 추가하면 sub-TASK들이 자동으로 따라오고, 부모를 빼면 같이 빠짐.
+Explicit set이 단일 진실. Deadline-auto는 task 상태에서 매번 파생 — localStorage에 안 들어감 (마감 지나거나 완료되면 자동으로 빠지고, "사용자가 골랐나?"가 흐려지지 않게). Effective set은 매 렌더마다 계산: explicit + deadline-auto를 seed로 자손까지 펼침. 부모 TASK를 추가하면 sub-TASK들이 자동으로 따라오고, 부모를 빼면 같이 빠짐. `todayStr`은 today 페이지가 mount 시점에 고정한 로컬 날짜.
+
+### 마감 자동 포함 (spec 결정 4, 2026-06-03)
+
+- 마감일이 오늘이거나 지난 미완료 task는 해 아이콘을 누르지 않아도 오늘에 자동 표시된다.
+- 자동 포함된 root에는 `TaskCard`의 `reasonBadge="deadline"`로 작은 "마감" 뱃지를 붙여 왜 여기 있는지 자명하게 한다 (explicit하게 직접 추가한 항목에는 안 붙음 — `!todayIds.has(id) && deadlineTodayIds.has(id)` 조건).
+- **해 토글 동작 결정**: Sun 토글은 *explicit set만* 토글한다 (기존 모델 그대로 — invariant 최소 변경).
+  - deadline-auto-only 항목에서 Sun을 켜면 → explicit에도 들어가 sticky해짐(마감 지나도 유지).
+  - deadline-auto 항목에서 Sun을 꺼도 → explicit에서만 빠지고, 마감 조건이 살아있는 한 오늘에 그대로 남는다 ("마감" 뱃지가 그 이유를 설명). 즉 마감 기반 자동 포함은 토글로 끌 수 없다 — 끄려면 task의 마감일/상태를 바꿔야 한다. 하루 숨김 같은 별도 persistence는 도입하지 않음(가장 단순 + pending invariant 불간섭).
 
 ## Today 렌더 = forest
 
@@ -23,28 +32,35 @@ Explicit set이 단일 진실. Effective set은 매 렌더마다 계산. 부모 
 - `hierarchyLabel = 'sub-TASK'` (parent_task_id 기준 — `hierarchy.md` 참고)
 - breadcrumb chip: `ISSUE: <issue 이름> › <부모 TASK 제목>`
 
-## Prompt-next-on-complete
+## Prompt-next-on-complete + 오늘 누적 (spec 결정 5)
 
-`promptNextInTodayIfNeeded(completedTask)` (in `src/lib/today-tasks.ts`):
+`promptNextInTodayIfNeeded(completedTask)` (in `src/lib/today-tasks.ts`) — task가 처리됨(완료/취소)으로 전이된 직후 호출. 한 번의 완료에 **fetch 1회 + 토스트 1개**만:
 
-발동 조건:
-1. `completed.id` 가 explicit set 안에 있음 (descendant 자동 따라옴은 제외)
-2. `completed.issue_id` 또는 `completed.parent_task_id` 가 있음 (sibling 개념이 의미 있는 경우만)
-3. `findNextSiblingTask(completed, allTasks)` 가 다음 미완료 sibling 반환 (같은 부모, position 더 큰 것)
-4. 다음 sibling이 effective set 에 아직 없음 (중복 권유 방지)
+1. `/api/tasks?deleted=false` 1회 fetch.
+2. `countCompletedToday(allTasks)` = 오늘 날짜(local, `completed_at` 기준)에 완료된 task 수 → tally 문자열 "오늘 N개 완료".
+3. prompt-next 권유 조건이 맞으면(아래) sibling 권유 토스트를 띄우고 description에 tally를 함께 표시.
+4. 권유 조건이 안 맞으면 plain `✓ 오늘 N개 완료` tally 토스트만.
 
-토스트:
+prompt-next 권유 조건:
+- `completed.id` 가 explicit set 안에 있음 (descendant 자동 따라옴은 제외)
+- `completed.issue_id` 또는 `completed.parent_task_id` 가 있음 (sibling 개념이 의미 있는 경우만)
+- `findNextSiblingTask` 가 다음 미완료 sibling 반환 (같은 부모, position 더 큰 것)
+- 다음 sibling이 effective set 에 아직 없음 (중복 권유 방지)
+
+토스트(권유 있을 때):
 ```
 ✓ 완료. 다음: "다음 TASK 제목"
-이 TASK도 오늘에 추가할까요?
+오늘 N개 완료 · 이 TASK도 오늘에 추가할까요?
 [오늘에 추가]   (8초 자동 닫힘)
 ```
 액션 클릭 → 다음 TASK가 explicit set 에 추가됨.
 
+tally count는 effective-today 멤버십이 아니라 "오늘 날짜에 완료된 수"로 단순화 — 모든 완료 경로(인박스/today/issue/inline editor)에서 동일 함수를 써 일관성 유지.
+
 ## 적용 경로
 
-`'완료'` 상태로 PATCH가 성공한 직후 호출:
-- `src/app/page.tsx` `handleStatusChange`
+처리됨(완료/취소) 상태로 PATCH가 성공한 직후 호출:
+- `src/app/inbox/page.tsx` `handleStatusChange` (구 `/` 인박스 — IA 단순화로 `/inbox`로 이동)
 - `src/app/today/page.tsx` `handleStatusChange`
 - `src/app/issues/[id]/page.tsx` `handleStatusChange`
 - `src/components/tasks/task-inline-editor.tsx` `save()` 안

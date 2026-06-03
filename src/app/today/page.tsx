@@ -14,6 +14,7 @@ import { TASK_STATUSES } from '@/lib/types';
 import {
   getTodayTaskIds,
   getEffectiveTodayTaskIds,
+  getDeadlineTodayTaskIds,
   promptNextInTodayIfNeeded,
   addTodayTask,
   pruneStaleTodayIds,
@@ -214,11 +215,17 @@ export default function TodayPage() {
     };
   }, [fetchAll]);
 
-  // Effective today set = explicit ids ∪ all descendants.
+  // Effective today set = explicit ids ∪ 마감 임박(오늘이거나 지남) 자동 포함
+  // ∪ 그 자손 전부 (spec 결정 4). deadline-auto 항목은 별도 set으로도 들고
+  // 있어 "마감" 뱃지로 이유를 표시한다.
+  const deadlineTodayIds = useMemo(
+    () => getDeadlineTodayTaskIds(tasks, todayStr),
+    [tasks, todayStr],
+  );
   const todayTasks = useMemo(() => {
-    const effective = getEffectiveTodayTaskIds(todayIds, tasks);
+    const effective = getEffectiveTodayTaskIds(todayIds, tasks, todayStr);
     return tasks.filter(t => effective.has(t.id) && !t.is_deleted);
-  }, [tasks, todayIds]);
+  }, [tasks, todayIds, todayStr]);
 
   const tasksById = useMemo(() => {
     const m = new Map<string, Task>();
@@ -335,7 +342,7 @@ export default function TodayPage() {
 
   // Lightweight progress for the header summary so the page feels alive
   // even when the list is short.
-  // 위임도 본인 입장에서는 처리된 것으로 보므로 진행률에 포함.
+  // 취소도 본인 입장에서는 처리된 것으로 보므로 진행률에 포함.
   const completedToday = todayTasks.filter(t => isTaskDone(t.status)).length;
   const remaining = todayTasks.length - completedToday;
   const progressPct = todayTasks.length > 0
@@ -508,6 +515,12 @@ export default function TodayPage() {
                                     editingTaskId={editingTaskId}
                                     onCloseEdit={() => setEditingTaskId(null)}
                                     breadcrumb={buildBreadcrumb(root.task)}
+                                    reasonBadge={
+                                      // 마감으로 자동 포함됐고 사용자가 직접 고른 게 아닐 때만 "마감" 뱃지.
+                                      !todayIds.has(root.task.id) && deadlineTodayIds.has(root.task.id)
+                                        ? 'deadline'
+                                        : undefined
+                                    }
                                     addToTodayOnCreate
                                     {...taskHandlers}
                                   />

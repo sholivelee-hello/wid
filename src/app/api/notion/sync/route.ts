@@ -284,7 +284,7 @@ export async function POST() {
           }
           // Notion에서 완료된 task는 WID에서도 자동 완료. one-way 동기화:
           // Notion이 다시 미완료가 되어도 WID 완료를 되돌리지 않고,
-          // 이미 위임/취소된 task도 건드리지 않는다 (등록 → 완료만 전이).
+          // 이미 취소된 task도 건드리지 않는다 (등록 → 완료만 전이).
           if (notionDone && existing.status === '등록') {
             updates.status = '완료';
             updates.completed_at = notionEditedAt ?? new Date().toISOString();

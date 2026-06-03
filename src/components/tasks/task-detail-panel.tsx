@@ -462,26 +462,22 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated, onNavigate }: 
                 </div>
               </div>
 
-              {(status === '위임' || status === '완료') && (
-                <div className="grid grid-cols-2 gap-3">
-                  {status === '위임' && (
-                    <div>
-                      <Label className="text-xs text-muted-foreground">위임 대상</Label>
-                      <Input value={delegateTo} onChange={(e) => setDelegateTo(e.target.value)} placeholder="담당자 이름" />
-                    </div>
-                  )}
-                  {status === '완료' && (
-                    <div>
-                      <Label className="text-xs text-muted-foreground">완료일시</Label>
-                      <Input
-                        type="datetime-local"
-                        value={completedAt}
-                        onChange={(e) => setCompletedAt(e.target.value)}
-                      />
-                    </div>
-                  )}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs text-muted-foreground">위임 대상</Label>
+                  <Input value={delegateTo} onChange={(e) => setDelegateTo(e.target.value)} placeholder="담당자 없음" />
                 </div>
-              )}
+                {status === '완료' && (
+                  <div>
+                    <Label className="text-xs text-muted-foreground">완료일시</Label>
+                    <Input
+                      type="datetime-local"
+                      value={completedAt}
+                      onChange={(e) => setCompletedAt(e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
 
               <Separator />
 

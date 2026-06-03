@@ -72,15 +72,51 @@ export function pruneStaleTodayIds(
 }
 
 /**
+ * Deadline-based auto-include: a task whose due date is today or past, and is
+ * not completed / pending / deleted, is implicitly part of today even if the
+ * user never tapped its Sun icon. Returns the matching task ids.
+ *
+ * Why a separate layer (not merged into the explicit set): the explicit set is
+ * the single source of truth persisted in localStorage. Folding deadline tasks
+ * into it would (a) make the auto-inclusion sticky after the deadline passes or
+ * the task completes, and (b) blur "did the user choose this?". Keeping it
+ * derived means it always reflects current task state and never needs cleanup.
+ */
+export function getDeadlineTodayTaskIds(
+  tasks: Task[],
+  todayStr: string,
+): Set<string> {
+  const out = new Set<string>();
+  for (const t of tasks) {
+    if (t.is_deleted) continue;
+    if (t.pending_at) continue;
+    if (isTaskDone(t.status)) continue;
+    if (!t.deadline) continue;
+    // deadline is ISO; compare the date portion only. 오늘이거나 지난 것.
+    if (t.deadline.slice(0, 10) <= todayStr) out.add(t.id);
+  }
+  return out;
+}
+
+/**
  * Effective Today set = explicit ids ∪ all descendants (children, grandchildren…)
  * of those explicit ids. Adding a parent TASK to Today implicitly pulls its
  * sub-TASKs (and their sub-TASKs) along.
+ *
+ * When `todayStr` is provided, deadline-auto tasks (due today or past) are
+ * folded in as additional roots and their descendants pulled along too — so a
+ * task that is overdue shows up in 오늘 without an explicit Sun tap.
  */
 export function getEffectiveTodayTaskIds(
   explicitIds: Set<string>,
   tasks: Task[],
+  todayStr?: string,
 ): Set<string> {
-  if (explicitIds.size === 0) return new Set();
+  const seeds = new Set(explicitIds);
+  if (todayStr) {
+    for (const id of getDeadlineTodayTaskIds(tasks, todayStr)) seeds.add(id);
+  }
+  if (seeds.size === 0) return new Set();
   const childrenByParent = new Map<string, string[]>();
   for (const t of tasks) {
     if (t.is_deleted) continue;
@@ -89,8 +125,8 @@ export function getEffectiveTodayTaskIds(
     arr.push(t.id);
     childrenByParent.set(t.parent_task_id, arr);
   }
-  const out = new Set(explicitIds);
-  const queue = [...explicitIds];
+  const out = new Set(seeds);
+  const queue = [...seeds];
   while (queue.length > 0) {
     const id = queue.shift()!;
     const kids = childrenByParent.get(id);
@@ -120,37 +156,63 @@ export function findNextSiblingTask(current: Task, allTasks: Task[]): Task | nul
   return candidates[0] ?? null;
 }
 
+/** Count of tasks completed *today* (local date), by completed_at. Used for
+ *  the "오늘 N개 완료" tally on completion. Simpler + consistent across pages
+ *  than an effective-today-membership count (spec 결정 5). */
+export function countCompletedToday(tasks: Task[]): number {
+  const todayStr = localDateStr(new Date());
+  let n = 0;
+  for (const t of tasks) {
+    if (t.is_deleted) continue;
+    if (!isTaskDone(t.status)) continue;
+    if (!t.completed_at) continue;
+    if (localDateStr(new Date(t.completed_at)) === todayStr) n += 1;
+  }
+  return n;
+}
+
 /**
- * Called whenever a TASK transitions to 완료. If it was explicitly in 오늘
- * AND has an undone sibling that is NOT yet in 오늘, surface a toast offering
- * to pull that next sibling into today.
+ * Called whenever a TASK transitions to 완료. Fetches the current task list
+ * once, then surfaces a single completion toast:
+ *  - if an undone sibling exists that isn't yet in 오늘, the prompt-next toast
+ *    (with the 오늘 누적 tally in its description),
+ *  - otherwise a plain "오늘 N개 완료" tally toast.
+ * One fetch, one toast — never two stacked toasts on a single completion.
  */
 export async function promptNextInTodayIfNeeded(completed: Task) {
   if (typeof window === 'undefined') return;
-  // Only meaningful for tasks that have siblings (under an ISSUE or under a parent TASK).
-  if (!completed.issue_id && !completed.parent_task_id) return;
-  const explicit = getTodayTaskIds();
-  if (!explicit.has(completed.id)) return; // only fire for explicitly-added today items
   let allTasks: Task[];
   try {
     allTasks = await apiFetch<Task[]>('/api/tasks?deleted=false', { suppressToast: true });
   } catch {
     return;
   }
-  const next = findNextSiblingTask(completed, allTasks);
-  if (!next) return;
-  // If the next sibling is already in today (explicit or via descendant pull), skip.
-  if (getEffectiveTodayTaskIds(explicit, allTasks).has(next.id)) return;
-  toast(`✓ 완료. 다음: "${next.title}"`, {
-    description: '이 TASK도 오늘에 추가할까요?',
-    duration: 8000,
-    action: {
-      label: '오늘에 추가',
-      onClick: () => {
-        const ids = getTodayTaskIds();
-        ids.add(next.id);
-        saveTodayTaskIds(ids);
-      },
-    },
-  });
+  const doneToday = countCompletedToday(allTasks);
+  const tally = doneToday > 0 ? `오늘 ${doneToday}개 완료` : '';
+
+  // prompt-next는 explicit하게 오늘에 든 task + sibling이 의미 있는 경우에만.
+  const explicit = getTodayTaskIds();
+  const siblingMeaningful = !!(completed.issue_id || completed.parent_task_id);
+  if (siblingMeaningful && explicit.has(completed.id)) {
+    const next = findNextSiblingTask(completed, allTasks);
+    // 다음 sibling이 아직 오늘(effective)에 없을 때만 권유.
+    if (next && !getEffectiveTodayTaskIds(explicit, allTasks).has(next.id)) {
+      toast(`✓ 완료. 다음: "${next.title}"`, {
+        description: tally ? `${tally} · 이 TASK도 오늘에 추가할까요?` : '이 TASK도 오늘에 추가할까요?',
+        duration: 8000,
+        action: {
+          label: '오늘에 추가',
+          onClick: () => {
+            const ids = getTodayTaskIds();
+            ids.add(next.id);
+            saveTodayTaskIds(ids);
+          },
+        },
+      });
+      return;
+    }
+  }
+
+  // sibling 권유가 없으면 누적 토스트만.
+  if (tally) toast(`✓ ${tally}`);
 }

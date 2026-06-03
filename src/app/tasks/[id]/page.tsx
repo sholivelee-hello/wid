@@ -36,7 +36,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
   const handleDelete = async () => {
     try {
       await apiFetch(`/api/tasks/${id}`, { method: 'DELETE' });
-      router.push('/');
+      router.push('/inbox');
     } catch {
       // error already toasted by apiFetch
     }
@@ -50,7 +50,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
   return (
     <div className="space-y-6 max-w-2xl">
       <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
-        <Link href="/" className="hover:text-foreground transition-colors">인박스</Link>
+        <Link href="/inbox" className="hover:text-foreground transition-colors">인박스</Link>
         <span>/</span>
         <span className="text-foreground">{task.title}</span>
       </div>
