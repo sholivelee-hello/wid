@@ -1,13 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const supabase = createServerSupabaseClient();
-  const { data, error } = await supabase
+  const pendingOnly = request.nextUrl.searchParams.get('pending') === 'true';
+  let query = supabase
     .from('issues')
     .select('*')
     .eq('is_deleted', false)
     .order('position', { ascending: true });
+  // 기본은 보류 제외 — 인박스 트리·IssuePicker에서 보류된 ISSUE가 숨겨진다.
+  query = pendingOnly
+    ? query.not('pending_at', 'is', null)
+    : query.is('pending_at', null);
+  const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data);
 }

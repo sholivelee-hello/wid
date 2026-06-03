@@ -27,6 +27,7 @@ export interface Issue {
   position: number;
   notion_issue_id: string | null;
   created_at: string;
+  pending_at: string | null;
   is_deleted: boolean;
 }
 
@@ -52,6 +53,7 @@ export interface Task {
   parent_task_id: string | null;
   sort_mode: SortMode;
   position: number;
+  pending_at: string | null;
   is_deleted: boolean;
 }
 

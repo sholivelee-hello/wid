@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
   const sort = searchParams.get('sort') ?? 'created_at';
   const order = searchParams.get('order') ?? 'desc';
   const showDeleted = searchParams.get('deleted') === 'true';
+  const pendingOnly = searchParams.get('pending') === 'true';
   const issueId = searchParams.get('issue_id');
   const parentId = searchParams.get('parent_task_id');
   const independent = searchParams.get('independent') === 'true';
@@ -21,6 +22,13 @@ export async function GET(request: NextRequest) {
     .from('tasks')
     .select('*')
     .eq('is_deleted', showDeleted);
+
+  // 보류(pending_at) 필터 — 휴지통 조회(deleted=true)에서는 적용하지 않는다:
+  // 보류 중이던 task를 삭제해도 휴지통에는 보여야 한다.
+  if (!showDeleted) {
+    if (pendingOnly) query = query.not('pending_at', 'is', null);
+    else query = query.is('pending_at', null);
+  }
 
   if (status) query = query.eq('status', status);
   if (source) query = query.eq('source', source);

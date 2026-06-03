@@ -10,6 +10,7 @@ export async function GET() {
     .from('tasks')
     .select('*', { count: 'exact', head: true })
     .eq('is_deleted', false)
+    .is('pending_at', null)
     .not('status', 'in', '("완료","취소","위임")');
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ active: count ?? 0 });
