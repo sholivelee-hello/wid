@@ -73,6 +73,18 @@
 - **구현 플랜**: `docs/superpowers/plans/YYYY-MM-DD-<주제>-implementation.md`
 - 큰 변경은 spec → plan → 구현 순서. 구현 도중 결정이 바뀌면 spec/plan을 함께 업데이트
 
+## 배포 프로세스 (필수 — 사용자 지시 2026-06-03)
+
+prod 배포 전 **반드시** 아래 순서를 지킨다. 어느 단계도 건너뛰고 배포하지 말 것:
+
+1. **전부 커밋** — `git status` clean 확인 (의도적으로 남기는 파일 제외)
+2. **GitHub 푸시** — origin(개인 저장소)에 브랜치 푸시. prod 반영분은 master 병합 후 master 푸시
+3. **빌드 검증** — `npm run build` exit 0 + `npm run lint` 신규 문제 0 확인
+4. **그 다음에만 배포** — Vercel prod (Git 연동이면 master push가 트리거, 아니면 `vercel --prod`)
+5. 배포 후 prod URL 동작 확인 (주요 라우트 200)
+
+DB 마이그레이션이 포함된 배포는 마이그레이션을 **먼저** Supabase에 적용한 뒤 코드를 배포한다 (컬럼 없는 코드가 prod에 뜨는 순간 방지).
+
 ## 아키텍처 참조 문서
 
 도메인별 invariant·계약·구현 패턴은 `docs/architecture/` 에 분리. CLAUDE.md는 인덱스만, 실제 내용은 아래 각 문서 참조.
