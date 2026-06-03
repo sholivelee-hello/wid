@@ -194,8 +194,32 @@ export async function POST() {
         let notionIssueLabel: string | null = null;
         let issueRelationId: string | null = null;
         if (issueProp?.type === 'relation') {
+          // The inline relation array in a query result is capped (~25) and may
+          // be truncated (has_more). When truncated, re-read the full relation
+          // via the property-item endpoint so we never miss the linked ISSUE.
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const relations = (issueProp as any).relation as { id: string }[] | undefined;
+          let relations = (issueProp as any).relation as { id: string }[] | undefined;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          if ((issueProp as any).has_more && (issueProp as any).id) {
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const full: any = await notion.pages.properties.retrieve({
+                page_id: page.id,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                property_id: (issueProp as any).id,
+              });
+              const items = Array.isArray(full?.results)
+                ? full.results
+                    .map((r: { relation?: { id?: string } }) => r?.relation)
+                    .filter((r: { id?: string } | undefined): r is { id: string } =>
+                      Boolean(r?.id),
+                    )
+                : [];
+              if (items.length > 0) relations = items;
+            } catch {
+              // fall back to the (possibly truncated) inline array
+            }
+          }
           if (relations && relations.length > 0) {
             issueRelationId = relations[0].id;
             const relTitle = await resolveIssueTitle(issueRelationId);
@@ -247,16 +271,20 @@ export async function POST() {
           requester = (requesterProp as any).select?.name ?? null;
         }
 
-        // Resolve the ISSUE relation to a local Issue id (create if needed)
+        // Resolve the ISSUE relation to a local Issue id (create if needed).
+        // Only resolve when we actually read a title: if the related ISSUE page
+        // is not shared with the integration, Notion redacts the relation
+        // (empty array) or pages.retrieve fails — in that case notionIssueLabel
+        // is empty and we must NOT create a junk "(제목 없음)" issue.
         let localIssueId: string | null = null;
-        if (issueRelationId) {
+        if (issueRelationId && notionIssueLabel) {
           if (issueIdMap.has(issueRelationId)) {
             localIssueId = issueIdMap.get(issueRelationId) ?? null;
           } else {
             localIssueId = await ensureIssue(
               supabase,
               issueRelationId,
-              notionIssueLabel ?? '',
+              notionIssueLabel,
             );
             issueIdMap.set(issueRelationId, localIssueId);
           }
@@ -294,9 +322,11 @@ export async function POST() {
             updates.status = '완료';
             updates.completed_at = notionEditedAt ?? new Date().toISOString();
           }
-          // Only override issue_id when Notion provides a relation; preserve
-          // the user's local linking otherwise.
-          if (issueRelationId && existing.issue_id !== localIssueId) {
+          // Link issue_id only when we resolved a real local ISSUE. Never clear
+          // an existing link from a redacted/empty relation (e.g. the related
+          // ISSUE database isn't shared with the integration → Notion returns
+          // an empty relation array), which would wipe valid links on sync.
+          if (localIssueId && existing.issue_id !== localIssueId) {
             updates.issue_id = localIssueId;
             updates.parent_task_id = null;
           }
