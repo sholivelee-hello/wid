@@ -81,6 +81,7 @@
 | `docs/architecture/inline-editing.md` | TaskCard 클릭 시맨틱 (카드=에디터 / chevron=expand / grip=drag), TaskInlineEditor save 라이프사이클 (저장 중 / 저장됨 / 토스트). |
 | `docs/architecture/calendar-embed.md` | `GCalConfig` (oauth + subscribedCalendars), GIS implicit-flow OAuth, 활성 캘린더/색상 헬퍼. /calendar 페이지 제거되어 히스토리에 통합. |
 | `docs/architecture/mock-backend.md` | `__tasksRef` / `__issuesRef` 컨벤션, **POST는 반드시 push** 규칙, position 할당 룰, PATCH 가드 코드 카탈로그. |
+| `docs/architecture/pending.md` | 보류함 pending_at soft-flag invariant, pend/unpend 전파 규칙, 무게 인박스(getTaskWeight) 기준. |
 
 새로운 아키텍처 결정이나 invariant이 생기면 위 문서 중 하나에 추가하거나 새 파일 만들고 이 표에 한 줄로 색인.
 
