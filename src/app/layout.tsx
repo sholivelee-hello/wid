@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist_Mono } from "next/font/google";
 import localFont from "next/font/local";
 import "./globals.css";
@@ -28,10 +28,17 @@ const pretendard = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "WID — What I Do",
+  // 🟣 — 탭 목록·미션 컨트롤 창 제목에서 한눈에 WID임을 식별하기 위한 마커.
+  // 사용자의 다른 창들이 대부분 다크모드라 색 점 하나가 가장 빠른 신호.
+  title: "🟣 WID — What I Do",
   description: "개인 업무일지 시스템",
   // iOS 홈 화면 추가 시 앱 이름 (아이콘은 apple-icon.png 파일 컨벤션)
   appleWebApp: { title: "WID" },
+};
+
+// Safari 15+ 탭바·모바일 주소창을 키컬러로 틴트 — 탭 단위 식별 보조.
+export const viewport: Viewport = {
+  themeColor: "#7D74F8",
 };
 
 export default function RootLayout({
