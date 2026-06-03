@@ -11,7 +11,9 @@ TaskCard 클릭 → 카드 안에서 에디터가 펼쳐짐. 오른쪽 슬라이
 | `↳ sub-TASK N개 (펼치기/접기)` 버튼 | 펼침 토글 (큰 hit area, 단일 always-visible 밴드) |
 | Grip 클릭 | 드래그 시작 (sortable, 카드 클릭과 분리) |
 | 제목 텍스트 | 단순 텍스트 + `title=` native tooltip (긴 제목용) |
-| 우클릭 (카드 영역) | 액션 컨텍스트 메뉴 (완료/오늘/상태/보류/상세/휴지통) — 마우스 이동 거리 최소화용. 인라인 에디터 열림 시(`editing`)에는 ContextMenu를 끼우지 않아 텍스트 필드에서 브라우저 기본 우클릭이 그대로 뜬다. |
+| 우클릭 (카드 영역) | 액션 컨텍스트 메뉴 — 마우스 이동 거리 최소화용. 인라인 에디터 열림 시(`editing`)에는 ContextMenu를 끼우지 않아 텍스트 필드에서 브라우저 기본 우클릭이 그대로 뜬다. |
+
+우클릭 메뉴 항목(2026-06-03): **원본 열기**(slack/notion 원본 URL — 맨 위, 출처 있는 task만) · 완료 · 오늘 · 상태 · 보류 · 휴지통. "상세 열기"는 카드 좌클릭(인라인 에디터)과 중복이라 제거됐다 — 상세 패널은 좌클릭/키보드 경로로만 연다. 출처 브랜드 아이콘(`SourceIcon`)은 표시 전용이며, 원본으로 가는 클릭 액션은 이 우클릭 메뉴 맨 위 항목이 담당한다.
 
 우클릭 메뉴는 `src/components/ui/context-menu.tsx`(base-ui `@base-ui/react/context-menu`, dropdown-menu와 동일 스타일)를 쓰고, TaskCard가 이미 가진 핸들러(`onComplete`/`onStatusChange`/`onPend`/`onDelete`/`onSelect`)와 `toggleTodayTask`를 그대로 재사용한다 (새 로직 없음). 컨텍스트 분기는 `⋯` 드롭다운과 동일하게 prop 유무로만 — `onStatusChange` 없으면 상태 변경 숨김, `onPend` 없으면 보류 숨김, `onDelete` 없으면 휴지통 숨김. `ContextMenuTrigger render={card}` 로 카드 div에 머지(추가 DOM 없음) — `divide-y` 레이아웃·grip·인라인 버튼의 `stopPropagation`과 충돌하지 않는다 (우클릭=contextmenu 이벤트는 별개 경로).
 
@@ -40,6 +42,15 @@ try {
 }
 ```
 `apiFetch` 실패 시 자체 토스트가 뜸 (`suppressToast` 안 씀).
+
+## name_locked (노션 이름 보호, 2026-06-03)
+
+source가 `notion`인 task의 제목을 인라인 에디터·상세 패널에서 수정하면
+`name_locked: true`를 함께 PATCH한다. 이후 `/api/notion/sync`는 그 task의
+노션 제목 변경을 따르지 않는다(완료 동기화는 `notion_task_id` 매칭이라
+이름과 무관하게 동작). 다른 출처(manual/slack)는 플래그를 보내지 않는다.
+세팅 지점: `task-inline-editor.tsx` 제목 onBlur, `task-detail-panel.tsx`
+제목 onBlur.
 
 ## Pill 표시
 

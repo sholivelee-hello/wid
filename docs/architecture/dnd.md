@@ -1,5 +1,13 @@
 # Drag & drop: sortable across 4 levels
 
+> **2026-06-03 변경 (평평한 리스트):** `/inbox`는 평면 리스트로 바뀌며 DnD를
+> 전부 제거했다. 드래그 reorder는 이제 **`/issues/[id]` 상세의 진행 중 목록
+> 1-context**에만 존재한다 (같은 ISSUE 내 top-level TASK reorder만, 계층 변경
+> 없음). `inbox-tree.tsx`의 4-context(ISSUE/issue내 TASK/sub/independent)와
+> cross-issue reparent·unlink·계층변경 가드는 더 이상 활성 경로가 아니다
+> (`/inbox`에서 미사용). `today/page.tsx`의 status 그룹 드래그는 그대로 유지.
+> 계층 이동 불가 invariant는 PATCH 가드(`DEPTH_FLIP` 등)로 계속 강제된다.
+
 `@dnd-kit/core` + `@dnd-kit/sortable`. 인박스에서 reorder + reparent + unlink 모두 처리.
 
 ## ID 네임스페이스

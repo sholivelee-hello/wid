@@ -36,6 +36,23 @@ normalizeDepth(taskList)               // 모듈 로드 시 한번 깊이 평탄
 
 `TaskCard.hierarchyLabel` 은 `node.task.parent_task_id` 로 계산. Today 페이지처럼 sub-TASK가 forest의 root로 렌더되는 경우에도 `'sub-TASK'` 배지 유지 (R3 평가 후 수정).
 
+## 표시 정책 (2026-06-03 평평한 리스트)
+
+- `/inbox`: top-level TASK만 평면 리스트로. sub-TASK는 카드 2행 `↳ sub N`
+  토글로 그 자리 펼침 — 트리 들여쓰기·`InboxTree`·`buildTree` 미사용.
+- `/issues/[id]`·`/today`: 계층 트리를 유지(`buildTree` + `TaskBranch`). 이슈
+  상세에서만 드래그 reorder.
+- sub-TASK가 forest root로 올라오는 경우(Today)에도 `isSubtask`(parent_task_id
+  기준) 표시는 유지.
+
+### /inbox 정렬·그룹 (2026-06-03)
+
+- 기본(등록 뷰): `created_at desc` 고정 — 정렬 컨트롤 없음(죽은 정렬 UI 제거).
+- 완료 칩 뷰(`showCompleted`): `completed_at desc`(null은 `created_at` fallback).
+  순회하며 날짜가 바뀔 때 **오늘 / 어제 / M월 d일 / yyyy년 M월 d일** 그룹 헤더 삽입.
+- 커스텀 뷰는 자체 `view.sortBy`(기본 `created_at`)로 독립 정렬 — 메인 인박스
+  정렬과 무관.
+
 ## 관련 파일
 
 - `src/app/api/tasks/route.ts` — POST 가드, 헬퍼들, normalizeDepth

@@ -9,7 +9,7 @@
 - **이름**: WID (work inbox / dashboard)
 - **목적**: 개인이 노션·슬랙·수동 입력으로 들어오는 일들을 한 인박스에서 처리하고, 시각적 타임라인과 히스토리로 회고하는 앱
 - **범위**: 1인 사용자(personal use). 다인용·SaaS 아님
-- **단계**: v2 구현 완료(`a33ce28` → 개인 메일 author 재작성으로 `ec6dafe`). 이후 인박스 UX 대수술(드래그 reorder, 인라인 에디터, 계층 표시, GCal 임베드, today prompt-next) + **디자인 시스템 v3** 마감 — `feat/issue-task-hierarchy` 브랜치
+- **단계**: v2 구현 완료(`a33ce28` → 개인 메일 author 재작성으로 `ec6dafe`). 이후 인박스 UX 대수술(인라인 에디터, 계층 표시, GCal 임베드, today prompt-next) + **디자인 시스템 v3** 마감. 2026-06-03: IA 단순화 + **/inbox 평면 리스트** 전환(드래그 reorder는 이슈 상세로 이동) + **이슈 페이지 신설**(/issues 목록·상세, 묶음 뷰 전담) + **노션 name_locked**(이름 보호) — `feat/issue-task-hierarchy` 브랜치
 - **상세 컨텍스트**: `docs/architecture/` (도메인별 invariant·계약·패턴), `docs/superpowers/specs/`, `docs/superpowers/plans/`
 
 ## 기술 스택
@@ -18,9 +18,9 @@
 - **UI**: shadcn/ui v4 (base-ui 기반)
 - **상태관리**: Zustand (타이머), localStorage (캘린더 가시성, 사용자 뷰 등)
 - **데이터**: Supabase 실연결 완료 (2026-04-29). mock 파일 전부 삭제됨. 마이그레이션: `supabase/migrations/001_initial_schema.sql` + `002_hierarchy_and_issues.sql`
-- **외부 연동**: Slack 실연동 완료 (reaction_added → task 생성). Notion (부분 연동). Google Calendar — 미연동 (빈 상태)
+- **외부 연동**: Slack 실연동 완료 (reaction_added → task 생성). Notion (2개 DB 동기화 — env `NOTION_DATABASE_ID_1`/`_2`, name_locked 이름 보호). Google Calendar — 미연동 (빈 상태)
 - **개발 명령어**: `npm run dev` (Turbopack), `npm run build`, `npm run lint`
-- **Slack 로컬 개발**: cloudflared로 터널 열어야 Slack webhook이 도달함. `cloudflared tunnel --url http://localhost:3000` 실행 후 나오는 `https://xxx.trycloudflare.com` URL을 Slack App → Event Subscriptions → Request URL에 등록. 터널 재시작하면 URL이 바뀌므로 그때마다 재등록 필요. 봇이 이모지 달린 채널에 멤버로 들어가있어야 reaction_added 이벤트를 받을 수 있음 (`/invite @TASK줍줍봇`).
+- **Slack 로컬 개발**: cloudflared로 터널 열어야 Slack webhook이 도달함. `cloudflared tunnel --url http://localhost:3000` 실행 후 나오는 `https://xxx.trycloudflare.com` URL을 Slack App → Event Subscriptions → Request URL에 등록. 터널 재시작하면 URL이 바뀌므로 그때마다 재등록 필요. 봇이 이모지 달린 채널에 멤버로 들어가있어야 reaction_added 이벤트를 받을 수 있음 (`/invite @TASK줍줍봇`). 봇 토큰에 `users:read` 스코프 필요(요청자 이름 해석 — `users.info` 캐시).
 
 ## 디자인 시스템 v3 (현재 기준선)
 
@@ -28,8 +28,9 @@
 
 - **타이포**: Pretendard Variable single-system (self-host, `public/fonts/PretendardVariable.woff2`). serif 디스플레이 폐기. 위계는 **weight × tracking**으로만 — h1 800w `-0.04em` `lh 1.02`, h2 700w `-0.03em`, body 400~500w `-0.01em`, 숫자는 `tabular-nums`. 토큰: `--font-sans`, `--font-heading`, `--font-display` 모두 Pretendard.
 - **컬러**: 단일 키컬러 `#7D74F8` (oklch light `0.63 0.191 282.6` / dark `0.73 0.17 282`). 한 화면 액센트 1개 원칙 — amber/emerald/mustard 잔재 없음. `destructive`(빨강)만 의미적 예외. chart-2~5는 chroma 0.04~0.06 무채색.
+- **출처 브랜드 아이콘 예외** (2026-06-03): TASK 출처 식별용 브랜드 아이콘(슬랙 4색 로고, 노션 흰색 단색 N, WID 직접입력 키컬러 점, jira 회색 점 슬롯)은 "한 화면 액센트 1개" 원칙의 의도된 예외다. 브랜드 컬러는 `SourceIcon`(`src/components/tasks/source-icon.tsx`) SVG 내부에만, 표시 전용(클릭 동작 없음 — 원본 열기는 우클릭 메뉴 맨 위). 상세 → `docs/architecture/issues.md`.
 - **표면**: 그림자 거의 0. border + `bg-card` / `bg-muted/40`로 위계. `card-hover-lift`는 bg 전환만, transform 없음.
-- **레이아웃**: 페이지 hero h1 안 씀. 시작 화면은 `/today`(루트 `/`는 redirect). `/today`는 미세 progress bar 한 줄, `/inbox`(전체)는 상단 보기 칩(진행 중·보류·완료·휴지통) + 인라인 한 줄 요약 + 기본 접힘 도구바, `/history`(돌아보기)는 월 네비게이터만. 사이드바는 메뉴 3개(오늘·전체·돌아보기) + 하단 설정 톱니바퀴. 큰 숫자는 그 페이지의 단 하나의 핵심 지표에만.
+- **레이아웃**: 페이지 hero h1 안 씀. 콘텐츠 컬럼은 `max-width 720px` 중앙 정렬(`layout.tsx` main 래퍼) — 오늘/전체/이슈/돌아보기 공통. 시작 화면은 `/today`(루트 `/`는 redirect). `/today`는 미세 progress bar 한 줄, `/inbox`(전체)는 상단 보기 칩(진행 중·보류·완료·휴지통) + 인라인 한 줄 요약 + 기본 접힘 도구바 + **평면 리스트**, `/issues`는 묶음 뷰(목록·상세), `/history`(돌아보기)는 월 네비게이터만. 사이드바는 메뉴 4개(오늘·전체·이슈·돌아보기, 이슈 아이콘 lucide `Folder`) + 하단 설정 톱니바퀴. 큰 숫자는 그 페이지의 단 하나의 핵심 지표에만.
 - **사이드바 = 무채색 면 + 로고 dot** (2026-06-03 갱신, 보라 기둥 폐기): 사용자 결정 — 앱을 100% 다크모드로 사용하며 보라 통판 사이드바가 "옛날 ERP 느낌"이라 폐기. 사이드바는 본문과 거의 같은 어두운 무채색 표면(`bg-sidebar`) + 오른쪽 `border-sidebar-border` hairline으로만 본문과 구분(그림자 0). 브랜드 식별("미션 컨트롤에서 창 구분")은 통판이 아니라 로고 옆 **키컬러 dot 한 점**(`bg-primary`)이 담당. 위계: 활성 = `bg-sidebar-accent` pill + 흰 글자 + **3px 키컬러 레일** + 키컬러 아이콘, 비활성 = `text-muted-foreground` + hover 시 `bg-sidebar-accent/60`. 컬러는 "현재 위치"를 가리키는 레일/아이콘에만 최소량. 카운트 뱃지 = `bg-primary/15 text-primary`. 모바일 헤더 Sheet nav도 동일 언어. 모든 색은 기존 토큰(`--sidebar*`, `primary`, `muted`, `border`)만 사용 — 새 색 없음, 라이트는 토큰으로 자동 따라옴.
 - **다크 전용** (2026-06-03): 사용자는 100% 다크모드로 사용 — `layout.tsx` ThemeProvider `forcedTheme="dark"`로 라이트 전환 경로 자체를 제거(헤더 테마 토글 삭제). 라이트 토큰은 globals.css에 남아 있으나 도달 불가(dead). 디자인 평가·수정은 다크 기준.
 - **미션 컨트롤 창 식별 = "WID" 제목 + 키컬러 워드마크 + theme-color** (2026-06-03 개정): 창 제목은 군더더기 없이 `"WID"`만 — 🟣 마커와 "What I Do" 꼬리표는 사용자 결정으로 제거. 3px top bar는 "브라우저와 분리돼 보인다"는 피드백으로 같은 날 폐기. 대신 사이드바 좌상단 **"WID" 워드마크 자체를 `text-primary`(키컬러)로** — 화면 콘텐츠에 자연스럽게 통합된 식별 앵커로, 어두운 썸네일에서 좌상단 보라 글자로 창을 구분한다. `viewport.themeColor`는 단일 `#7D74F8`(설치형 웹앱 타이틀바 틴트). 새 색 없음.
@@ -79,7 +80,8 @@
 | 문서 | 다루는 것 |
 |---|---|
 | `docs/architecture/status.md` | task 상태 3-값 모델(등록/완료/취소), isTaskDone 종결 기준, 위임=delegate_to 필드(status 아님) 결정, /inbox 칩 용어 일치, 취소 표시 위치, status CHECK·마이그레이션 이력. |
-| `docs/architecture/hierarchy.md` | ISSUE > TASK > sub-TASK 3-level invariant. depth guard 위치 (POST/PATCH/UI), normalizeDepth 자가치유, hierarchyLabel 데이터 기준 계산. |
+| `docs/architecture/hierarchy.md` | ISSUE > TASK > sub-TASK 3-level invariant. depth guard 위치 (POST/PATCH/UI), normalizeDepth 자가치유, hierarchyLabel 데이터 기준 계산. /inbox 평면 리스트 표시·정렬·그룹 정책. |
+| `docs/architecture/issues.md` | /issues 목록·상세 계약. 진행률 집계(`issueTaskProgress` 공유 헬퍼 — 취소 분모 제외·allDone은 취소 포함 종결), 다음 지목, 이슈 상세 1-context 드래그, 출처 브랜드 아이콘. |
 | `docs/architecture/today.md` | explicit/effective today set 의 두 모델, today forest 빌드, prompt-next-on-complete 토스트 발동 조건. |
 | `docs/architecture/dnd.md` | `@dnd-kit` ID 네임스페이스 (`iss:`, `dropiss:`, `tsk:`, `unlinked`), 4-context sortable, grip handle 패턴, KeyboardSensor 와이어링. |
 | `docs/architecture/inline-editing.md` | TaskCard 클릭 시맨틱 (카드=에디터 / chevron=expand / grip=drag), TaskInlineEditor save 라이프사이클 (저장 중 / 저장됨 / 토스트). |

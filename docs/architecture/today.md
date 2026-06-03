@@ -32,6 +32,20 @@ Explicit set이 단일 진실. Deadline-auto는 task 상태에서 매번 파생 
 - `hierarchyLabel = 'sub-TASK'` (parent_task_id 기준 — `hierarchy.md` 참고)
 - breadcrumb chip: `ISSUE: <issue 이름> › <부모 TASK 제목>`
 
+## 카드 스타일 (2026-06-03)
+
+Today도 두 줄 카드(출처 아이콘 + 제목 / ISSUE 칩·마감·요청자)를 공유한다.
+root top-level TASK에는 `issueChip`(id+name)을 전달해 소속 ISSUE 칩을 띄운다
+(`buildIssueChip`). sub-TASK·자식에는 전파하지 않는다. sub 펼침은 Today의
+기존 forest(TaskBranch chevron)가 담당하므로 카드의 `subCount` 토글은 Today에서
+쓰지 않는다(이중 펼침 방지).
+
+## 오늘 토글의 키보드 경로 (2026-06-03)
+
+해 아이콘(explicit set 토글)과 별개로, `TaskDetailPanel`에도 "오늘로 보내기/
+오늘에서 빼기" 버튼(`toggleTodayTask`)이 있어 키보드/포커스 경로로도 explicit
+set을 토글할 수 있다. 두 진입점 모두 `today-tasks-changed` 이벤트로 동기화된다.
+
 ## Prompt-next-on-complete + 오늘 누적 (spec 결정 5)
 
 `promptNextInTodayIfNeeded(completedTask)` (in `src/lib/today-tasks.ts`) — task가 처리됨(완료/취소)으로 전이된 직후 호출. 한 번의 완료에 **fetch 1회 + 토스트 1개**만:
