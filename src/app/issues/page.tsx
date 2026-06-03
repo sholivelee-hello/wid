@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Issue, Task, isTaskDone } from '@/lib/types';
+import { Issue, Task } from '@/lib/types';
 import { apiFetch } from '@/lib/api';
+import { issueTaskProgress } from '@/lib/hierarchy';
 import { EmptyState } from '@/components/ui/empty-state';
 import { cn, formatDate } from '@/lib/utils';
 import { Folder } from 'lucide-react';
@@ -37,34 +38,10 @@ export default function IssuesListPage() {
   }, []);
 
   const stats = useMemo<IssueStat[]>(() => {
-    // issue_id로 직속+하위 TASK를 모은다. sub-TASK도 부모를 통해 같은 issue_id를
-    // 직접 들고 있지 않을 수 있으므로, 부모의 issue_id를 따라가 집계한다.
-    const byId = new Map<string, Task>();
-    for (const t of tasks) byId.set(t.id, t);
-    const resolveIssueId = (t: Task): string | null => {
-      if (t.issue_id) return t.issue_id;
-      if (t.parent_task_id) {
-        const p = byId.get(t.parent_task_id);
-        return p?.issue_id ?? null;
-      }
-      return null;
-    };
-    const grouped = new Map<string, Task[]>();
-    for (const t of tasks) {
-      const iid = resolveIssueId(t);
-      if (!iid) continue;
-      const arr = grouped.get(iid) ?? [];
-      arr.push(t);
-      grouped.set(iid, arr);
-    }
+    // 직속 + (부모 경유) 하위 TASK 전부에서 집계 (취소 제외). 상세 페이지와
+    // 동일 규칙을 공유 헬퍼(issueTaskProgress)로 써서 두 페이지가 어긋나지 않게.
     const result: IssueStat[] = issues.map(issue => {
-      const list = grouped.get(issue.id) ?? [];
-      // 분모에서 취소 제외. 완료만 분자.
-      const denom = list.filter(t => t.status !== '취소');
-      const done = denom.filter(t => isTaskDone(t.status)).length;
-      const total = denom.length;
-      const allDone = list.length > 0 && list.every(t => isTaskDone(t.status));
-      const pct = total === 0 ? 0 : Math.round((done / total) * 100);
+      const { total, done, allDone, pct } = issueTaskProgress(issue.id, tasks);
       return { issue, total, done, allDone, pct };
     });
     // 정렬: 진행 중 우선 → 임박 마감순(마감 있는 것 먼저, 빠른 날짜 우선) → 최신순.

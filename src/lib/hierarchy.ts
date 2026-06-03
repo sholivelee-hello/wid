@@ -89,6 +89,47 @@ export function countSubtasks(nodes: TaskNode[]): number {
   return total;
 }
 
+export interface IssueProgress {
+  /** 분모: 취소 제외한 직속+하위 TASK 수 */
+  total: number;
+  /** 분자: 완료(종결) TASK 수 */
+  done: number;
+  /** 모든 task가 종결(완료/취소) 상태 (task 0개면 false) */
+  allDone: boolean;
+  /** 0~100 정수 진행률 */
+  pct: number;
+}
+
+/**
+ * 한 ISSUE의 진행률을 직속 + (부모 경유) 하위 TASK 전부에서 집계한다.
+ * sub-TASK는 자기 issue_id가 비어 있고 부모를 통해 ISSUE에 귀속되므로
+ * parent_task_id를 따라가 부모의 issue_id로 묶는다 (resolveIssueId).
+ * 목록(/issues)·상세(/issues/[id]) 두 페이지가 같은 분모를 쓰도록 공유한다.
+ *
+ * @param issueId 집계 대상 ISSUE id
+ * @param tasks   삭제되지 않은 task 목록(호출부에서 is_deleted 필터를 권장)
+ */
+export function issueTaskProgress(issueId: string, tasks: Task[]): IssueProgress {
+  const byId = new Map<string, Task>();
+  for (const t of tasks) byId.set(t.id, t);
+  const resolveIssueId = (t: Task): string | null => {
+    if (t.issue_id) return t.issue_id;
+    if (t.parent_task_id) {
+      const p = byId.get(t.parent_task_id);
+      return p?.issue_id ?? null;
+    }
+    return null;
+  };
+  const list = tasks.filter(t => !t.is_deleted && resolveIssueId(t) === issueId);
+  // 분모에서 취소 제외. 완료만 분자.
+  const denom = list.filter(t => t.status !== '취소');
+  const done = denom.filter(t => isTaskDone(t.status)).length;
+  const total = denom.length;
+  const allDone = list.length > 0 && list.every(t => isTaskDone(t.status));
+  const pct = total === 0 ? 0 : Math.round((done / total) * 100);
+  return { total, done, allDone, pct };
+}
+
 export interface SearchResult {
   tree: Tree;
   forceOpenIssueIds: Set<string>;

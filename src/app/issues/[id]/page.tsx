@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Issue, Task, TaskStatus, isTaskDone } from '@/lib/types';
 import { apiFetch } from '@/lib/api';
-import { buildTree, filterIncomplete, countSubtasks } from '@/lib/hierarchy';
+import { buildTree, filterIncomplete, countSubtasks, issueTaskProgress } from '@/lib/hierarchy';
 import { promptNextInTodayIfNeeded } from '@/lib/today-tasks';
 import { lockedSiblings } from '@/lib/lock-state';
 import { Button } from '@/components/ui/button';
@@ -84,16 +84,12 @@ export default function IssueDetailPage({ params }: { params: Promise<{ id: stri
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
+  // 진행률 분모 = 직속 + (부모 경유) 하위 TASK 전부 (취소 제외).
+  // 목록(/issues)과 동일 규칙을 공유 헬퍼로 집계해 두 페이지가 어긋나지 않게 한다.
   const totals = useMemo(() => {
-    const top = tasks.filter(t => !t.is_deleted && !t.parent_task_id);
-    const denomTop = top.filter(t => t.status !== '취소');
-    const done = denomTop.filter(t => isTaskDone(t.status)).length;
-    return {
-      taskTotal: denomTop.length,
-      taskDone: done,
-      taskPct: denomTop.length === 0 ? 0 : Math.round((done / denomTop.length) * 100),
-    };
-  }, [tasks]);
+    const { total, done, pct } = issueTaskProgress(id, tasks);
+    return { taskTotal: total, taskDone: done, taskPct: pct };
+  }, [id, tasks]);
 
   // 진행 중 / 종결 트리. buildTree로 계층을 살린 뒤 top-level 기준으로 분리.
   const { activeNodes, doneNodes, nextTask, lockedTop, subCount } = useMemo(() => {
