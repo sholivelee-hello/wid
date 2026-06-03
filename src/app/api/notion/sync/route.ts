@@ -270,13 +270,18 @@ export async function POST() {
 
         const { data: existing } = await supabase
           .from('tasks')
-          .select('id, title, deadline, issue_id, requester, notion_url, status')
+          .select('id, title, deadline, issue_id, requester, notion_url, status, name_locked')
           .eq('notion_task_id', page.id)
           .maybeSingle();
 
         if (existing) {
           const updates: Record<string, unknown> = {};
-          if (title && existing.title !== title) updates.title = title;
+          // name_locked = 사용자가 WID에서 이름을 직접 고친 task. 노션 제목으로
+          // 덮어쓰지 않는다. 완료 동기화는 notion_task_id 매칭이라 이름과 무관하게
+          // 그대로 동작한다(아래 status 블록은 그대로 둔다).
+          if (title && existing.title !== title && !existing.name_locked) {
+            updates.title = title;
+          }
           if (existing.deadline !== deadline) updates.deadline = deadline;
           if (existing.requester !== requester) updates.requester = requester;
           if (notionUrl && existing.notion_url !== notionUrl) {

@@ -145,7 +145,13 @@ export function TaskInlineEditor({ task, onClose }: Props) {
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         onBlur={() => {
-          if (title.trim() && title !== task.title) save({ title: title.trim() });
+          if (title.trim() && title !== task.title) {
+            // 노션発 task의 이름을 WID에서 고치면 이후 노션 제목 변경을 따르지
+            // 않도록 잠근다 (name_locked). 다른 출처는 플래그가 무의미하므로 안 보냄.
+            const patch: Record<string, unknown> = { title: title.trim() };
+            if (task.source === 'notion') patch.name_locked = true;
+            save(patch);
+          }
         }}
         aria-label="제목"
       />

@@ -246,10 +246,14 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated, onNavigate }: 
                   onBlur={async () => {
                     if (task && title !== task.title && title.trim()) {
                       try {
+                        // 노션発 task는 이름을 고치면 name_locked로 잠가 이후 노션
+                        // 제목 변경을 따르지 않게 한다.
+                        const patch: Record<string, unknown> = { title };
+                        if (task.source === 'notion') patch.name_locked = true;
                         await apiFetch(`/api/tasks/${taskId}`, {
                           method: 'PATCH',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ title }),
+                          body: JSON.stringify(patch),
                         });
                         onTaskUpdated?.();
                       } catch {}
