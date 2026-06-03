@@ -14,6 +14,8 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { format, isToday, isYesterday, isSameYear } from 'date-fns';
+import { ko } from 'date-fns/locale';
 import { Inbox, ChevronDown, Plus, Pencil, Trash2, Search, X } from 'lucide-react';
 import { PendingView } from '@/components/inbox/pending-view';
 import { TrashView } from '@/components/inbox/trash-view';
@@ -23,8 +25,7 @@ import { IssueDeleteDialog } from '@/components/issues/issue-delete-dialog';
 import { promptNextInTodayIfNeeded } from '@/lib/today-tasks';
 import {
   loadViews, saveViews, loadInboxFilter, saveInboxFilter,
-  loadInboxSort, saveInboxSort, SORT_LABEL,
-  type CustomTaskView, type SortKey,
+  type CustomTaskView,
 } from '@/lib/custom-views';
 import { ViewEditForm } from '@/components/tasks/view-edit-form';
 import { TaskQuickCapture, type TaskQuickCaptureHandle } from '@/components/tasks/task-quick-capture';
@@ -36,6 +37,19 @@ type InboxView = 'active' | 'pending' | 'done' | 'trash';
 const VIEW_VALUES: InboxView[] = ['active', 'pending', 'done', 'trash'];
 function parseView(v: string | null): InboxView {
   return VIEW_VALUES.includes(v as InboxView) ? (v as InboxView) : 'active';
+}
+
+// 완료 뷰 날짜 그룹용. completed_at(없으면 created_at) ISO 문자열을 로컬 날짜로 파싱해
+// 그룹 키(yyyy-MM-dd)와 사람이 읽는 라벨(오늘/어제/M월 d일/yyyy년 M월 d일)을 만든다.
+function completionDayKey(t: Task): string {
+  const d = new Date(t.completed_at ?? t.created_at);
+  return format(d, 'yyyy-MM-dd');
+}
+function completionDayLabel(t: Task): string {
+  const d = new Date(t.completed_at ?? t.created_at);
+  if (isToday(d)) return '오늘';
+  if (isYesterday(d)) return '어제';
+  return format(d, isSameYear(d, new Date()) ? 'M월 d일' : 'yyyy년 M월 d일', { locale: ko });
 }
 
 export default function InboxPage() {
@@ -64,8 +78,6 @@ function InboxPageInner() {
   const [delegate, setDelegate] = useState('all');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [sortBy, setSortByRaw] = useState<SortKey>(() => loadInboxSort());
-  const setSortBy = (v: SortKey) => { setSortByRaw(v); saveInboxSort(v); };
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [expandedSubs, setExpandedSubs] = useState<Set<string>>(new Set());
@@ -307,10 +319,18 @@ function InboxPageInner() {
     const base = applyBaseFilter(treeFilteredTasks)
       .filter(t => !t.parent_task_id && !t.is_deleted)
       .filter(t => isTaskDone(t.status) === showCompleted);
-    return base.sort((a, b) => b.created_at.localeCompare(a.created_at));
+    // 등록 뷰: created_at desc. 완료 뷰: completed_at desc(취소 등 null은 created_at fallback).
+    // id를 2차 키로 두어 동시 생성/완료 시 순서가 흔들리지 않게.
+    const key = (t: Task) => (showCompleted ? (t.completed_at ?? t.created_at) : t.created_at);
+    return base.sort(
+      (a, b) => key(b).localeCompare(key(a)) || b.id.localeCompare(a.id),
+    );
   }, [applyBaseFilter, treeFilteredTasks, showCompleted]);
-  const issueChipFor = (t: Task) =>
-    t.issue_id ? (() => { const i = issuesById.get(t.issue_id!); return i ? { id: i.id, name: i.name } : null; })() : null;
+  const issueChipFor = (t: Task) => {
+    if (!t.issue_id) return null;
+    const i = issuesById.get(t.issue_id);
+    return i ? { id: i.id, name: i.name } : null;
+  };
 
   // 필터 chip 후보군은 실제 task에서 추출 (sub-task 포함).
   const requesters = useMemo(() => {
@@ -405,7 +425,11 @@ function InboxPageInner() {
           onCloseEdit={closeEdit}
         />
         {expanded && subs.length > 0 && (
-          <div className="ml-6 pl-3 border-l-2 border-border/60 divide-y divide-border">
+          <div
+            role="group"
+            aria-label={`하위 task ${subs.length}개`}
+            className="ml-6 pl-3 border-l-2 border-border/60 divide-y divide-border"
+          >
             {subs.map(s => (
               <TaskCard
                 key={s.id}
@@ -507,7 +531,8 @@ function InboxPageInner() {
       />
 
       {/* Chrome: 기본 접힘 (spec 결정 6). 접힘 시 한 줄 — 돋보기 토글 + 새 ISSUE.
-        * 펼침 시 검색 + 필터 + 정렬 라벨 노출. sticky로 긴 목록에서도 따라옴. */}
+        * 펼침 시 검색 + 필터 노출. 정렬은 created_at desc 고정이라 컨트롤 없음.
+        * sticky로 긴 목록에서도 따라옴. */}
       <div className="sticky top-0 z-20 -mx-4 md:-mx-6 px-4 md:px-6 py-2.5 bg-background/85 dark:bg-background/90 backdrop-blur-md backdrop-saturate-150 border-b border-border">
         {!toolbarOpen ? (
           <div className="flex items-center gap-3">
@@ -550,14 +575,13 @@ function InboxPageInner() {
               <kbd className="absolute right-2 top-1/2 -translate-y-1/2 hidden sm:inline-flex text-[10px] font-mono bg-muted text-muted-foreground px-1 py-0.5 rounded border pointer-events-none">⌘K</kbd>
             </div>
             <InboxFilterPopover
-              sort={sortBy}
+              showSort={false}
               source={source}
               statuses={statusFilter}
               requester={requester}
               delegate={delegate}
               requesters={requesters}
               delegatees={delegatees}
-              onSortChange={setSortBy}
               onSourceChange={setSource}
               onStatusesChange={(next) => { setStatusFilter(next); saveInboxFilter(next); }}
               onRequesterChange={setRequester}
@@ -578,9 +602,6 @@ function InboxPageInner() {
                 초기화
               </button>
             )}
-            <span className="text-[11px] text-muted-foreground hidden sm:inline">
-              정렬: {SORT_LABEL[sortBy]}
-            </span>
             <Button
               size="sm"
               variant="ghost"
@@ -603,7 +624,7 @@ function InboxPageInner() {
         )}
       </div>
 
-      {/* Main list (ISSUE → TASK → sub-TASK tree) */}
+      {/* Main list — flat top-level TASKs, created_at desc; subs via toggle */}
       <div>
         <div className="flex items-center gap-2 mb-3">
           <h2
@@ -661,6 +682,38 @@ function InboxPageInner() {
                 : { label: '새 task 등록하기', onClick: () => captureRef.current?.focus() }
             }
           />
+        ) : showCompleted ? (
+          // 완료 뷰: completed_at desc 정렬을 순회하며 날짜가 바뀔 때 그룹 헤더 삽입.
+          (() => {
+            let lastKey: string | null = null;
+            return (
+              <div>
+                {flatTopTasks.map((t, idx) => {
+                  const key = completionDayKey(t);
+                  const isNewGroup = key !== lastKey;
+                  lastKey = key;
+                  return (
+                    <div key={t.id}>
+                      {isNewGroup && (
+                        <div
+                          className={cn(
+                            'text-[11px] font-medium text-muted-foreground/80 uppercase tracking-wide pb-1.5 px-1',
+                            idx === 0 ? 'pt-0' : 'pt-4',
+                          )}
+                        >
+                          {completionDayLabel(t)}
+                        </div>
+                      )}
+                      {/* 같은 그룹 내 두 번째 카드부터만 상단 구분선 (헤더가 첫 카드를 나눔). */}
+                      <div className={cn(!isNewGroup && 'border-t border-border')}>
+                        {renderFlatTask(t)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()
         ) : (
           <div className="divide-y divide-border">
             {flatTopTasks.map(renderFlatTask)}

@@ -25,14 +25,16 @@ const SOURCE_LABEL: Record<string, string> = {
 };
 
 interface Props {
-  sort: SortKey;
+  /** 정렬 섹션 표시 여부. 인박스 메인 리스트는 created_at desc 고정이라 false로 숨김. */
+  showSort?: boolean;
+  sort?: SortKey;
   source: string;          // 'all' | Source
   statuses: string[];      // multi
   requester: string;       // 'all' | name
   delegate: string;        // 'all' | name
   requesters: string[];    // 선택 가능한 요청자 목록 (실제 task에서 추출)
   delegatees: string[];    // 선택 가능한 위임 대상 목록
-  onSortChange: (v: SortKey) => void;
+  onSortChange?: (v: SortKey) => void;
   onSourceChange: (v: string) => void;
   onStatusesChange: (v: string[]) => void;
   onRequesterChange: (v: string) => void;
@@ -40,6 +42,7 @@ interface Props {
 }
 
 export function InboxFilterPopover({
+  showSort = true,
   sort,
   source,
   statuses,
@@ -94,22 +97,26 @@ export function InboxFilterPopover({
       />
       <PopoverContent align="end" className="w-72 p-3">
         <div className="space-y-3">
-          <Section label="정렬">
-            <ChipRow>
-              {SORT_OPTIONS.map(k => (
-                <Chip
-                  key={k}
-                  active={sort === k}
-                  onClick={() => onSortChange(k)}
-                  ariaPressed
-                >
-                  {SORT_LABEL[k]}
-                </Chip>
-              ))}
-            </ChipRow>
-          </Section>
+          {showSort && (
+            <>
+              <Section label="정렬">
+                <ChipRow>
+                  {SORT_OPTIONS.map(k => (
+                    <Chip
+                      key={k}
+                      active={sort === k}
+                      onClick={() => onSortChange?.(k)}
+                      ariaPressed
+                    >
+                      {SORT_LABEL[k]}
+                    </Chip>
+                  ))}
+                </ChipRow>
+              </Section>
 
-          <Separator />
+              <Separator />
+            </>
+          )}
 
           <Section label="출처">
             <ChipRow>
