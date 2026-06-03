@@ -31,7 +31,6 @@ import {
   Sun,
   PauseCircle,
   ListChecks,
-  Pencil,
 } from 'lucide-react';
 
 interface TaskCardProps {
@@ -190,11 +189,6 @@ export function TaskCard({
           보류
         </ContextMenuItem>
       )}
-
-      <ContextMenuItem onClick={openDetail}>
-        <Pencil />
-        상세 열기
-      </ContextMenuItem>
 
       {onDelete && (
         <>
