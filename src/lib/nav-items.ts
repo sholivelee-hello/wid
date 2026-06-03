@@ -3,6 +3,7 @@ import {
   Sun,
   History,
   Settings,
+  PauseCircle,
   Trash2,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -21,5 +22,6 @@ export const navItems: NavItem[] = [
   { href: '/history', label: '히스토리', icon: History },
   { href: '/settings', label: '설정', icon: Settings },
   { separator: true },
+  { href: '/pending', label: '보류함', icon: PauseCircle },
   { href: '/tasks/trash', label: '휴지통', icon: Trash2 },
 ];
