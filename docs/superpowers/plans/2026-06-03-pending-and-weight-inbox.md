@@ -19,10 +19,12 @@
 
 ---
 
-### Task 1: DB 마이그레이션 005 — pending_at 추가 + priority 제거
+### Task 1: DB 마이그레이션 005 — pending_at 추가 (additive만)
+
+**중요 — priority 컬럼 drop은 여기서 하지 않는다.** 운영(Vercel)에 배포된 코드가 아직 insert에 priority를 넣는다. 컬럼을 먼저 지우면 코드 배포 전까지 운영의 task 생성(수동·Slack webhook)이 전부 500. drop은 Task 7에서 코드 배포 후 수행 (마이그레이션 006).
 
 **Files:**
-- Create: `supabase/migrations/005_pending_and_drop_priority.sql`
+- Create: `supabase/migrations/005_pending.sql`
 
 - [ ] **Step 1: 마이그레이션 파일 작성**
 
@@ -30,9 +32,6 @@
 -- 보류(pending) soft-flag: 휴지통 is_deleted 패턴과 동일. null = 활성.
 alter table tasks add column if not exists pending_at timestamptz;
 alter table issues add column if not exists pending_at timestamptz;
-
--- 우선순위 필드 전면 제거 (사용자 결정 2026-06-03 — 기존 값 폐기).
-alter table tasks drop column if exists priority;
 
 create index if not exists idx_task_pending on tasks(pending_at) where pending_at is not null;
 create index if not exists idx_issue_pending on issues(pending_at) where pending_at is not null;
@@ -42,7 +41,7 @@ create index if not exists idx_issue_pending on issues(pending_at) where pending
 
 Supabase MCP 도구 `mcp__plugin_supabase_supabase__apply_migration` 호출:
 - project_id: `merdoqdtujfnickbgmhz`
-- name: `pending_and_drop_priority`
+- name: `pending`
 - query: 위 SQL 전체
 
 - [ ] **Step 3: 적용 확인**
@@ -50,24 +49,24 @@ Supabase MCP 도구 `mcp__plugin_supabase_supabase__apply_migration` 호출:
 `mcp__plugin_supabase_supabase__execute_sql` 로:
 
 ```sql
-select column_name from information_schema.columns
-where table_name = 'tasks' and column_name in ('pending_at', 'priority');
+select table_name, column_name from information_schema.columns
+where column_name = 'pending_at' and table_name in ('tasks', 'issues');
 ```
 
-Expected: `pending_at` 1행만 반환 (priority 없음).
+Expected: tasks·issues 각 1행, 총 2행.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add supabase/migrations/005_pending_and_drop_priority.sql
-git commit -m "feat: pending_at 컬럼 추가 + priority 컬럼 제거 (마이그레이션 005)"
+git add supabase/migrations/005_pending.sql
+git commit -m "feat: pending_at 컬럼 추가 (마이그레이션 005)"
 ```
 
 ---
 
 ### Task 2: priority 전면 제거 (타입 → API → UI)
 
-DB 컬럼이 사라졌으므로 이 태스크가 끝나기 전까지 task 생성 API가 500을 낸다 (insert에 priority 포함). **Task 1 직후 바로 진행할 것.** 중간 단계는 컴파일이 깨질 수 있으므로 빌드 검증·커밋은 이 태스크 끝에서 1회.
+DB의 priority 컬럼은 아직 살아있다 (default '보통') — 코드에서 priority를 제거해도 insert는 default로 채워지므로 안전하다. 컬럼 자체는 Task 7에서 drop. 중간 단계는 컴파일이 깨질 수 있으므로 빌드 검증·커밋은 이 태스크 끝에서 1회.
 
 **Files:**
 - Modify: `src/lib/types.ts:1-3, 34-58`
@@ -267,7 +266,7 @@ sleep 5
 curl -s -X POST http://localhost:3000/api/tasks -H 'Content-Type: application/json' -d '{"title":"priority 제거 검증"}' | head -c 300
 ```
 
-Expected: 201로 task JSON 반환, `priority` 키 없음. 확인 후 해당 task는 DELETE로 정리:
+Expected: 201로 task JSON 반환. (DB 컬럼이 아직 있어 응답에 `priority: '보통'`이 보일 수 있음 — Task 7에서 컬럼 drop 후 사라진다. 코드가 priority를 **보내지 않는 것**이 검증 포인트.) 확인 후 해당 task는 DELETE로 정리:
 
 ```bash
 curl -s -X DELETE http://localhost:3000/api/tasks/<위에서 받은 id>
@@ -1089,6 +1088,32 @@ npm run build && npx eslint src --quiet
 ```
 
 Expected: 빌드 성공. eslint 에러는 기존 6건(react-hooks — history/gcal 파일)만.
+
+- [ ] **Step 3.5: priority 컬럼 drop (마이그레이션 006) — 운영 배포 후에만**
+
+이 단계는 **새 코드가 Vercel에 배포된 뒤** 실행한다 (배포는 컨트롤러/사용자 승인 사항 — 미배포 상태면 이 단계는 SKIP하고 보고에 남길 것).
+
+`supabase/migrations/006_drop_priority.sql`:
+
+```sql
+-- 우선순위 필드 전면 제거 (사용자 결정 2026-06-03 — 기존 값 폐기).
+-- 코드에서 priority 참조가 모두 사라진 뒤(배포 완료) 실행해야 안전.
+alter table tasks drop column if exists priority;
+```
+
+`mcp__plugin_supabase_supabase__apply_migration` (project_id: `merdoqdtujfnickbgmhz`, name: `drop_priority`)로 적용 후:
+
+```sql
+select column_name from information_schema.columns
+where table_name = 'tasks' and column_name = 'priority';
+```
+
+Expected: 0행.
+
+```bash
+git add supabase/migrations/006_drop_priority.sql
+git commit -m "feat: priority 컬럼 drop (마이그레이션 006)"
+```
 
 - [ ] **Step 4: 통합 시나리오 검증 (dev 서버)**
 
