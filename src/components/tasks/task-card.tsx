@@ -1,13 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import Link from 'next/link';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -21,22 +15,19 @@ import {
 import { STATUS_ICONS } from '@/lib/constants';
 import { TASK_STATUSES, type TaskStatus, isTaskDone } from '@/lib/types';
 import { Task } from '@/lib/types';
-import { formatDate, cn, getNotionPageUrl } from '@/lib/utils';
+import { formatDate, cn } from '@/lib/utils';
 import { toggleTodayTask, getTodayTaskIds } from '@/lib/today-tasks';
 import { TaskInlineEditor } from '@/components/tasks/task-inline-editor';
 import { getTaskWeight } from '@/lib/task-weight';
-import { sourceOpenUrl } from '@/components/tasks/source-icon';
+import { SourceIcon, sourceOpenUrl } from '@/components/tasks/source-icon';
 import {
   Circle,
   CheckCircle2,
-  MoreHorizontal,
   Trash2,
   ExternalLink,
   User,
   CalendarDays,
-  FileText,
   FolderOpen,
-  MessageSquare,
   Sun,
   PauseCircle,
   ListChecks,
@@ -75,10 +66,14 @@ interface TaskCardProps {
    *  오늘 because its due date is today/past (spec 결정 4). Renders a small
    *  "마감" pill before the title. */
   reasonBadge?: 'deadline';
-}
-
-function Dot() {
-  return <span className="text-muted-foreground/40 select-none" aria-hidden="true">·</span>;
+  /** 카드 2행 메타에 표시할 소속 ISSUE. 평면 리스트(/inbox)에서 사용.
+   *  칩 클릭 시 `/issues/[id]`로 이동한다. 없으면 칩 생략. */
+  issueChip?: { id: string; name: string } | null;
+  /** 직속 sub-TASK 개수. 0보다 크면 2행에 `↳ sub N` 토글을 렌더한다. */
+  subCount?: number;
+  /** sub 펼침 상태 (부모가 소유). `↳ sub N` 클릭 시 onToggleSubs 호출. */
+  subsExpanded?: boolean;
+  onToggleSubs?: () => void;
 }
 
 export function TaskCard({
@@ -88,13 +83,16 @@ export function TaskCard({
   onDelete,
   onSelect,
   onPend,
-  hierarchyLabel,
   isSubtask = false,
   hasChildren = false,
   breadcrumb,
   editing = false,
   onCloseEdit,
   reasonBadge,
+  issueChip,
+  subCount = 0,
+  subsExpanded = false,
+  onToggleSubs,
 }: TaskCardProps) {
   const openDetail = () => {
     if (onSelect) onSelect(task.id);
@@ -108,7 +106,6 @@ export function TaskCard({
 
   const [isTodayTask, setIsTodayTask] = useState(() => getTodayTaskIds().has(task.id));
   const [completePulse, setCompletePulse] = useState(0);
-  const [todayPulse, setTodayPulse] = useState(0);
 
   useEffect(() => {
     const handler = () => setIsTodayTask(getTodayTaskIds().has(task.id));
@@ -124,12 +121,6 @@ export function TaskCard({
     if (d < today && !isDone) deadlineSuffix = ' · 기한 초과';
     else if (d.toDateString() === today.toDateString()) deadlineSuffix = ' · 오늘';
   }
-
-  const handleStatusSelect = (val: string | null) => {
-    if (!val) return;
-    if (!(TASK_STATUSES as readonly string[]).includes(val)) return;
-    onStatusChange?.(task.id, val as TaskStatus);
-  };
 
   // 완료 토글 가드 — completion 버튼과 동일 규칙: 핸들러가 없고 아직 미완료면
   // (하위 task 미완료) 완료가 막힌다.
@@ -167,7 +158,6 @@ export function TaskCard({
       </ContextMenuItem>
       <ContextMenuItem
         onClick={() => {
-          setTodayPulse((p) => p + 1);
           toggleTodayTask(task.id);
         }}
       >
@@ -314,34 +304,6 @@ export function TaskCard({
             );
           })()}
 
-          {/* 1-tap "오늘 토글" */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setTodayPulse(p => p + 1);
-              toggleTodayTask(task.id);
-            }}
-            className={cn(
-              'flex-shrink-0 -ml-2 -my-1.5 p-1.5 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-              isTodayTask
-                ? 'text-primary hover:text-primary/80'
-                : 'text-muted-foreground/30 group-hover/card:text-muted-foreground hover:text-primary',
-            )}
-            aria-pressed={isTodayTask}
-            aria-label={isTodayTask ? '오늘에서 제거' : '오늘에 추가'}
-            title={isTodayTask ? '오늘 묶음에서 빼기' : '오늘 할 일로 등록'}
-          >
-            <Sun
-              key={`sun-${todayPulse}`}
-              className={cn(
-                'h-4 w-4',
-                isTodayTask && 'fill-primary',
-                todayPulse > 0 && 'animate-today-pulse',
-              )}
-            />
-          </button>
-
           {/* Title + metadata */}
           <div className="flex-1 min-w-0 space-y-1.5">
             {breadcrumb && (breadcrumb.issueName || breadcrumb.parentTaskTitle) && (
@@ -381,6 +343,8 @@ export function TaskCard({
                   ↳
                 </span>
               )}
+              {/* 출처 브랜드 아이콘 — 표시 전용. 제목 바로 앞. */}
+              <SourceIcon source={task.source} className="flex-shrink-0" />
               {reasonBadge === 'deadline' && !isDone && (
                 <span
                   className="inline-flex items-center flex-shrink-0 text-[10px] font-semibold tracking-wide px-1.5 h-[16px] rounded bg-primary/12 text-primary dark:bg-primary/20"
@@ -409,136 +373,50 @@ export function TaskCard({
               </span>
             </div>
 
-            <div className="flex items-center gap-x-2.5 gap-y-1 text-xs flex-wrap text-muted-foreground">
-              {task.deadline && (
-                <span
-                  className={cn(
-                    'inline-flex items-center gap-1',
-                    weight === 'heavy' && !isDone && 'text-primary font-medium',
-                  )}
-                >
-                  <CalendarDays className="h-3 w-3" aria-hidden="true" />
-                  {formatDate(task.deadline, 'M월 d일')}{deadlineSuffix}
-                </span>
-              )}
-
-              {task.requester && (
-                <>
-                  <Dot />
+            {(issueChip || task.deadline || task.requester || subCount > 0) && (
+              <div className="flex items-center gap-x-2.5 gap-y-1 text-xs flex-wrap text-muted-foreground">
+                {issueChip && (
+                  <Link
+                    href={`/issues/${issueChip.id}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="inline-flex items-center gap-1 max-w-[180px] px-1.5 h-5 rounded-full bg-primary/10 text-primary hover:bg-primary/15 transition-colors"
+                    title={issueChip.name}
+                  >
+                    <FolderOpen className="h-3 w-3 flex-shrink-0" aria-hidden />
+                    <span className="truncate font-medium">{issueChip.name}</span>
+                  </Link>
+                )}
+                {task.deadline && (
+                  <span
+                    className={cn(
+                      'inline-flex items-center gap-1',
+                      weight === 'heavy' && !isDone && 'text-primary font-medium',
+                    )}
+                  >
+                    <CalendarDays className="h-3 w-3" aria-hidden="true" />
+                    {formatDate(task.deadline, 'M월 d일')}{deadlineSuffix}
+                  </span>
+                )}
+                {task.requester && (
                   <span className="inline-flex items-center gap-1">
                     <User className="h-3 w-3" aria-hidden="true" />
                     {task.requester}
                   </span>
-                </>
-              )}
-
-              {task.source === 'notion' && task.notion_task_id && (
-                <>
-                  <Dot />
-                  <a
-                    href={task.notion_url ?? getNotionPageUrl(task.notion_task_id)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
-                    title="Notion에서 보기"
-                    aria-label="Notion에서 보기"
+                )}
+                {subCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onToggleSubs?.(); }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    aria-expanded={subsExpanded}
+                    className="inline-flex items-center gap-1 text-muted-foreground/80 hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded"
                   >
-                    <FileText className="h-3 w-3" />
-                    <ExternalLink className="h-2.5 w-2.5" />
-                  </a>
-                </>
-              )}
-              {task.source === 'slack' && task.slack_url && (
-                <>
-                  <Dot />
-                  <a
-                    href={task.slack_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
-                    title="Slack에서 보기"
-                    aria-label="Slack에서 보기"
-                  >
-                    <MessageSquare className="h-3 w-3" />
-                    <ExternalLink className="h-2.5 w-2.5" />
-                  </a>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div
-            className="flex items-center gap-1 flex-shrink-0"
-            onClick={(e) => e.stopPropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            {onStatusChange ? (
-              <Select value={task.status} onValueChange={handleStatusSelect}>
-                <SelectTrigger
-                  className="h-7 text-[11px] px-2.5 rounded-full border border-border/60 bg-background text-foreground hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring min-w-0"
-                  aria-label="상태 변경"
-                >
-                  {task.status}
-                </SelectTrigger>
-                <SelectContent>
-                  {TASK_STATUSES.map((s) => {
-                    const Icon = STATUS_ICONS[s];
-                    return (
-                      <SelectItem key={s} value={s}>
-                        <div className="flex items-center gap-2">
-                          {Icon && <Icon className="h-3.5 w-3.5 text-muted-foreground" />}
-                          <span>{s}</span>
-                        </div>
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 h-8 text-xs px-2.5 rounded-md border border-border text-muted-foreground">
-                {STATUS_ICONS[task.status] && (() => {
-                  const Icon = STATUS_ICONS[task.status];
-                  return <Icon className="h-3.5 w-3.5" />;
-                })()}
-                {task.status}
-              </span>
+                    <span aria-hidden>↳</span> sub {subCount}
+                    <span className="text-muted-foreground/60">{subsExpanded ? '· 접기' : '· 펼치기'}</span>
+                  </button>
+                )}
+              </div>
             )}
-
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                className="inline-flex items-center justify-center rounded-md h-8 w-8 p-0 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label="더 보기"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <MoreHorizontal className="h-4 w-4" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {onPend && (
-                  <DropdownMenuItem
-                    onClick={(e) => { e.stopPropagation(); onPend(task.id); }}
-                  >
-                    <PauseCircle className="h-4 w-4 mr-2" />
-                    보류
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuItem
-                  onClick={(e) => { e.stopPropagation(); onDelete?.(task.id); }}
-                  className="text-destructive focus:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  삭제
-                </DropdownMenuItem>
-                {task.slack_url && (
-                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); window.open(task.slack_url!, '_blank'); }}>
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    Slack 보기
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
         </div>
         {editing && (
