@@ -50,6 +50,9 @@ interface Props extends TaskBranchHandlers {
   /** Reason this row appears where it does — forwarded to TaskCard. Set by the
    *  Today page on deadline-auto roots; not propagated through recursion. */
   reasonBadge?: 'deadline';
+  /** 카드 2행에 표시할 소속 ISSUE 칩. 평면 리스트/Today에서 root에만 설정.
+   *  recursion으로 전파하지 않는다(자식은 부모를 통해 ISSUE에 속하므로). */
+  issueChip?: { id: string; name: string } | null;
   /** Drag handle slot passed from parent SortableTaskItem. */
   dragHandle?: HandleSlot;
   /** When true, any task created via the inline AddSubTaskRow is auto-added
@@ -218,6 +221,7 @@ export function TaskBranch({
   onCloseEdit,
   breadcrumb,
   reasonBadge,
+  issueChip,
   dragHandle,
   addToTodayOnCreate = false,
   onStatusChange,
@@ -356,6 +360,7 @@ export function TaskBranch({
             onCloseEdit={onCloseEdit}
             breadcrumb={breadcrumb}
             reasonBadge={reasonBadge}
+            issueChip={issueChip}
           />
           {blocked && (
             <div className="text-[10px] text-muted-foreground ml-3 mt-1 inline-flex items-center gap-1">

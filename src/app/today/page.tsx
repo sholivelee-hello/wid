@@ -288,6 +288,13 @@ export default function TodayPage() {
     return { issueName, parentTaskTitle };
   };
 
+  const buildIssueChip = (task: Task) => {
+    // top-level TASK만 ISSUE 칩을 가진다(sub-TASK는 부모를 통해 연결).
+    if (task.parent_task_id || !task.issue_id) return null;
+    const i = issuesById.get(task.issue_id);
+    return i ? { id: i.id, name: i.name } : null;
+  };
+
   const handleStatusChange = async (taskId: string, newStatus: TaskStatus) => {
     const before = tasks.find(t => t.id === taskId);
     setTasks(prev => prev.map(t =>
@@ -515,6 +522,7 @@ export default function TodayPage() {
                                     editingTaskId={editingTaskId}
                                     onCloseEdit={() => setEditingTaskId(null)}
                                     breadcrumb={buildBreadcrumb(root.task)}
+                                    issueChip={buildIssueChip(root.task)}
                                     reasonBadge={
                                       // 마감으로 자동 포함됐고 사용자가 직접 고른 게 아닐 때만 "마감" 뱃지.
                                       !todayIds.has(root.task.id) && deadlineTodayIds.has(root.task.id)
