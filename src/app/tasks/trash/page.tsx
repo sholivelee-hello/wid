@@ -139,7 +139,6 @@ export default function TrashPage() {
               </div>
               <p className="font-medium truncate">{task.title}</p>
               <div className="flex items-center gap-2 mt-1">
-                <Badge variant="outline">{task.priority}</Badge>
                 <Badge variant="outline">{task.status}</Badge>
               </div>
             </div>

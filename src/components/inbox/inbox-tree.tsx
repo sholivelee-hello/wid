@@ -57,8 +57,6 @@ interface Props {
   onCloseEdit: () => void;
 }
 
-const PRIORITY_ORDER: Record<string, number> = { '긴급': 0, '높음': 1, '보통': 2, '낮음': 3 };
-
 /**
  * Sort top-level task siblings by user-selected key, with `position` as
  * stable tie-breaker (so DnD reorder is still visible within the same key).
@@ -77,11 +75,7 @@ function strCmp(a: string | null | undefined, b: string | null | undefined): num
 function sortNodes(nodes: TaskNode[], sortBy: SortKey): TaskNode[] {
   const cmp = (a: TaskNode, b: TaskNode) => {
     const ta = a.task, tb = b.task;
-    if (sortBy === 'priority') {
-      const pa = PRIORITY_ORDER[ta.priority] ?? 9;
-      const pb = PRIORITY_ORDER[tb.priority] ?? 9;
-      if (pa !== pb) return pa - pb;
-    } else if (sortBy === 'deadline') {
+    if (sortBy === 'deadline') {
       const da = ta.deadline ?? '￿';
       const db = tb.deadline ?? '￿';
       if (da !== db) return da < db ? -1 : 1;

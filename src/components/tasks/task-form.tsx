@@ -7,7 +7,6 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PRIORITIES } from '@/lib/constants';
 import { TASK_STATUSES, Task } from '@/lib/types';
 import { apiFetch } from '@/lib/api';
 import { Separator } from '@/components/ui/separator';
@@ -23,7 +22,6 @@ export function TaskForm({ task }: TaskFormProps) {
   const [form, setForm] = useState({
     title: task?.title ?? '',
     description: task?.description ?? '',
-    priority: task?.priority ?? '보통',
     status: task?.status ?? '등록',
     requester: task?.requester ?? '',
     requested_at: task?.requested_at?.slice(0, 10) ?? '',
@@ -52,7 +50,6 @@ export function TaskForm({ task }: TaskFormProps) {
     const payload: Record<string, unknown> = {
       title: form.title,
       description: form.description || null,
-      priority: form.priority,
       status: form.status,
       requester: form.requester || null,
       requested_at: form.requested_at || null,
@@ -107,25 +104,14 @@ export function TaskForm({ task }: TaskFormProps) {
       </div>
       <Separator />
       <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">분류</p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <Label>우선순위</Label>
-          <Select value={form.priority} onValueChange={(v) => update('priority', v ?? '보통')}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {PRIORITIES.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label>상태</Label>
-          <Select value={form.status} onValueChange={(v) => update('status', v ?? '등록')}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {TASK_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
+      <div>
+        <Label>상태</Label>
+        <Select value={form.status} onValueChange={(v) => update('status', v ?? '등록')}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {TASK_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+          </SelectContent>
+        </Select>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>

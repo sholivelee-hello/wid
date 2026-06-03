@@ -1,5 +1,4 @@
 export type SortKey =
-  | 'priority'
   | 'deadline'
   | 'created_at'
   | 'title'
@@ -8,7 +7,6 @@ export type SortKey =
 
 export const SORT_LABEL: Record<SortKey, string> = {
   created_at: '최근 추가',
-  priority: '우선순위',
   deadline: '마감일',
   title: '이름',
   requester: '요청자',
@@ -17,7 +15,6 @@ export const SORT_LABEL: Record<SortKey, string> = {
 
 const SORT_KEYS: SortKey[] = [
   'created_at',
-  'priority',
   'deadline',
   'title',
   'requester',
@@ -32,7 +29,6 @@ export interface CustomTaskView {
   id: string;
   name: string;
   statuses: string[];    // empty = all statuses
-  priorities: string[];  // empty = all priorities
   sortBy: SortKey;
 }
 
@@ -46,7 +42,13 @@ const INBOX_SORT_KEY = 'wid-inbox-sort';
 export function loadViews(page: 'inbox' | 'today'): CustomTaskView[] {
   if (typeof window === 'undefined') return [];
   try {
-    return JSON.parse(localStorage.getItem(KEYS[page]) ?? '[]');
+    const raw: (CustomTaskView & { sortBy?: string })[] =
+      JSON.parse(localStorage.getItem(KEYS[page]) ?? '[]');
+    // priority 정렬/필터는 폐기됨 — 옛 저장값은 created_at으로 강등.
+    return raw.map(v => ({
+      ...v,
+      sortBy: isSortKey(v.sortBy ?? null) ? (v.sortBy as SortKey) : 'created_at',
+    }));
   } catch {
     return [];
   }

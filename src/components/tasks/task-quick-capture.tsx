@@ -1,10 +1,8 @@
 'use client';
 
 import { useEffect, useImperativeHandle, useRef, useState, forwardRef } from 'react';
-import { Task, Issue, Priority } from '@/lib/types';
-import { PRIORITIES } from '@/lib/constants';
+import { Task, Issue } from '@/lib/types';
 import { Input } from '@/components/ui/input';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { IssuePicker } from '@/components/issues/issue-picker';
 import { TaskChipButton } from '@/components/tasks/task-chip-button';
 import { DeadlinePopover } from '@/components/tasks/deadline-popover';
@@ -33,13 +31,11 @@ export const TaskQuickCapture = forwardRef<TaskQuickCaptureHandle, TaskQuickCapt
   function TaskQuickCapture({ surface, onCreated, defaultIssueId = null, onSubmittedClose, autoFocus }, ref) {
     const inputRef = useRef<HTMLInputElement>(null);
     const [title, setTitle] = useState('');
-    const [priority, setPriority] = useState<Priority>('보통');
     const [deadline, setDeadline] = useState<string | null>(null);
     const [issueId, setIssueId] = useState<string | null>(defaultIssueId);
     const [issueName, setIssueName] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
     const [issuePickerOpen, setIssuePickerOpen] = useState(false);
-    const [priorityOpen, setPriorityOpen] = useState(false);
 
     useImperativeHandle(ref, () => ({
       focus: () => inputRef.current?.focus(),
@@ -60,11 +56,9 @@ export const TaskQuickCapture = forwardRef<TaskQuickCaptureHandle, TaskQuickCapt
       return () => { cancel = true; };
     }, [issueId]);
 
-    const chipsTouched =
-      priority !== '보통' || deadline !== null || issueId !== defaultIssueId;
+    const chipsTouched = deadline !== null || issueId !== defaultIssueId;
 
     const resetChips = () => {
-      setPriority('보통');
       setDeadline(null);
       setIssueId(defaultIssueId);
     };
@@ -79,7 +73,6 @@ export const TaskQuickCapture = forwardRef<TaskQuickCaptureHandle, TaskQuickCapt
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             title: trimmed,
-            priority,
             deadline,
             issue_id: issueId,
             parent_task_id: null,
@@ -178,37 +171,6 @@ export const TaskQuickCapture = forwardRef<TaskQuickCaptureHandle, TaskQuickCapt
         </div>
 
         <div className="mt-2 flex items-center gap-1.5 flex-wrap">
-          <Popover open={priorityOpen} onOpenChange={setPriorityOpen}>
-            <PopoverTrigger
-              render={
-                <TaskChipButton
-                  active={priority !== '보통'}
-                  variant={priority === '긴급' ? 'destructive' : 'default'}
-                >
-                  {priority}
-                </TaskChipButton>
-              }
-            />
-            <PopoverContent className="w-32 p-1" align="start">
-              <div className="flex flex-col">
-                {PRIORITIES.map(p => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => { setPriority(p); setPriorityOpen(false); }}
-                    className={cn(
-                      'text-left px-2 py-1.5 rounded text-xs hover:bg-accent transition-colors',
-                      p === priority && 'font-semibold',
-                      p === '긴급' && 'text-destructive',
-                    )}
-                  >
-                    {p}
-                  </button>
-                ))}
-              </div>
-            </PopoverContent>
-          </Popover>
-
           <DeadlinePopover value={deadline} onChange={setDeadline} />
 
           <TaskChipButton

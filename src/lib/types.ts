@@ -1,4 +1,3 @@
-export type Priority = '긴급' | '높음' | '보통' | '낮음';
 export type Source = 'manual' | 'notion' | 'slack';
 export type SortMode = 'checklist' | 'sequential';
 
@@ -35,7 +34,6 @@ export interface Task {
   id: string;
   title: string;
   description: string | null;
-  priority: Priority;
   status: TaskStatus;
   source: Source;
   requester: string | null;

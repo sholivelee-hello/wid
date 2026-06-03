@@ -5,14 +5,13 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { ChevronDown, SlidersHorizontal } from 'lucide-react';
-import { PRIORITIES, SOURCES } from '@/lib/constants';
+import { SOURCES } from '@/lib/constants';
 import { TASK_STATUSES } from '@/lib/types';
 import { SORT_LABEL, type SortKey } from '@/lib/custom-views';
 import { cn } from '@/lib/utils';
 
 const SORT_OPTIONS: SortKey[] = [
   'created_at',
-  'priority',
   'deadline',
   'title',
   'requester',
@@ -27,7 +26,6 @@ const SOURCE_LABEL: Record<string, string> = {
 
 interface Props {
   sort: SortKey;
-  priority: string;        // 'all' | Priority
   source: string;          // 'all' | Source
   statuses: string[];      // multi
   requester: string;       // 'all' | name
@@ -35,7 +33,6 @@ interface Props {
   requesters: string[];    // 선택 가능한 요청자 목록 (실제 task에서 추출)
   delegatees: string[];    // 선택 가능한 위임 대상 목록
   onSortChange: (v: SortKey) => void;
-  onPriorityChange: (v: string) => void;
   onSourceChange: (v: string) => void;
   onStatusesChange: (v: string[]) => void;
   onRequesterChange: (v: string) => void;
@@ -44,7 +41,6 @@ interface Props {
 
 export function InboxFilterPopover({
   sort,
-  priority,
   source,
   statuses,
   requester,
@@ -52,7 +48,6 @@ export function InboxFilterPopover({
   requesters,
   delegatees,
   onSortChange,
-  onPriorityChange,
   onSourceChange,
   onStatusesChange,
   onRequesterChange,
@@ -61,14 +56,12 @@ export function InboxFilterPopover({
   const [open, setOpen] = useState(false);
 
   const activeCount =
-    (priority !== 'all' ? 1 : 0) +
     (source !== 'all' ? 1 : 0) +
     (requester !== 'all' ? 1 : 0) +
     (delegate !== 'all' ? 1 : 0) +
     statuses.length;
 
   const reset = () => {
-    onPriorityChange('all');
     onSourceChange('all');
     onStatusesChange([]);
     onRequesterChange('all');
@@ -111,26 +104,6 @@ export function InboxFilterPopover({
                   ariaPressed
                 >
                   {SORT_LABEL[k]}
-                </Chip>
-              ))}
-            </ChipRow>
-          </Section>
-
-          <Separator />
-
-          <Section label="우선순위">
-            <ChipRow>
-              <Chip active={priority === 'all'} onClick={() => onPriorityChange('all')} ariaPressed>
-                전체
-              </Chip>
-              {PRIORITIES.map(p => (
-                <Chip
-                  key={p}
-                  active={priority === p}
-                  onClick={() => onPriorityChange(p)}
-                  ariaPressed
-                >
-                  {p}
                 </Chip>
               ))}
             </ChipRow>

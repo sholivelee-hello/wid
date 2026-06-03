@@ -11,7 +11,6 @@ import { IssuePicker } from '@/components/issues/issue-picker';
 import { TaskChipButton } from '@/components/tasks/task-chip-button';
 import { DeadlinePopover } from '@/components/tasks/deadline-popover';
 import { Issue, Task, TASK_STATUSES, isTaskDone, isTaskStatus } from '@/lib/types';
-import { PRIORITIES } from '@/lib/constants';
 import { apiFetch } from '@/lib/api';
 import { promptNextInTodayIfNeeded } from '@/lib/today-tasks';
 import { Check, Loader2, Trash2, X, FolderOpen, ChevronDown } from 'lucide-react';
@@ -26,7 +25,6 @@ export function TaskInlineEditor({ task, onClose }: Props) {
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description ?? '');
   const [status, setStatus] = useState(task.status);
-  const [priority, setPriority] = useState(task.priority);
   const [deadline, setDeadline] = useState<string | null>(task.deadline?.slice(0, 10) ?? null);
   const [requester, setRequester] = useState(task.requester ?? '');
   const [delegateTo, setDelegateTo] = useState(task.delegate_to ?? '');
@@ -36,7 +34,6 @@ export function TaskInlineEditor({ task, onClose }: Props) {
   const [linkedIssueId, setLinkedIssueId] = useState<string | null>(task.issue_id);
 
   const [statusOpen, setStatusOpen] = useState(false);
-  const [priorityOpen, setPriorityOpen] = useState(false);
 
   // Auto-expand the optional section when task already has any of its values.
   const [moreOpen, setMoreOpen] = useState(
@@ -182,43 +179,6 @@ export function TaskInlineEditor({ task, onClose }: Props) {
                   )}
                 >
                   {s}
-                </button>
-              ))}
-            </div>
-          </PopoverContent>
-        </Popover>
-
-        {/* Priority chip */}
-        <Popover open={priorityOpen} onOpenChange={setPriorityOpen}>
-          <PopoverTrigger
-            render={
-              <TaskChipButton
-                active={priority !== '보통'}
-                variant={priority === '긴급' ? 'destructive' : 'default'}
-              >
-                {priority}
-              </TaskChipButton>
-            }
-          />
-          <PopoverContent className="w-32 p-1" align="start">
-            <div className="flex flex-col">
-              {PRIORITIES.map(p => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => {
-                    setPriorityOpen(false);
-                    if (p === priority) return;
-                    setPriority(p);
-                    save({ priority: p });
-                  }}
-                  className={cn(
-                    'text-left px-2 py-1.5 rounded text-xs hover:bg-accent transition-colors',
-                    p === priority && 'font-semibold',
-                    p === '긴급' && 'text-destructive',
-                  )}
-                >
-                  {p}
                 </button>
               ))}
             </div>

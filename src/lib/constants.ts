@@ -4,8 +4,6 @@ import { TASK_STATUSES, type TaskStatus } from '@/lib/types';
 /** Canonical status list — same as TASK_STATUSES, re-exported for convenience. */
 export const DEFAULT_STATUSES = TASK_STATUSES;
 
-export const PRIORITIES = ['긴급', '높음', '보통', '낮음'] as const;
-
 export const SOURCES = ['manual', 'notion', 'slack'] as const;
 
 export const STATUS_ICONS: Record<TaskStatus, LucideIcon> = {
@@ -20,13 +18,6 @@ export const STATUS_COLORS: Record<TaskStatus, string> = {
   '완료': '#10B981',
   '위임': '#8B5CF6',
   '취소': '#9CA3AF',
-};
-
-export const PRIORITY_COLORS: Record<string, string> = {
-  '긴급': '#EF4444',
-  '높음': '#F59E0B',
-  '보통': '#6366F1',
-  '낮음': '#9CA3AF',
 };
 
 export function getContrastTextColor(bgHex: string): string {

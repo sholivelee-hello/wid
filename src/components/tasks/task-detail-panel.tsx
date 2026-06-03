@@ -12,7 +12,6 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Issue, Task, TASK_STATUSES } from '@/lib/types';
-import { PRIORITIES } from '@/lib/constants';
 import { formatDate, cn, getNotionPageUrl } from '@/lib/utils';
 import { apiFetch } from '@/lib/api';
 import { IssuePicker } from '@/components/issues/issue-picker';
@@ -62,7 +61,6 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated, onNavigate }: 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState('');
-  const [priority, setPriority] = useState('');
   const [delegateTo, setDelegateTo] = useState('');
   const [deadline, setDeadline] = useState('');
   const [completedAt, setCompletedAt] = useState('');
@@ -84,7 +82,6 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated, onNavigate }: 
       setTitle(taskData.title);
       setDescription(taskData.description ?? '');
       setStatus(taskData.status);
-      setPriority(taskData.priority);
       setDelegateTo(taskData.delegate_to ?? '');
       setDeadline(taskData.deadline?.slice(0, 10) ?? '');
       setCompletedAt(isoToLocalDateTime(taskData.completed_at));
@@ -182,12 +179,6 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated, onNavigate }: 
     if (!v) return;
     setStatus(v);
     handleInstantSave('status', v);
-  };
-
-  const handlePriorityChange = (v: string | null) => {
-    if (!v) return;
-    setPriority(v);
-    handleInstantSave('priority', v);
   };
 
   const handleSave = async () => {
@@ -446,28 +437,16 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated, onNavigate }: 
                 )}
               </div>
 
-              {/* Status + Priority */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs text-muted-foreground">상태</Label>
-                  <Select value={status} onValueChange={handleStatusChange}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {TASK_STATUSES.map(s => (
-                        <SelectItem key={s} value={s}>{s}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">우선순위</Label>
-                  <Select value={priority} onValueChange={handlePriorityChange}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {PRIORITIES.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">상태</Label>
+                <Select value={status} onValueChange={handleStatusChange}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {TASK_STATUSES.map(s => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
 

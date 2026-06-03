@@ -32,7 +32,6 @@ export default function InboxPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(true);
-  const [priority, setPriority] = useState('all');
   const [source, setSource] = useState('all');
   const [requester, setRequester] = useState('all');
   const [delegate, setDelegate] = useState('all');
@@ -97,7 +96,6 @@ export default function InboxPage() {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (priority !== 'all') params.set('priority', priority);
       if (source !== 'all') params.set('source', source);
       const [taskData, issueData] = await Promise.all([
         apiFetch<Task[]>(`/api/tasks?${params}`),
@@ -109,7 +107,7 @@ export default function InboxPage() {
     } finally {
       setLoading(false);
     }
-  }, [priority, source]);
+  }, [source]);
 
   useEffect(() => { fetchTasks(); }, [fetchTasks]);
 
@@ -205,8 +203,6 @@ export default function InboxPage() {
     });
   };
 
-  const priorityOrder: Record<string, number> = { '긴급': 0, '높음': 1, '보통': 2, '낮음': 3 };
-
   const applyBaseFilter = useCallback((list: Task[]) => {
     if (debouncedSearch) {
       list = list.filter(t => t.title.toLowerCase().includes(debouncedSearch.toLowerCase()));
@@ -214,14 +210,13 @@ export default function InboxPage() {
     return list;
   }, [debouncedSearch]);
 
-  // 모든 필터 (요청자/위임자/우선순위/출처/상태)는 top-level TASK 단위로
+  // 모든 필터 (요청자/위임자/출처/상태)는 top-level TASK 단위로
   // 매칭하고, 매칭된 부모의 sub-task는 그대로 따라온다 (3-level invariant
-  // 활용 — sub-task는 보통 본인 priority/source/status가 부모와 다를 수 있어
+  // 활용 — sub-task는 source/status가 부모와 다를 수 있어
   // 그 단위로 거르면 트리가 깨진다).
   const noFilters =
     requester === 'all' &&
     delegate === 'all' &&
-    priority === 'all' &&
     source === 'all' &&
     statusFilter.length === 0;
   const treeFilteredTasks = useMemo(() => {
@@ -231,15 +226,14 @@ export default function InboxPage() {
       if (t.parent_task_id) continue;
       const reqOk = requester === 'all' || (t.requester ?? '') === requester;
       const delOk = delegate === 'all' || (t.delegate_to ?? '') === delegate;
-      const prioOk = priority === 'all' || t.priority === priority;
       const srcOk = source === 'all' || t.source === source;
       const stOk = statusFilter.length === 0 || statusFilter.includes(t.status);
-      if (reqOk && delOk && prioOk && srcOk && stOk) matchedParentIds.add(t.id);
+      if (reqOk && delOk && srcOk && stOk) matchedParentIds.add(t.id);
     }
     return tasks.filter(t =>
       t.parent_task_id ? matchedParentIds.has(t.parent_task_id) : matchedParentIds.has(t.id),
     );
-  }, [tasks, requester, delegate, priority, source, statusFilter, noFilters]);
+  }, [tasks, requester, delegate, source, statusFilter, noFilters]);
 
   // 필터 chip 후보군은 실제 task에서 추출 (sub-task 포함).
   const requesters = useMemo(() => {
@@ -273,10 +267,7 @@ export default function InboxPage() {
     if (view.statuses.length > 0) {
       list = list.filter(t => view.statuses.includes(t.status));
     }
-    if ((view.priorities ?? []).length > 0) {
-      list = list.filter(t => view.priorities.includes(t.priority));
-    }
-    const sort = view.sortBy ?? 'priority';
+    const sort = view.sortBy ?? 'created_at';
     const compareStr = (a: string | null | undefined, b: string | null | undefined) => {
       const av = a?.trim() ?? '';
       const bv = b?.trim() ?? '';
@@ -286,7 +277,6 @@ export default function InboxPage() {
       return av.localeCompare(bv, 'ko');
     };
     return list.sort((a, b) => {
-      if (sort === 'priority') return (priorityOrder[a.priority] ?? 9) - (priorityOrder[b.priority] ?? 9);
       if (sort === 'deadline') {
         if (!a.deadline && !b.deadline) return 0;
         if (!a.deadline) return 1;
@@ -379,7 +369,6 @@ export default function InboxPage() {
         </div>
         <InboxFilterPopover
           sort={sortBy}
-          priority={priority}
           source={source}
           statuses={statusFilter}
           requester={requester}
@@ -387,17 +376,15 @@ export default function InboxPage() {
           requesters={requesters}
           delegatees={delegatees}
           onSortChange={setSortBy}
-          onPriorityChange={setPriority}
           onSourceChange={setSource}
           onStatusesChange={(next) => { setStatusFilter(next); saveInboxFilter(next); }}
           onRequesterChange={setRequester}
           onDelegateChange={setDelegate}
         />
-        {(priority !== 'all' || source !== 'all' || statusFilter.length > 0 || requester !== 'all' || delegate !== 'all') && (
+        {(source !== 'all' || statusFilter.length > 0 || requester !== 'all' || delegate !== 'all') && (
           <button
             type="button"
             onClick={() => {
-              setPriority('all');
               setSource('all');
               setStatusFilter([]);
               setRequester('all');

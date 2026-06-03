@@ -6,7 +6,6 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
 
   const status = searchParams.get('status');
-  const priority = searchParams.get('priority');
   const source = searchParams.get('source');
   const from = searchParams.get('from');
   const to = searchParams.get('to');
@@ -24,7 +23,6 @@ export async function GET(request: NextRequest) {
     .eq('is_deleted', showDeleted);
 
   if (status) query = query.eq('status', status);
-  if (priority) query = query.eq('priority', priority);
   if (source) query = query.eq('source', source);
   if (issueId) query = query.eq('issue_id', issueId);
   if (parentId) query = query.eq('parent_task_id', parentId);
@@ -55,7 +53,6 @@ export async function POST(request: NextRequest) {
     .insert({
       title: body.title,
       description: body.description ?? null,
-      priority: body.priority ?? '보통',
       status: body.status ?? '등록',
       source: body.source ?? 'manual',
       requester: body.requester ?? null,

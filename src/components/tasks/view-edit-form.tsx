@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PRIORITIES, STATUS_COLORS } from '@/lib/constants';
+import { STATUS_COLORS } from '@/lib/constants';
 import { TASK_STATUSES } from '@/lib/types';
 import { makeViewId, type CustomTaskView, type SortKey } from '@/lib/custom-views';
 import { cn } from '@/lib/utils';
@@ -18,17 +18,11 @@ interface ViewEditFormProps {
 export function ViewEditForm({ initial, onSave, onCancel }: ViewEditFormProps) {
   const [name, setName] = useState(initial?.name ?? '');
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>(initial?.statuses ?? []);
-  const [selectedPriorities, setSelectedPriorities] = useState<string[]>(initial?.priorities ?? []);
-  const [sortBy, setSortBy] = useState<SortKey>(initial?.sortBy ?? 'priority');
+  const [sortBy, setSortBy] = useState<SortKey>(initial?.sortBy ?? 'created_at');
 
   const toggleStatus = (original: string) =>
     setSelectedStatuses(prev =>
       prev.includes(original) ? prev.filter(x => x !== original) : [...prev, original]
-    );
-
-  const togglePriority = (p: string) =>
-    setSelectedPriorities(prev =>
-      prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]
     );
 
   const handleSave = () => {
@@ -37,13 +31,8 @@ export function ViewEditForm({ initial, onSave, onCancel }: ViewEditFormProps) {
       id: initial?.id ?? makeViewId(),
       name: name.trim(),
       statuses: selectedStatuses,
-      priorities: selectedPriorities,
       sortBy,
     });
-  };
-
-  const priorityColors: Record<string, string> = {
-    '긴급': '#EF4444', '높음': '#F59E0B', '보통': '#6366F1', '낮음': '#9CA3AF',
   };
 
   return (
@@ -85,31 +74,6 @@ export function ViewEditForm({ initial, onSave, onCancel }: ViewEditFormProps) {
         </div>
       </div>
 
-      {/* Priority filter */}
-      <div>
-        <p className="text-[11px] text-muted-foreground mb-1.5">우선순위 필터 (비워두면 전체)</p>
-        <div className="flex flex-wrap gap-1.5">
-          {PRIORITIES.map(p => {
-            const color = priorityColors[p] ?? '#6B7280';
-            const active = selectedPriorities.includes(p);
-            return (
-              <button
-                key={p}
-                type="button"
-                onClick={() => togglePriority(p)}
-                className={cn(
-                  'text-[11px] px-2.5 py-0.5 rounded-full border transition-all',
-                  active ? 'font-medium' : 'border-border text-muted-foreground hover:border-foreground/30'
-                )}
-                style={active ? { backgroundColor: `${color}20`, color, borderColor: color } : {}}
-              >
-                {p}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
       {/* Sort */}
       <div className="flex items-center gap-2">
         <p className="text-[11px] text-muted-foreground shrink-0">정렬:</p>
@@ -118,7 +82,6 @@ export function ViewEditForm({ initial, onSave, onCancel }: ViewEditFormProps) {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="priority">우선순위</SelectItem>
             <SelectItem value="deadline">마감일</SelectItem>
             <SelectItem value="created_at">생성일</SelectItem>
           </SelectContent>
