@@ -210,13 +210,6 @@ export function TaskCard({
         상세 열기
       </ContextMenuItem>
 
-      {task.slack_url && (
-        <ContextMenuItem onClick={() => window.open(task.slack_url!, '_blank')}>
-          <ExternalLink />
-          Slack 보기
-        </ContextMenuItem>
-      )}
-
       {onDelete && (
         <>
           <ContextMenuSeparator />
