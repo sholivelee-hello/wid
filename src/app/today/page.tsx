@@ -282,9 +282,9 @@ export default function TodayPage() {
       parentTaskTitle = parent?.title ?? null;
       const parentIssueId = parent?.issue_id ?? null;
       if (parentIssueId) issueName = issuesById.get(parentIssueId)?.name ?? null;
-    } else if (task.issue_id) {
-      issueName = issuesById.get(task.issue_id)?.name ?? null;
     }
+    // top-level TASK의 ISSUE 이름은 breadcrumb 대신 메타 줄의 issueChip이 담당
+    // (두 군데 중복 노출 방지, Task 6 후속 정리).
     return { issueName, parentTaskTitle };
   };
 
