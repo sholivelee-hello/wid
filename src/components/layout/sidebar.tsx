@@ -52,9 +52,12 @@ export function Sidebar() {
   };
 
   return (
+    // 키컬러 기둥 — 웹앱(독립 창)으로 쓸 때 미션 컨트롤 썸네일에서
+    // "왼쪽 보라 기둥 = WID"로 즉시 식별되는 브랜드 표면 (사용자 결정 2026-06-03).
+    // v3 "한 화면 액센트 1개"의 그 1개가 사이드바 전체로 승격된 형태.
     <aside
       className={cn(
-        'border-r bg-sidebar p-4 flex flex-col gap-1 transition-all duration-200',
+        'bg-primary p-4 flex flex-col gap-1 transition-all duration-200',
         collapsed ? 'w-16' : 'w-60'
       )}
     >
@@ -63,19 +66,16 @@ export function Sidebar() {
         {!collapsed && (
           <Link href="/" aria-label="홈" className="group/logo inline-flex items-baseline gap-1 outline-none">
             {/* Pretendard 900 + 극단 자간. serif 없이 단단한 wordmark.
-              * 토스 앱 좌상단 로고타입과 동일 접근. */}
+              * 키컬러 기둥 위라 흰색 반전. */}
             <span
-              className="font-black text-[21px] leading-none tracking-[-0.055em] transition-colors group-hover/logo:text-foreground text-foreground"
+              className="font-black text-[21px] leading-none tracking-[-0.055em] text-primary-foreground"
             >
               WID
             </span>
-            {/* Mustard dot — first appearance of the paired accent in UI.
-              * Together with the teal wordmark, this creates the "two-color
-              * signature" the brand evaluator demanded. */}
+            {/* 점은 배경과 같은 키컬러 대신 흰색 — 기둥 위에서의 시그니처. */}
             <span
               aria-hidden
-              className="inline-block h-[6px] w-[6px] rounded-full translate-y-[-1px]"
-              style={{ background: 'var(--primary)' }}
+              className="inline-block h-[6px] w-[6px] rounded-full translate-y-[-1px] bg-primary-foreground"
             />
           </Link>
         )}
@@ -83,7 +83,7 @@ export function Sidebar() {
           variant="ghost"
           size="icon"
           onClick={toggleCollapsed}
-          className="h-8 w-8 text-sidebar-foreground/60 hover:text-sidebar-foreground"
+          className="h-8 w-8 text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary-foreground/10"
           aria-label={collapsed ? '사이드바 펼치기' : '사이드바 접기'}
         >
           {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
@@ -91,7 +91,7 @@ export function Sidebar() {
       </div>
       <nav className="flex flex-col gap-1 flex-1">
         {navItems.map((item, idx) => {
-          if (item.separator) return <Separator key={`sep-${idx}`} className="my-2" />;
+          if (item.separator) return <Separator key={`sep-${idx}`} className="my-2 bg-primary-foreground/20" />;
           const isActive = item.href === '/'
             ? pathname === '/'
             : pathname.startsWith(item.href!);
@@ -101,22 +101,22 @@ export function Sidebar() {
                 href={item.href!}
                 title={collapsed ? item.label : undefined}
                 className={cn(
-                  // Dark-first: active state pairs a brighter sidebar-accent
-                  // bg with primary-tinted text + an accent rail for unmistakable affordance.
-                  'relative flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                  // 키컬러 기둥 위 — 위계는 흰색 불투명도로만: 활성 = 반투명 흰 배경
+                  // + 흰 레일, 비활성 = 70% 흰 글자. 라이트/다크 동일 (배경이 이미 brand).
+                  'relative flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-foreground/60',
                   collapsed && 'justify-center px-0',
                   isActive
-                    ? 'bg-sidebar-accent text-sidebar-foreground font-semibold dark:bg-primary/15 dark:text-primary'
-                    : 'hover:bg-sidebar-accent/60 text-sidebar-foreground/65 hover:text-sidebar-foreground dark:text-sidebar-foreground/70'
+                    ? 'bg-primary-foreground/15 text-primary-foreground font-semibold'
+                    : 'hover:bg-primary-foreground/10 text-primary-foreground/70 hover:text-primary-foreground'
                 )}
               >
                 {isActive && !collapsed && (
-                  <span aria-hidden className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full bg-primary" />
+                  <span aria-hidden className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full bg-primary-foreground" />
                 )}
                 {item.icon && <item.icon className="h-4 w-4 flex-shrink-0" />}
                 {!collapsed && item.label}
                 {!collapsed && item.label === '인박스' && inboxCount != null && inboxCount > 0 && (
-                  <span className="ml-auto text-[11px] font-semibold bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 min-w-[20px] text-center tabular-nums">
+                  <span className="ml-auto text-[11px] font-semibold bg-primary-foreground text-primary rounded-full px-1.5 py-0.5 min-w-[20px] text-center tabular-nums">
                     {inboxCount}
                   </span>
                 )}
