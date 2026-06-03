@@ -30,6 +30,8 @@ const pretendard = localFont({
 export const metadata: Metadata = {
   title: "WID — What I Do",
   description: "개인 업무일지 시스템",
+  // iOS 홈 화면 추가 시 앱 이름 (아이콘은 apple-icon.png 파일 컨벤션)
+  appleWebApp: { title: "WID" },
 };
 
 export default function RootLayout({
