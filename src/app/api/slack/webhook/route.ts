@@ -145,6 +145,15 @@ export async function POST(request: NextRequest) {
 
   if (event.type !== 'reaction_added') return NextResponse.json({ ok: true });
 
+  // Personal app: only the owner's own reactions should create/complete tasks.
+  // The bot sits in shared team channels, so without this guard ANY teammate's
+  // :send-away:/:완료: reaction would inject (or complete) a task in the
+  // owner's inbox. event.user is the person who ADDED the reaction.
+  const ownerUserId = process.env.SLACK_OWNER_USER_ID;
+  if (ownerUserId && event.user && event.user !== ownerUserId) {
+    return NextResponse.json({ ok: true });
+  }
+
   const triggerEmoji = process.env.SLACK_TRIGGER_EMOJI ?? 'send-away';
   const completeEmoji = process.env.SLACK_COMPLETE_EMOJI ?? '완료';
 
