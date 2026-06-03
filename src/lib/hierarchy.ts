@@ -121,7 +121,10 @@ export function issueTaskProgress(issueId: string, tasks: Task[]): IssueProgress
     return null;
   };
   const list = tasks.filter(t => !t.is_deleted && resolveIssueId(t) === issueId);
-  // 분모에서 취소 제외. 완료만 분자.
+  // 의도된 비대칭: 분모(total)는 "취소 제외"(취소는 진행률에서 빠짐)지만,
+  // allDone은 "취소 포함 종결" 기준(취소된 task도 더는 할 일이 아니므로 완료로
+  // 침). 즉 모두 취소면 total=0·pct=0 이어도 allDone=true 가 될 수 있다.
+  // 미래의 "일관성 정리"로 둘을 같은 기준으로 합치지 말 것 — 회귀.
   const denom = list.filter(t => t.status !== '취소');
   const done = denom.filter(t => isTaskDone(t.status)).length;
   const total = denom.length;

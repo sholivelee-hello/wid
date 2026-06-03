@@ -106,8 +106,12 @@ export default function IssueDetailPage({ params }: { params: Promise<{ id: stri
     return {
       activeNodes: sortedActive,
       doneNodes: done,
+      // 잠금은 렌더되는 sortedActive 기준으로 계산한다. 기존 사용처
+      // (inbox-tree, task-branch)도 lockedSiblings에 "그 자리에서 렌더하는
+      // 바로 그 노드 집합"을 넘기므로 일관성을 맞춘다. all(완료 포함) 기준으로
+      // 계산하면 사이에 낀 완료 task가 잠금 시점을 흐트러뜨릴 수 있다.
       nextTask: next,
-      lockedTop: lockedSiblings(all, issue.sort_mode),
+      lockedTop: lockedSiblings(sortedActive, issue.sort_mode),
       subCount: countSubtasks(all),
     };
   }, [issue, tasks]);
@@ -201,15 +205,20 @@ export default function IssueDetailPage({ params }: { params: Promise<{ id: stri
       // position 맨 아래 = 현재 top-level 최대 + 1.
       const tops = tasks.filter(x => !x.is_deleted && x.issue_id === id && x.parent_task_id === null);
       const nextPos = tops.reduce((m, x) => Math.max(m, x.position), -1) + 1;
+      // suppressToast 생략 — 실패 시 토스트로 사용자에게 알려야 함. 무반응이면
+      // 사용자가 추가됐는지 알 수 없어 같은 task를 중복 입력하게 된다.
       await apiFetch('/api/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: t, issue_id: id, parent_task_id: null, status: '등록', position: nextPos }),
-        suppressToast: true,
       });
       window.dispatchEvent(new CustomEvent('task-created'));
       setNewTitle('');
       setAdding(false);
+    } catch {
+      // 입력값·입력창은 유지해서 사용자가 그대로 다시 시도할 수 있게.
+      // 서버 상태와 어긋났을 수 있으니 목록만 재동기화.
+      fetchAll();
     } finally {
       setCreatingTask(false);
     }
@@ -270,7 +279,14 @@ export default function IssueDetailPage({ params }: { params: Promise<{ id: stri
               <span>완료</span>
               {subCount > 0 && <span className="text-muted-foreground/70">· 하위 {subCount}</span>}
             </div>
-            <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+            <div
+              className="h-2 w-full rounded-full bg-muted overflow-hidden"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={totals.taskPct}
+              aria-label={`진행률 ${totals.taskPct}%`}
+            >
               <div
                 className="h-full bg-primary transition-[width] duration-500 ease-out"
                 style={{ width: `${totals.taskPct}%` }}
