@@ -10,7 +10,7 @@
 - **목적**: 개인이 노션·슬랙·수동 입력으로 들어오는 일들을 한 인박스에서 처리하고, 시각적 타임라인과 히스토리로 회고하는 앱
 - **범위**: 1인 사용자(personal use). 다인용·SaaS 아님
 - **단계**: v2 구현 완료(`a33ce28` → 개인 메일 author 재작성으로 `ec6dafe`). 이후 인박스 UX 대수술(드래그 reorder, 인라인 에디터, 계층 표시, GCal 임베드, today prompt-next) + **디자인 시스템 v3** 마감 — `feat/issue-task-hierarchy` 브랜치
-- **상세 컨텍스트**: `docs/NEXT-SESSION.md`, `docs/architecture/` (도메인별 invariant·계약·패턴), `docs/superpowers/specs/`, `docs/superpowers/plans/`
+- **상세 컨텍스트**: `docs/architecture/` (도메인별 invariant·계약·패턴), `docs/superpowers/specs/`, `docs/superpowers/plans/`
 
 ## 기술 스택
 
@@ -67,7 +67,6 @@
 
 - **계획 문서**: `docs/superpowers/specs/YYYY-MM-DD-<주제>-design.md` (브레인스토밍 결과)
 - **구현 플랜**: `docs/superpowers/plans/YYYY-MM-DD-<주제>-implementation.md`
-- **세션 인계**: `docs/NEXT-SESSION.md` (다음 세션 가이드 — 새 세션 시작 시 가장 먼저 읽기)
 - 큰 변경은 spec → plan → 구현 순서. 구현 도중 결정이 바뀌면 spec/plan을 함께 업데이트
 
 ## 아키텍처 참조 문서
