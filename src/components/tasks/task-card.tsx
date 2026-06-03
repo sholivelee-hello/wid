@@ -229,7 +229,8 @@ export function TaskCard({
         <span aria-hidden className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full bg-primary" />
       )}
       <div className={cn(isSubtask ? 'px-3 py-2' : 'px-3 py-3')}>
-        <div className="flex items-center gap-3">
+        {/* 제목이 여러 줄로 늘어날 수 있어 상단 정렬 — 완료 동그라미/제목 첫 줄을 맞춘다. */}
+        <div className="flex items-start gap-3">
           {/* Completion toggle */}
           {(() => {
             const blocked = completeBlocked;
@@ -238,7 +239,8 @@ export function TaskCard({
                 type="button"
                 disabled={blocked}
                 className={cn(
-                  'flex-shrink-0 -m-1.5 p-1.5 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  // 제목 여러 줄 시 첫 줄에 동그라미가 정렬되도록 미세 하향 보정.
+                  'flex-shrink-0 -m-1.5 mt-[1px] p-1.5 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                   blocked
                     ? 'cursor-not-allowed opacity-50'
                     : 'hover:bg-muted',
@@ -320,24 +322,25 @@ export function TaskCard({
                 )}
               </div>
             )}
-            <div className="flex items-center gap-2">
+            {/* 제목이 여러 줄로 늘어나도 아이콘·뱃지는 첫 줄에 맞춘다 (items-start + 첫 줄 보정). */}
+            <div className="flex items-start gap-2">
               {/* Sub-task connector glyph — sits flush before the title so the
                 * row reads as "└ child of the row above" without taking width
                 * with a label badge. Only shown for sub-tasks. */}
               {isSubtask && (
                 <span
                   aria-hidden
-                  className="text-muted-foreground/50 dark:text-muted-foreground/40 select-none flex-shrink-0 -ml-0.5 leading-none"
+                  className="text-muted-foreground/50 dark:text-muted-foreground/40 select-none flex-shrink-0 -ml-0.5 mt-[2px] leading-none"
                   style={{ fontFeatureSettings: '"tnum"' }}
                 >
                   ↳
                 </span>
               )}
-              {/* 출처 브랜드 아이콘 — 표시 전용. 제목 바로 앞. */}
-              <SourceIcon source={task.source} className="flex-shrink-0" />
+              {/* 출처 브랜드 아이콘 — 표시 전용. 제목 바로 앞. 첫 줄 정렬 보정. */}
+              <SourceIcon source={task.source} className="flex-shrink-0 mt-[2px]" />
               {reasonBadge === 'deadline' && !isDone && (
                 <span
-                  className="inline-flex items-center flex-shrink-0 text-[10px] font-semibold tracking-wide px-1.5 h-[16px] rounded bg-primary/12 text-primary dark:bg-primary/20"
+                  className="inline-flex items-center flex-shrink-0 mt-[1px] text-[10px] font-semibold tracking-wide px-1.5 h-[16px] rounded bg-primary/12 text-primary dark:bg-primary/20"
                   title="마감일이 오늘이거나 지나서 자동으로 오늘에 포함됐어요"
                 >
                   마감
@@ -345,16 +348,18 @@ export function TaskCard({
               )}
               <span
                 className={cn(
-                  'leading-snug truncate tracking-[-0.012em]',
+                  // 긴 제목은 잘리지 않고 끝까지 줄바꿈으로 보여준다 (사용자 요청).
+                  // 첫 줄 정렬 기준이 되도록 줄간격은 snug 유지.
+                  'leading-snug whitespace-normal break-words tracking-[-0.012em]',
                   isSubtask
-                    ? 'text-[13px] font-normal text-foreground/80'
+                    ? 'text-[14px] font-normal text-foreground/80'
                     : weight === 'heavy'
                       ? 'text-[15px] font-bold text-foreground'
                       : weight === 'light'
-                        ? 'text-[13px] font-normal text-foreground/60'
+                        ? 'text-[14px] font-normal text-foreground/60'
                         : hasChildren
-                          ? 'text-[14.5px] font-semibold text-foreground'
-                          : 'text-[14px] font-medium text-foreground',
+                          ? 'text-[15px] font-semibold text-foreground'
+                          : 'text-[15px] font-medium text-foreground',
                   isDone && 'line-through text-muted-foreground',
                 )}
                 title={task.title}
@@ -364,7 +369,7 @@ export function TaskCard({
             </div>
 
             {(issueChip || task.deadline || task.requester || (subCount > 0 && onToggleSubs)) && (
-              <div className="flex items-center gap-x-2.5 gap-y-1 text-xs flex-wrap text-muted-foreground">
+              <div className="flex items-center gap-x-2.5 gap-y-1 text-[13px] flex-wrap text-muted-foreground">
                 {issueChip && (
                   <Link
                     href={`/issues/${issueChip.id}`}

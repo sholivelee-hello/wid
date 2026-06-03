@@ -24,21 +24,23 @@ function IssueRow({ issue, total, done, allDone, pct }: IssueStat) {
       <Link
         href={`/issues/${issue.id}`}
         className={cn(
-          'flex items-center gap-3 px-1 py-2.5 rounded-md hover:bg-accent/30 active:bg-accent/40 transition-colors',
+          // 이름이 여러 줄로 늘어날 수 있어 상단 정렬 — 진행바/카운트를 첫 줄에 맞춘다.
+          'flex items-start gap-3 px-1 py-2.5 rounded-md hover:bg-accent/30 active:bg-accent/40 transition-colors',
           allDone && 'opacity-50',
         )}
       >
-        <Folder className="h-4 w-4 text-primary flex-shrink-0" aria-hidden />
-        <span className="flex-1 min-w-0 truncate text-[14px] font-medium tracking-[-0.01em]">
+        <Folder className="h-4 w-4 text-primary flex-shrink-0 mt-[2px]" aria-hidden />
+        {/* 긴 이슈 이름도 잘리지 않고 끝까지 줄바꿈으로 보여준다 (사용자 요청). */}
+        <span className="flex-1 min-w-0 whitespace-normal break-words text-[15px] font-medium tracking-[-0.01em]">
           {issue.name}
         </span>
         {issue.deadline && (
-          <span className="text-[11px] text-primary tabular-nums whitespace-nowrap">
+          <span className="text-[11px] text-primary tabular-nums whitespace-nowrap mt-[3px]">
             ⏰ {formatDate(issue.deadline, 'M월 d일')}
           </span>
         )}
         <span
-          className="block w-16 h-1.5 rounded-full bg-muted overflow-hidden flex-shrink-0"
+          className="block w-16 h-1.5 rounded-full bg-muted overflow-hidden flex-shrink-0 mt-[7px]"
           role="progressbar"
           aria-valuemin={0}
           aria-valuemax={100}
@@ -50,7 +52,7 @@ function IssueRow({ issue, total, done, allDone, pct }: IssueStat) {
             style={{ width: `${pct}%` }}
           />
         </span>
-        <span className="text-[11px] text-muted-foreground tabular-nums whitespace-nowrap min-w-[42px] text-right">
+        <span className="text-[11px] text-muted-foreground tabular-nums whitespace-nowrap min-w-[42px] text-right mt-[3px]">
           {done}<span className="text-muted-foreground/50">/</span>{total}
         </span>
       </Link>
