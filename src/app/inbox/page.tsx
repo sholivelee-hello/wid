@@ -15,13 +15,11 @@ import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Inbox, ChevronDown, Plus, Pencil, Trash2, Search, X } from 'lucide-react';
-import { InboxTree } from '@/components/inbox/inbox-tree';
 import { PendingView } from '@/components/inbox/pending-view';
 import { TrashView } from '@/components/inbox/trash-view';
 import { TaskDetailPanel } from '@/components/tasks/task-detail-panel';
 import { IssueForm } from '@/components/issues/issue-form';
 import { IssueDeleteDialog } from '@/components/issues/issue-delete-dialog';
-import { buildTree, filterIncomplete } from '@/lib/hierarchy';
 import { promptNextInTodayIfNeeded } from '@/lib/today-tasks';
 import {
   loadViews, saveViews, loadInboxFilter, saveInboxFilter,
@@ -70,6 +68,13 @@ function InboxPageInner() {
   const setSortBy = (v: SortKey) => { setSortByRaw(v); saveInboxSort(v); };
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [expandedSubs, setExpandedSubs] = useState<Set<string>>(new Set());
+  const toggleSubs = (id: string) =>
+    setExpandedSubs(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
   const [selectedDetailTaskId, setSelectedDetailTaskId] = useState<string | null>(null);
   // 완료 칩 = 완료된 task만 표시 (기존 "완료한 것도 보기" 토글 대체).
   const showCompleted = view === 'done';
@@ -186,21 +191,6 @@ function InboxPageInner() {
     await handleStatusChange(taskId, newStatus);
   };
 
-  const handleToggleSortMode = async (issue: Issue) => {
-    const next = issue.sort_mode === 'sequential' ? 'checklist' : 'sequential';
-    setIssues(prev => prev.map(x => x.id === issue.id ? { ...x, sort_mode: next } : x));
-    try {
-      const updated = await apiFetch<Issue>(`/api/issues/${issue.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sort_mode: next }),
-      });
-      setIssues(prev => prev.map(x => x.id === issue.id ? updated : x));
-    } catch {
-      fetchTasks();
-    }
-  };
-
   const handleDelete = async (taskId: string) => {
     setTasks(prev => prev.filter(t => t.id !== taskId));
     try {
@@ -224,36 +214,6 @@ function InboxPageInner() {
             // apiFetch가 실패 토스트를 띄우고 throw하므로 여기선 재동기화만 보장.
             try {
               await apiFetch(`/api/tasks/${taskId}/unpend`, { method: 'POST' });
-            } finally {
-              fetchTasks();
-            }
-          },
-        },
-      });
-    } catch {
-      fetchTasks();
-    }
-  };
-
-  const handlePendIssue = async (issue: Issue) => {
-    setIssues(prev => prev.filter(i => i.id !== issue.id));
-    setTasks(prev => {
-      // 서버 전파와 동일 범위 제거: top-level + (issue_id가 null일 수 있는) 직계 sub-task.
-      const topIds = new Set(prev.filter(t => t.issue_id === issue.id).map(t => t.id));
-      return prev.filter(
-        t => t.issue_id !== issue.id && !(t.parent_task_id && topIds.has(t.parent_task_id)),
-      );
-    });
-    try {
-      await apiFetch(`/api/issues/${issue.id}/pend`, { method: 'POST' });
-      window.dispatchEvent(new CustomEvent('task-updated'));
-      toast(`"${issue.name}" 전체를 보류함으로 옮겼어요`, {
-        action: {
-          label: '되돌리기',
-          onClick: async () => {
-            // apiFetch가 실패 토스트를 띄우고 throw하므로 여기선 재동기화만 보장.
-            try {
-              await apiFetch(`/api/issues/${issue.id}/unpend`, { method: 'POST' });
             } finally {
               fetchTasks();
             }
@@ -326,6 +286,32 @@ function InboxPageInner() {
     );
   }, [tasks, requester, delegate, source, statusFilter, noFilters]);
 
+  // 평면 리스트 (spec 1): top-level TASK만 최신순. sub-TASK는 부모 토글로만 노출.
+  const issuesById = useMemo(() => {
+    const m = new Map<string, Issue>();
+    for (const i of issues) m.set(i.id, i);
+    return m;
+  }, [issues]);
+  const subsByParent = useMemo(() => {
+    const m = new Map<string, Task[]>();
+    for (const t of treeFilteredTasks) {
+      if (!t.parent_task_id || t.is_deleted) continue;
+      const arr = m.get(t.parent_task_id) ?? [];
+      arr.push(t);
+      m.set(t.parent_task_id, arr);
+    }
+    for (const arr of m.values()) arr.sort((a, b) => a.position - b.position);
+    return m;
+  }, [treeFilteredTasks]);
+  const flatTopTasks = useMemo(() => {
+    const base = applyBaseFilter(treeFilteredTasks)
+      .filter(t => !t.parent_task_id && !t.is_deleted)
+      .filter(t => isTaskDone(t.status) === showCompleted);
+    return base.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  }, [applyBaseFilter, treeFilteredTasks, showCompleted]);
+  const issueChipFor = (t: Task) =>
+    t.issue_id ? (() => { const i = issuesById.get(t.issue_id!); return i ? { id: i.id, name: i.name } : null; })() : null;
+
   // 필터 chip 후보군은 실제 task에서 추출 (sub-task 포함).
   const requesters = useMemo(() => {
     const set = new Set<string>();
@@ -343,15 +329,6 @@ function InboxPageInner() {
     }
     return Array.from(set).sort();
   }, [tasks]);
-
-  const treeVisibleCount = useMemo(() => {
-    const built = buildTree(issues, treeFilteredTasks);
-    const view = showCompleted ? built : filterIncomplete(built);
-    let n = 0;
-    for (const issueNode of view.issues) n += issueNode.tasks.length;
-    n += view.independents.length;
-    return n;
-  }, [issues, treeFilteredTasks, showCompleted]);
 
   const getViewTasks = useCallback((view: CustomTaskView) => {
     let list = applyBaseFilter(treeFilteredTasks);
@@ -412,15 +389,38 @@ function InboxPageInner() {
   };
   const closeEdit = () => setEditingTaskId(null);
 
-  // 완료 칩 = 완료된 task만 (flat list). 트리가 아니라 단순 목록으로 — "완료된 것만 보기"는
-  // 계층보다 "무엇을 끝냈나" 회고가 목적이라 평면이 더 읽기 쉽다.
-  const completedTasks = useMemo(
-    () =>
-      applyBaseFilter(treeFilteredTasks)
-        .filter(t => isTaskDone(t.status))
-        .sort((a, b) => (b.completed_at ?? '').localeCompare(a.completed_at ?? '')),
-    [applyBaseFilter, treeFilteredTasks],
-  );
+  const renderFlatTask = (t: Task) => {
+    const subs = subsByParent.get(t.id) ?? [];
+    const expanded = expandedSubs.has(t.id);
+    return (
+      <div key={t.id}>
+        <TaskCard
+          task={t}
+          {...taskHandlers}
+          issueChip={issueChipFor(t)}
+          subCount={subs.length}
+          subsExpanded={expanded}
+          onToggleSubs={() => toggleSubs(t.id)}
+          editing={editingTaskId === t.id}
+          onCloseEdit={closeEdit}
+        />
+        {expanded && subs.length > 0 && (
+          <div className="ml-6 pl-3 border-l-2 border-border/60 divide-y divide-border">
+            {subs.map(s => (
+              <TaskCard
+                key={s.id}
+                task={s}
+                {...taskHandlers}
+                isSubtask
+                editing={editingTaskId === s.id}
+                onCloseEdit={closeEdit}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // 접힘 도구바에 "필터 적용 중" 점 표시용.
   const hasActiveFilter =
@@ -612,7 +612,7 @@ function InboxPageInner() {
             {showCompleted ? '완료' : '등록'}
           </h2>
           <span className="text-[12px] font-medium text-muted-foreground tabular-nums px-1.5 h-5 inline-flex items-center rounded-md bg-muted/70">
-            {showCompleted ? completedTasks.length : treeVisibleCount}
+            {flatTopTasks.length}
           </span>
         </div>
 
@@ -640,59 +640,31 @@ function InboxPageInner() {
           </div>
         )}
 
-        {showCompleted ? (
-          completedTasks.length === 0 ? (
-            <EmptyState
-              icon={Inbox}
-              title={debouncedSearch ? '검색 결과가 없어요' : '완료한 task가 없어요'}
-              description={
-                debouncedSearch
-                  ? '검색어를 바꿔보거나 필터를 초기화해 보세요.'
-                  : '등록된 task를 완료하면 여기에 모여요.'
-              }
-            />
-          ) : (
-            <div className="divide-y divide-border">
-              {completedTasks.map(task => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  {...taskHandlers}
-                  editing={editingTaskId === task.id}
-                  onCloseEdit={closeEdit}
-                />
-              ))}
-            </div>
-          )
-        ) : treeVisibleCount === 0 ? (
+        {flatTopTasks.length === 0 ? (
           <EmptyState
             icon={Inbox}
-            title={debouncedSearch ? '검색 결과가 없어요' : '인박스가 비었어요'}
+            title={
+              debouncedSearch
+                ? '검색 결과가 없어요'
+                : showCompleted ? '완료한 task가 없어요' : '인박스가 비었어요'
+            }
             description={
               debouncedSearch
                 ? '검색어를 바꿔보거나 필터를 초기화해 보세요.'
-                : '위 입력창에 한 줄로 적기만 해도 task가 생겨요.'
+                : showCompleted
+                  ? '등록된 task를 완료하면 여기에 모여요.'
+                  : '위 입력창에 한 줄로 적기만 해도 task가 생겨요.'
             }
-            action={{ label: '새 task 등록하기', onClick: () => captureRef.current?.focus() }}
+            action={
+              showCompleted
+                ? undefined
+                : { label: '새 task 등록하기', onClick: () => captureRef.current?.focus() }
+            }
           />
         ) : (
-          <InboxTree
-            issues={issues}
-            tasks={treeFilteredTasks}
-            showCompleted={showCompleted}
-            searchQuery={debouncedSearch}
-            sortBy={sortBy}
-            taskHandlers={taskHandlers}
-            onEditIssue={(i) => { setAddingIssue(false); setEditingIssue(i); }}
-            onDeleteIssue={(i) => setDeletingIssue(i)}
-            onPendIssue={handlePendIssue}
-            onToggleSortMode={handleToggleSortMode}
-            onMutate={fetchTasks}
-            setIssues={setIssues}
-            setTasks={setTasks}
-            editingTaskId={editingTaskId}
-            onCloseEdit={closeEdit}
-          />
+          <div className="divide-y divide-border">
+            {flatTopTasks.map(renderFlatTask)}
+          </div>
         )}
       </div>
 
