@@ -268,7 +268,13 @@ function InboxPageInner() {
 
   const applyBaseFilter = useCallback((list: Task[]) => {
     if (debouncedSearch) {
-      list = list.filter(t => t.title.toLowerCase().includes(debouncedSearch.toLowerCase()));
+      const q = debouncedSearch.toLowerCase();
+      // 제목뿐 아니라 요청자/위임자 이름도 매칭 (대소문자 무시, includes).
+      list = list.filter(t =>
+        t.title.toLowerCase().includes(q) ||
+        (t.requester ?? '').toLowerCase().includes(q) ||
+        (t.delegate_to ?? '').toLowerCase().includes(q),
+      );
     }
     return list;
   }, [debouncedSearch]);
@@ -566,7 +572,7 @@ function InboxPageInner() {
             <div className="relative flex-1 min-w-0 sm:max-w-xs">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" aria-hidden="true" />
               <Input
-                placeholder="task 검색..."
+                placeholder="제목·요청자 검색..."
                 aria-label="task 검색"
                 className="pl-8 pr-12"
                 value={search}
