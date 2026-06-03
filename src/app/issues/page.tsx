@@ -7,7 +7,7 @@ import { apiFetch } from '@/lib/api';
 import { issueTaskProgress } from '@/lib/hierarchy';
 import { EmptyState } from '@/components/ui/empty-state';
 import { cn, formatDate } from '@/lib/utils';
-import { Folder } from 'lucide-react';
+import { Folder, ChevronDown } from 'lucide-react';
 
 interface IssueStat {
   issue: Issue;
@@ -17,10 +17,53 @@ interface IssueStat {
   pct: number;
 }
 
+// 진행/완료 공통 행 렌더. 두 섹션이 같은 행 마크업을 공유하도록 분리.
+function IssueRow({ issue, total, done, allDone, pct }: IssueStat) {
+  return (
+    <li>
+      <Link
+        href={`/issues/${issue.id}`}
+        className={cn(
+          'flex items-center gap-3 px-1 py-2.5 rounded-md hover:bg-accent/30 active:bg-accent/40 transition-colors',
+          allDone && 'opacity-50',
+        )}
+      >
+        <Folder className="h-4 w-4 text-primary flex-shrink-0" aria-hidden />
+        <span className="flex-1 min-w-0 truncate text-[14px] font-medium tracking-[-0.01em]">
+          {issue.name}
+        </span>
+        {issue.deadline && (
+          <span className="text-[11px] text-primary tabular-nums whitespace-nowrap">
+            ⏰ {formatDate(issue.deadline, 'M월 d일')}
+          </span>
+        )}
+        <span
+          className="block w-16 h-1.5 rounded-full bg-muted overflow-hidden flex-shrink-0"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={pct}
+          aria-label={`진행률 ${pct}%`}
+        >
+          <span
+            className="block h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
+            style={{ width: `${pct}%` }}
+          />
+        </span>
+        <span className="text-[11px] text-muted-foreground tabular-nums whitespace-nowrap min-w-[42px] text-right">
+          {done}<span className="text-muted-foreground/50">/</span>{total}
+        </span>
+      </Link>
+    </li>
+  );
+}
+
 export default function IssuesListPage() {
   const [issues, setIssues] = useState<Issue[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+  // 완료 이슈 섹션은 기본 접힘. 접힘 상태는 저장하지 않음 (매번 접힘).
+  const [doneOpen, setDoneOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -55,6 +98,11 @@ export default function IssuesListPage() {
     });
   }, [issues, tasks]);
 
+  // 진행 중 / 완료 두 섹션으로 분리 (allDone 기준). stats가 이미 정렬돼 있어
+  // 각 섹션 내부 정렬은 그대로 유지됨.
+  const activeStats = useMemo(() => stats.filter(s => !s.allDone), [stats]);
+  const doneStats = useMemo(() => stats.filter(s => s.allDone), [stats]);
+
   if (loading) {
     return (
       <div className="space-y-2">
@@ -76,45 +124,47 @@ export default function IssuesListPage() {
   return (
     <div className="space-y-1">
       <h1 className="text-[13px] font-semibold tracking-[-0.01em] text-foreground mb-3">이슈</h1>
-      <ul className="divide-y divide-border">
-        {stats.map(({ issue, total, done, allDone, pct }) => (
-          <li key={issue.id}>
-            <Link
-              href={`/issues/${issue.id}`}
+
+      {activeStats.length > 0 ? (
+        <ul className="divide-y divide-border">
+          {activeStats.map(stat => (
+            <IssueRow key={stat.issue.id} {...stat} />
+          ))}
+        </ul>
+      ) : (
+        <p className="px-1 py-2.5 text-[13px] text-muted-foreground">
+          진행 중인 이슈가 없어요.
+        </p>
+      )}
+
+      {doneStats.length > 0 && (
+        <div className="pt-2">
+          <button
+            type="button"
+            onClick={() => setDoneOpen(o => !o)}
+            aria-expanded={doneOpen}
+            className="flex items-center gap-1.5 px-1 py-2 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ChevronDown
               className={cn(
-                'flex items-center gap-3 px-1 py-2.5 rounded-md hover:bg-accent/30 active:bg-accent/40 transition-colors',
-                allDone && 'opacity-50',
+                'h-3.5 w-3.5 transition-transform flex-shrink-0',
+                !doneOpen && '-rotate-90',
               )}
-            >
-              <Folder className="h-4 w-4 text-primary flex-shrink-0" aria-hidden />
-              <span className="flex-1 min-w-0 truncate text-[14px] font-medium tracking-[-0.01em]">
-                {issue.name}
-              </span>
-              {issue.deadline && (
-                <span className="text-[11px] text-primary tabular-nums whitespace-nowrap">
-                  ⏰ {formatDate(issue.deadline, 'M월 d일')}
-                </span>
-              )}
-              <span
-                className="block w-16 h-1.5 rounded-full bg-muted overflow-hidden flex-shrink-0"
-                role="progressbar"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={pct}
-                aria-label={`진행률 ${pct}%`}
-              >
-                <span
-                  className="block h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
-                  style={{ width: `${pct}%` }}
-                />
-              </span>
-              <span className="text-[11px] text-muted-foreground tabular-nums whitespace-nowrap min-w-[42px] text-right">
-                {done}<span className="text-muted-foreground/50">/</span>{total}
-              </span>
-            </Link>
-          </li>
-        ))}
-      </ul>
+              aria-hidden
+            />
+            <span className="tabular-nums">
+              완료된 이슈 {doneStats.length}개 · {doneOpen ? '접기' : '펼치기'}
+            </span>
+          </button>
+          {doneOpen && (
+            <ul className="divide-y divide-border">
+              {doneStats.map(stat => (
+                <IssueRow key={stat.issue.id} {...stat} />
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   );
 }
