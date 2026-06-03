@@ -124,6 +124,7 @@ export function NotionMapping() {
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ created: number; updated: number; total: number } | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [partialError, setPartialError] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const [lastSyncResult, setLastSyncResult] = useState<SyncResult | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
@@ -142,18 +143,30 @@ export function NotionMapping() {
     setSyncing(true);
     setSyncResult(null);
     setSyncError(null);
+    setPartialError(null);
     try {
-      const data = await apiFetch<{ created: number; updated: number; total: number }>(
-        '/api/notion/sync',
-        { method: 'POST' }
-      );
+      const data = await apiFetch<{
+        created: number;
+        updated: number;
+        total: number;
+        errors?: { dbId: string; message: string }[];
+      }>('/api/notion/sync', { method: 'POST' });
       setSyncResult(data);
+      // Partial failure: some DBs synced, but at least one (e.g. deleted /
+      // not shared with the integration) couldn't be reached.
+      const failedCount = data.errors?.length ?? 0;
+      if (failedCount > 0) {
+        setPartialError(
+          `Notion DB ${failedCount}개에 접근하지 못했습니다. 해당 DB가 삭제됐거나, 통합(integration)에 공유되지 않았을 수 있어요.`,
+        );
+      }
       const now = new Date();
       localStorage.setItem(LS_KEY, now.toISOString());
-      localStorage.setItem(LS_RESULT_KEY, 'success');
+      const result: SyncResult = failedCount > 0 ? 'failed' : 'success';
+      localStorage.setItem(LS_RESULT_KEY, result);
       setLastSync(now);
-      setLastSyncResult('success');
-      setHistory((h) => pushHistory(h, { ts: now.getTime(), result: 'success' }));
+      setLastSyncResult(result);
+      setHistory((h) => pushHistory(h, { ts: now.getTime(), result }));
     } catch {
       setSyncError('동기화 중 오류가 발생했습니다. NOTION_API_KEY와 DB ID를 확인해주세요.');
       const now = new Date();
@@ -228,6 +241,9 @@ export function NotionMapping() {
             <p className="text-sm text-primary">
               완료 — {syncResult.total}건 확인, {syncResult.created}건 새로 가져옴, {syncResult.updated}건 업데이트
             </p>
+          )}
+          {partialError && (
+            <p className="text-sm text-destructive">{partialError}</p>
           )}
           {syncError && (
             <p className="text-sm text-destructive">{syncError}</p>

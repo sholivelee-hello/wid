@@ -77,6 +77,9 @@ export async function POST() {
   let created = 0;
   let updated = 0;
   let total = 0;
+  // Per-DB failures must NOT abort the whole sync. One unshared/deleted DB
+  // (404) used to throw out of the loop and kill the healthy DBs too.
+  const errors: { dbId: string; message: string }[] = [];
   // Cache of resolved Notion ISSUE relation page ids → local Issue.id
   const issueIdMap = new Map<string, string | null>();
   // Cache of relation page id → title (lazy fetch via notion.pages.retrieve)
@@ -107,6 +110,7 @@ export async function POST() {
   };
 
   for (const dbId of dbIds) {
+    try {
     // @notionhq/client v5+ replaced databases.query with dataSources.query.
     // A database now exposes one or more data_sources; iterate them all.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -273,6 +277,13 @@ export async function POST() {
         cursor = response.next_cursor ?? undefined;
       }
     }
+    } catch (e) {
+      // A 404 means the DB was deleted, the ID is wrong, or the integration
+      // isn't shared with it. Record it and keep going so the other DBs sync.
+      const message = e instanceof Error ? e.message : String(e);
+      console.error('[notion/sync] db failed', dbId, message);
+      errors.push({ dbId, message });
+    }
   }
 
   return NextResponse.json({
@@ -280,5 +291,6 @@ export async function POST() {
     updated,
     total,
     issuesResolved: issueIdMap.size,
+    errors,
   });
 }
