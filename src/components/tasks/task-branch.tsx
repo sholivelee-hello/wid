@@ -28,6 +28,10 @@ export interface TaskBranchHandlers {
   onDelete: (id: string) => void;
   onSelect: (id: string) => void;
   onPend?: (id: string) => void;
+  /** 우클릭 "ISSUE에 연결" 후보 + 핸들러 — TaskCard로 그대로 전달.
+   *  TaskCard가 top-level TASK에만 서브메뉴를 노출한다. */
+  linkableIssues?: { id: string; name: string }[];
+  onLinkIssue?: (taskId: string, issueId: string | null) => void;
 }
 
 interface Props extends TaskBranchHandlers {
@@ -229,6 +233,8 @@ export function TaskBranch({
   onDelete,
   onSelect,
   onPend,
+  linkableIssues,
+  onLinkIssue,
 }: Props) {
   const forceOpen = forceOpenIds?.has(node.task.id) ?? false;
   const { collapsed, toggle } = useCollapsed('task', node.task.id, false, forceOpen);
@@ -275,6 +281,8 @@ export function TaskBranch({
           onDelete={onDelete}
           onSelect={onSelect}
           onPend={onPend}
+          linkableIssues={linkableIssues}
+          onLinkIssue={onLinkIssue}
         />
       ));
     }
@@ -298,6 +306,8 @@ export function TaskBranch({
                 onDelete={onDelete}
                 onSelect={onSelect}
                 onPend={onPend}
+                linkableIssues={linkableIssues}
+                onLinkIssue={onLinkIssue}
                 dragHandle={handle}
               />
             )}
@@ -361,6 +371,8 @@ export function TaskBranch({
             breadcrumb={breadcrumb}
             reasonBadge={reasonBadge}
             issueChip={issueChip}
+            linkableIssues={linkableIssues}
+            onLinkIssue={onLinkIssue}
           />
           {blocked && (
             <div className="text-[10px] text-muted-foreground ml-3 mt-1 inline-flex items-center gap-1">

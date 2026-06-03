@@ -9,6 +9,7 @@ import { TaskBranch } from '@/components/tasks/task-branch';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { apiFetch } from '@/lib/api';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { TASK_STATUSES } from '@/lib/types';
 import {
@@ -328,6 +329,34 @@ export default function TodayPage() {
     } catch { fetchAll(); }
   };
 
+  // 우클릭 → ISSUE에 연결/해제. top-level TASK만 (sub-TASK는 부모 경유).
+  const handleLinkIssue = async (taskId: string, issueId: string | null) => {
+    const target = tasks.find(t => t.id === taskId);
+    if (target?.parent_task_id) {
+      toast('하위 task는 부모를 통해 ISSUE에 연결돼요');
+      return;
+    }
+    setTasks(prev => prev.map(t => (t.id === taskId ? { ...t, issue_id: issueId } : t)));
+    try {
+      await apiFetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ issue_id: issueId }),
+      });
+      window.dispatchEvent(new CustomEvent('task-updated'));
+      toast(issueId ? 'ISSUE에 연결했어요' : 'ISSUE 연결을 해제했어요');
+    } catch { fetchAll(); }
+  };
+
+  // 우클릭 "ISSUE에 연결" 후보 — 삭제·보류되지 않은 활성 ISSUE만.
+  const linkableIssues = useMemo(
+    () =>
+      issues
+        .filter(i => !i.is_deleted && !i.pending_at)
+        .map(i => ({ id: i.id, name: i.name })),
+    [issues],
+  );
+
   const toggleGroup = (status: string) => {
     setCollapsedGroups(prev => {
       const next = new Set(prev);
@@ -345,6 +374,8 @@ export default function TodayPage() {
     // which is the answer to "I see a sub-task here, where's the context?".
     // Inline editing isn't lost — it just lives behind the detail panel now.
     onSelect: (id: string) => setSelectedDetailTaskId(id),
+    linkableIssues,
+    onLinkIssue: handleLinkIssue,
   };
 
   // Lightweight progress for the header summary so the page feels alive

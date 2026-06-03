@@ -23,6 +23,7 @@ import { SourceIcon, sourceOpenUrl } from '@/components/tasks/source-icon';
 import {
   Circle,
   CheckCircle2,
+  Check,
   Trash2,
   ExternalLink,
   User,
@@ -69,6 +70,12 @@ interface TaskCardProps {
   /** sub 펼침 상태 (부모가 소유). `↳ sub N` 클릭 시 onToggleSubs 호출. */
   subsExpanded?: boolean;
   onToggleSubs?: () => void;
+  /** 우클릭 "ISSUE에 연결" 서브메뉴에 노출할 활성 ISSUE 목록. `onLinkIssue`와
+   *  함께 전달될 때만 서브메뉴를 렌더한다. sub-TASK는 부모를 통해 ISSUE에
+   *  연결되므로(hierarchy invariant) 노출하지 않는다. */
+  linkableIssues?: { id: string; name: string }[];
+  /** ISSUE 연결/해제 핸들러. issueId=null이면 연결 해제. */
+  onLinkIssue?: (taskId: string, issueId: string | null) => void;
 }
 
 export function TaskCard({
@@ -88,6 +95,8 @@ export function TaskCard({
   subCount = 0,
   subsExpanded = false,
   onToggleSubs,
+  linkableIssues,
+  onLinkIssue,
 }: TaskCardProps) {
   const openDetail = () => {
     if (onSelect) onSelect(task.id);
@@ -179,6 +188,47 @@ export function TaskCard({
                 </ContextMenuItem>
               );
             })}
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+      )}
+
+      {/* ISSUE에 연결 — top-level TASK만 (sub-TASK는 부모를 통해 연결되는
+        * hierarchy invariant). linkableIssues + onLinkIssue 둘 다 있을 때만. */}
+      {linkableIssues && onLinkIssue && !isSubtask && !task.parent_task_id && (
+        <ContextMenuSub>
+          <ContextMenuSubTrigger>
+            <FolderOpen />
+            ISSUE에 연결
+          </ContextMenuSubTrigger>
+          <ContextMenuSubContent className="max-h-[320px] overflow-y-auto">
+            {linkableIssues.length === 0 ? (
+              <ContextMenuItem disabled>활성 ISSUE가 없어요</ContextMenuItem>
+            ) : (
+              linkableIssues.map((iss) => {
+                const linked = task.issue_id === iss.id;
+                return (
+                  <ContextMenuItem
+                    key={iss.id}
+                    onClick={() => onLinkIssue(task.id, iss.id)}
+                  >
+                    {linked ? (
+                      <Check className="text-primary" />
+                    ) : (
+                      <FolderOpen className="text-muted-foreground" />
+                    )}
+                    <span className="truncate">{iss.name}</span>
+                  </ContextMenuItem>
+                );
+              })
+            )}
+            {task.issue_id && (
+              <>
+                <ContextMenuSeparator />
+                <ContextMenuItem onClick={() => onLinkIssue(task.id, null)}>
+                  연결 해제
+                </ContextMenuItem>
+              </>
+            )}
           </ContextMenuSubContent>
         </ContextMenuSub>
       )}

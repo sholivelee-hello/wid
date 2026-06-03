@@ -237,6 +237,28 @@ function InboxPageInner() {
     }
   };
 
+  // 우클릭 → ISSUE에 연결/해제. top-level TASK만 (sub-TASK는 부모 경유).
+  // issue_id ↔ parent_task_id 상호배타이므로 parent 있는 task는 거절 + 안내.
+  const handleLinkIssue = async (taskId: string, issueId: string | null) => {
+    const target = tasks.find(t => t.id === taskId);
+    if (target?.parent_task_id) {
+      toast('하위 task는 부모를 통해 ISSUE에 연결돼요');
+      return;
+    }
+    setTasks(prev => prev.map(t => (t.id === taskId ? { ...t, issue_id: issueId } : t)));
+    try {
+      await apiFetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ issue_id: issueId }),
+      });
+      window.dispatchEvent(new CustomEvent('task-updated'));
+      toast(issueId ? 'ISSUE에 연결했어요' : 'ISSUE 연결을 해제했어요');
+    } catch {
+      fetchTasks();
+    }
+  };
+
   const handleAddView = (view: CustomTaskView) => {
     const next = [...customViews, view];
     setCustomViews(next);
@@ -337,6 +359,14 @@ function InboxPageInner() {
     const i = issuesById.get(t.issue_id);
     return i ? { id: i.id, name: i.name } : null;
   };
+  // 우클릭 "ISSUE에 연결" 후보 — 삭제·보류되지 않은 활성 ISSUE만.
+  const linkableIssues = useMemo(
+    () =>
+      issues
+        .filter(i => !i.is_deleted && !i.pending_at)
+        .map(i => ({ id: i.id, name: i.name })),
+    [issues],
+  );
 
   // 필터 chip 후보군은 실제 task에서 추출 (sub-task 포함).
   const requesters = useMemo(() => {
@@ -412,6 +442,8 @@ function InboxPageInner() {
     // longer reached from this list.
     onSelect: (id: string) => setSelectedDetailTaskId(id),
     onPend: handlePend,
+    linkableIssues,
+    onLinkIssue: handleLinkIssue,
   };
   const closeEdit = () => setEditingTaskId(null);
 
