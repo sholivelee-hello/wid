@@ -185,8 +185,12 @@ export default function InboxPage() {
         action: {
           label: '되돌리기',
           onClick: async () => {
-            await apiFetch(`/api/tasks/${taskId}/unpend`, { method: 'POST' });
-            fetchTasks();
+            // apiFetch가 실패 토스트를 띄우고 throw하므로 여기선 재동기화만 보장.
+            try {
+              await apiFetch(`/api/tasks/${taskId}/unpend`, { method: 'POST' });
+            } finally {
+              fetchTasks();
+            }
           },
         },
       });
@@ -197,7 +201,13 @@ export default function InboxPage() {
 
   const handlePendIssue = async (issue: Issue) => {
     setIssues(prev => prev.filter(i => i.id !== issue.id));
-    setTasks(prev => prev.filter(t => t.issue_id !== issue.id));
+    setTasks(prev => {
+      // 서버 전파와 동일 범위 제거: top-level + (issue_id가 null일 수 있는) 직계 sub-task.
+      const topIds = new Set(prev.filter(t => t.issue_id === issue.id).map(t => t.id));
+      return prev.filter(
+        t => t.issue_id !== issue.id && !(t.parent_task_id && topIds.has(t.parent_task_id)),
+      );
+    });
     try {
       await apiFetch(`/api/issues/${issue.id}/pend`, { method: 'POST' });
       window.dispatchEvent(new CustomEvent('task-updated'));
@@ -205,8 +215,12 @@ export default function InboxPage() {
         action: {
           label: '되돌리기',
           onClick: async () => {
-            await apiFetch(`/api/issues/${issue.id}/unpend`, { method: 'POST' });
-            fetchTasks();
+            // apiFetch가 실패 토스트를 띄우고 throw하므로 여기선 재동기화만 보장.
+            try {
+              await apiFetch(`/api/issues/${issue.id}/unpend`, { method: 'POST' });
+            } finally {
+              fetchTasks();
+            }
           },
         },
       });

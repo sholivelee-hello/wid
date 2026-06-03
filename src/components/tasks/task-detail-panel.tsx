@@ -14,6 +14,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Issue, Task, TASK_STATUSES } from '@/lib/types';
 import { formatDate, cn, getNotionPageUrl } from '@/lib/utils';
 import { apiFetch } from '@/lib/api';
+import { toast } from 'sonner';
 import { IssuePicker } from '@/components/issues/issue-picker';
 import { Trash2, ExternalLink, ChevronDown, Save, X, FolderPlus, ArrowUpRight, CornerLeftUp, CheckCircle2, Circle, PauseCircle } from 'lucide-react';
 
@@ -525,10 +526,28 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated, onNavigate }: 
                     className="text-muted-foreground hover:text-foreground"
                     onClick={async () => {
                       if (!taskId) return;
-                      await apiFetch(`/api/tasks/${taskId}/pend`, { method: 'POST' });
+                      const pendedId = taskId;
+                      try {
+                        await apiFetch(`/api/tasks/${pendedId}/pend`, { method: 'POST' });
+                      } catch {
+                        return; // 실패 토스트는 apiFetch가 띄움 — 패널은 열린 채 유지.
+                      }
                       window.dispatchEvent(new CustomEvent('task-updated'));
                       onTaskUpdated?.();
                       onClose();
+                      toast('보류함으로 이동했어요', {
+                        action: {
+                          label: '되돌리기',
+                          onClick: async () => {
+                            try {
+                              await apiFetch(`/api/tasks/${pendedId}/unpend`, { method: 'POST' });
+                            } finally {
+                              window.dispatchEvent(new CustomEvent('task-updated'));
+                              onTaskUpdated?.();
+                            }
+                          },
+                        },
+                      });
                     }}
                   >
                     <PauseCircle className="h-4 w-4 mr-1" />
