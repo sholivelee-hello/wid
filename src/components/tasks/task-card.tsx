@@ -43,10 +43,6 @@ interface TaskCardProps {
   /** 보류함으로 이동. 전달되지 않으면 메뉴에 보류 항목이 표시되지 않는다
    *  (Today·휴지통 등 보류 액션이 없는 화면). */
   onPend?: (taskId: string) => void;
-  /** Optional hierarchy label rendered as a small badge before the title.
-   * Kept for legacy callers; new code should rely on `isSubtask` + indent for
-   * the hierarchy cue instead. Defaults to no badge. */
-  hierarchyLabel?: 'TASK' | 'sub-TASK';
   /** Sub-task styling: smaller title, slightly muted tone, leading connector
    * glyph. Combined with the parent's indent/rail this makes the parent vs.
    * child distinction unmistakable in dark mode. */
@@ -373,7 +369,7 @@ export function TaskCard({
               </span>
             </div>
 
-            {(issueChip || task.deadline || task.requester || subCount > 0) && (
+            {(issueChip || task.deadline || task.requester || (subCount > 0 && onToggleSubs)) && (
               <div className="flex items-center gap-x-2.5 gap-y-1 text-xs flex-wrap text-muted-foreground">
                 {issueChip && (
                   <Link
@@ -403,10 +399,10 @@ export function TaskCard({
                     {task.requester}
                   </span>
                 )}
-                {subCount > 0 && (
+                {subCount > 0 && onToggleSubs && (
                   <button
                     type="button"
-                    onClick={(e) => { e.stopPropagation(); onToggleSubs?.(); }}
+                    onClick={(e) => { e.stopPropagation(); onToggleSubs(); }}
                     onPointerDown={(e) => e.stopPropagation()}
                     aria-expanded={subsExpanded}
                     className="inline-flex items-center gap-1 text-muted-foreground/80 hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded"

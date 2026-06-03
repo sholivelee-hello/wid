@@ -16,7 +16,8 @@ import { formatDate, cn, getNotionPageUrl } from '@/lib/utils';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
 import { IssuePicker } from '@/components/issues/issue-picker';
-import { Trash2, ExternalLink, ChevronDown, Save, X, FolderPlus, ArrowUpRight, CornerLeftUp, CheckCircle2, Circle, PauseCircle } from 'lucide-react';
+import { toggleTodayTask, getTodayTaskIds } from '@/lib/today-tasks';
+import { Trash2, ExternalLink, ChevronDown, Save, X, FolderPlus, ArrowUpRight, CornerLeftUp, CheckCircle2, Circle, PauseCircle, Sun } from 'lucide-react';
 
 // `<input type="datetime-local">` round-trip: the input wants a naive
 // "YYYY-MM-DDTHH:mm" string in the user's local timezone, and ISO strings
@@ -68,6 +69,9 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated, onNavigate }: 
   const [requester, setRequester] = useState('');
   const [followUpNote, setFollowUpNote] = useState('');
   const [saving, setSaving] = useState(false);
+  // 오늘 묶음 포함 여부 — task-card 우클릭과 같은 localStorage 헬퍼를 쓰며,
+  // 다른 화면에서 토글돼도 'today-tasks-changed' 이벤트로 동기화된다.
+  const [isTodayTask, setIsTodayTask] = useState(false);
 
   const fetchTask = useCallback(async () => {
     if (!taskId) return;
@@ -163,6 +167,13 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated, onNavigate }: 
   useEffect(() => {
     if (taskId) fetchTask();
   }, [taskId, fetchTask]);
+
+  useEffect(() => {
+    const sync = () => setIsTodayTask(taskId ? getTodayTaskIds().has(taskId) : false);
+    sync();
+    window.addEventListener('today-tasks-changed', sync);
+    return () => window.removeEventListener('today-tasks-changed', sync);
+  }, [taskId]);
 
   const handleInstantSave = async (field: string, value: string) => {
     if (!taskId) return;
@@ -519,6 +530,23 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated, onNavigate }: 
 
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className={cn(
+                      'hover:text-foreground',
+                      isTodayTask ? 'text-primary' : 'text-muted-foreground',
+                    )}
+                    aria-pressed={isTodayTask}
+                    onClick={() => {
+                      if (!taskId) return;
+                      toggleTodayTask(taskId);
+                    }}
+                  >
+                    <Sun className={cn('h-4 w-4 mr-1', isTodayTask && 'fill-primary')} />
+                    {isTodayTask ? '오늘에서 빼기' : '오늘로 보내기'}
+                  </Button>
                   <Button
                     type="button"
                     variant="ghost"
