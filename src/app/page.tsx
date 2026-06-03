@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { apiFetch } from '@/lib/api';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Inbox, ChevronDown, Plus, Pencil, Trash2, Search } from 'lucide-react';
 import { InboxTree } from '@/components/inbox/inbox-tree';
@@ -174,6 +175,46 @@ export default function InboxPage() {
     }
   };
 
+  const handlePend = async (taskId: string) => {
+    // 낙관적 제거: 본인 + 직계 sub-task. 실패 시 fetchTasks로 원복.
+    setTasks(prev => prev.filter(t => t.id !== taskId && t.parent_task_id !== taskId));
+    try {
+      await apiFetch(`/api/tasks/${taskId}/pend`, { method: 'POST' });
+      window.dispatchEvent(new CustomEvent('task-updated'));
+      toast('보류함으로 이동했어요', {
+        action: {
+          label: '되돌리기',
+          onClick: async () => {
+            await apiFetch(`/api/tasks/${taskId}/unpend`, { method: 'POST' });
+            fetchTasks();
+          },
+        },
+      });
+    } catch {
+      fetchTasks();
+    }
+  };
+
+  const handlePendIssue = async (issue: Issue) => {
+    setIssues(prev => prev.filter(i => i.id !== issue.id));
+    setTasks(prev => prev.filter(t => t.issue_id !== issue.id));
+    try {
+      await apiFetch(`/api/issues/${issue.id}/pend`, { method: 'POST' });
+      window.dispatchEvent(new CustomEvent('task-updated'));
+      toast(`"${issue.name}" 전체를 보류함으로 옮겼어요`, {
+        action: {
+          label: '되돌리기',
+          onClick: async () => {
+            await apiFetch(`/api/issues/${issue.id}/unpend`, { method: 'POST' });
+            fetchTasks();
+          },
+        },
+      });
+    } catch {
+      fetchTasks();
+    }
+  };
+
   const handleAddView = (view: CustomTaskView) => {
     const next = [...customViews, view];
     setCustomViews(next);
@@ -317,6 +358,7 @@ export default function InboxPage() {
     // surface. The legacy inline editor still exists in TaskCard but is no
     // longer reached from this list.
     onSelect: (id: string) => setSelectedDetailTaskId(id),
+    onPend: handlePend,
   };
   const closeEdit = () => setEditingTaskId(null);
 
@@ -476,6 +518,7 @@ export default function InboxPage() {
             taskHandlers={taskHandlers}
             onEditIssue={(i) => { setAddingIssue(false); setEditingIssue(i); }}
             onDeleteIssue={(i) => setDeletingIssue(i)}
+            onPendIssue={handlePendIssue}
             onToggleSortMode={handleToggleSortMode}
             onMutate={fetchTasks}
             setIssues={setIssues}

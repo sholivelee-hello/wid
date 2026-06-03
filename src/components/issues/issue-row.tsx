@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ChevronDown, MoreHorizontal, Pencil, Trash2, Lock, FolderOpen } from 'lucide-react';
+import { ChevronDown, MoreHorizontal, Pencil, Trash2, Lock, FolderOpen, PauseCircle } from 'lucide-react';
 import { Issue } from '@/lib/types';
 import { cn, formatDate } from '@/lib/utils';
 import { useCollapsed } from '@/lib/use-tree-collapsed';
@@ -20,6 +20,7 @@ interface Props {
   children: React.ReactNode;
   onEdit: () => void;
   onDelete: () => void;
+  onPend?: () => void;
   onToggleSortMode?: (issue: Issue) => void;
   forceOpen?: boolean;
   dragHandleSlot?: React.ReactNode;
@@ -33,6 +34,7 @@ export function IssueRow({
   children,
   onEdit,
   onDelete,
+  onPend,
   onToggleSortMode,
   forceOpen = false,
   dragHandleSlot,
@@ -163,6 +165,12 @@ export function IssueRow({
                 <Pencil className="h-4 w-4 mr-2" />
                 편집
               </DropdownMenuItem>
+              {onPend && (
+                <DropdownMenuItem onClick={onPend}>
+                  <PauseCircle className="h-4 w-4 mr-2" />
+                  보류
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 onClick={onDelete}
                 className="text-destructive focus:text-destructive"

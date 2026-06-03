@@ -27,6 +27,7 @@ export interface TaskBranchHandlers {
   onComplete: (id: string) => void;
   onDelete: (id: string) => void;
   onSelect: (id: string) => void;
+  onPend?: (id: string) => void;
 }
 
 interface Props extends TaskBranchHandlers {
@@ -219,6 +220,7 @@ export function TaskBranch({
   onComplete,
   onDelete,
   onSelect,
+  onPend,
 }: Props) {
   const forceOpen = forceOpenIds?.has(node.task.id) ?? false;
   const { collapsed, toggle } = useCollapsed('task', node.task.id, false, forceOpen);
@@ -264,6 +266,7 @@ export function TaskBranch({
           onComplete={onComplete}
           onDelete={onDelete}
           onSelect={onSelect}
+          onPend={onPend}
         />
       ));
     }
@@ -286,6 +289,7 @@ export function TaskBranch({
                 onComplete={onComplete}
                 onDelete={onDelete}
                 onSelect={onSelect}
+                onPend={onPend}
                 dragHandle={handle}
               />
             )}
@@ -341,6 +345,7 @@ export function TaskBranch({
             onComplete={handleComplete}
             onDelete={onDelete}
             onSelect={onSelect}
+            onPend={onPend}
             isSubtask={!!node.task.parent_task_id}
             hasChildren={hasChildren}
             editing={editingTaskId === node.task.id}

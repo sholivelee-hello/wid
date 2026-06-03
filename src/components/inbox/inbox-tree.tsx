@@ -49,6 +49,7 @@ interface Props {
   taskHandlers: TaskBranchHandlers;
   onEditIssue: (issue: Issue) => void;
   onDeleteIssue: (issue: Issue) => void;
+  onPendIssue: (issue: Issue) => void;
   onToggleSortMode: (issue: Issue) => void;
   onMutate: () => void;
   setIssues: React.Dispatch<React.SetStateAction<Issue[]>>;
@@ -209,6 +210,7 @@ export function InboxTree({
   taskHandlers,
   onEditIssue,
   onDeleteIssue,
+  onPendIssue,
   onToggleSortMode,
   onMutate,
   setIssues,
@@ -542,6 +544,7 @@ export function InboxTree({
                     subCount={subCount}
                     onEdit={() => onEditIssue(issue)}
                     onDelete={() => onDeleteIssue(issue)}
+                    onPend={() => onPendIssue(issue)}
                     onToggleSortMode={onToggleSortMode}
                     forceOpen={forceOpenIssueIds.has(issue.id)}
                     dragHandleSlot={dragHandleSlot}

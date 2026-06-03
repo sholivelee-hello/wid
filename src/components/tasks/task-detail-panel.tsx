@@ -15,7 +15,7 @@ import { Issue, Task, TASK_STATUSES } from '@/lib/types';
 import { formatDate, cn, getNotionPageUrl } from '@/lib/utils';
 import { apiFetch } from '@/lib/api';
 import { IssuePicker } from '@/components/issues/issue-picker';
-import { Trash2, ExternalLink, ChevronDown, Save, X, FolderPlus, ArrowUpRight, CornerLeftUp, CheckCircle2, Circle } from 'lucide-react';
+import { Trash2, ExternalLink, ChevronDown, Save, X, FolderPlus, ArrowUpRight, CornerLeftUp, CheckCircle2, Circle, PauseCircle } from 'lucide-react';
 
 // `<input type="datetime-local">` round-trip: the input wants a naive
 // "YYYY-MM-DDTHH:mm" string in the user's local timezone, and ISO strings
@@ -517,9 +517,27 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated, onNavigate }: 
               <Separator />
 
               <div className="flex items-center justify-between">
-                <Button variant="destructive" size="sm" onClick={() => setConfirmDelete(true)}>
-                  <Trash2 className="h-4 w-4 mr-1" /> 삭제
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground hover:text-foreground"
+                    onClick={async () => {
+                      if (!taskId) return;
+                      await apiFetch(`/api/tasks/${taskId}/pend`, { method: 'POST' });
+                      window.dispatchEvent(new CustomEvent('task-updated'));
+                      onTaskUpdated?.();
+                      onClose();
+                    }}
+                  >
+                    <PauseCircle className="h-4 w-4 mr-1" />
+                    보류
+                  </Button>
+                  <Button variant="destructive" size="sm" onClick={() => setConfirmDelete(true)}>
+                    <Trash2 className="h-4 w-4 mr-1" /> 삭제
+                  </Button>
+                </div>
                 <Button size="sm" onClick={handleSave} disabled={saving}>
                   <Save className="h-4 w-4 mr-1" />
                   {saving ? '저장 중...' : '저장'}

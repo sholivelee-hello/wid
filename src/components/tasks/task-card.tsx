@@ -27,6 +27,7 @@ import {
   FolderOpen,
   MessageSquare,
   Sun,
+  PauseCircle,
 } from 'lucide-react';
 
 interface TaskCardProps {
@@ -35,6 +36,9 @@ interface TaskCardProps {
   onComplete?: (taskId: string) => void;
   onDelete?: (taskId: string) => void;
   onSelect?: (taskId: string) => void;
+  /** 보류함으로 이동. 전달되지 않으면 메뉴에 보류 항목이 표시되지 않는다
+   *  (Today·휴지통 등 보류 액션이 없는 화면). */
+  onPend?: (taskId: string) => void;
   /** Optional hierarchy label rendered as a small badge before the title.
    * Kept for legacy callers; new code should rely on `isSubtask` + indent for
    * the hierarchy cue instead. Defaults to no badge. */
@@ -66,6 +70,7 @@ export function TaskCard({
   onComplete,
   onDelete,
   onSelect,
+  onPend,
   hierarchyLabel,
   isSubtask = false,
   hasChildren = false,
@@ -390,6 +395,14 @@ export function TaskCard({
                   <UserPlus className="h-4 w-4 mr-2" />
                   위임
                 </DropdownMenuItem>
+                {onPend && (
+                  <DropdownMenuItem
+                    onClick={(e) => { e.stopPropagation(); onPend(task.id); }}
+                  >
+                    <PauseCircle className="h-4 w-4 mr-2" />
+                    보류
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem
                   onClick={(e) => { e.stopPropagation(); onDelete?.(task.id); }}
                   className="text-destructive focus:text-destructive"
