@@ -15,7 +15,7 @@ interface SourceIconProps {
  * - slack  = 공식 4색 로고 SVG
  * - notion = 흰 바탕 + 공식 Notion 로고 (simple-icons, CC0)
  * - manual = WID 직접 입력 → 키컬러 점
- * - jira   = 슬롯 예약 (아이콘·연동 범위 외) → 회색 점 placeholder
+ * - jira   = 공식 Jira 로고 (simple-icons, CC0) — 다크 가독을 위해 #2684FF 단색
  */
 export function SourceIcon({ source, className }: SourceIconProps) {
   const box = cn('inline-flex items-center justify-center flex-shrink-0', className);
@@ -50,10 +50,16 @@ export function SourceIcon({ source, className }: SourceIconProps) {
   }
 
   if (source === 'jira') {
-    // 슬롯 예약 — 실제 아이콘·연동은 별도 스펙. 무채색 점 placeholder.
     return (
       <span className={box} aria-label="Jira에서 온 task" title="Jira">
-        <span aria-hidden className="inline-block h-[8px] w-[8px] rounded-full bg-muted-foreground/50" />
+        {/* Jira logo path: simple-icons (CC0). 공식 블루는 #0052CC지만
+          * 다크 배경에서 너무 어두워 밝은 브랜드 블루 #2684FF 단색으로. */}
+        <svg viewBox="0 0 24 24" className="h-[14px] w-[14px]" aria-hidden role="img">
+          <path
+            fill="#2684FF"
+            d="M11.571 11.513H0a5.218 5.218 0 0 0 5.232 5.215h2.13v2.057A5.215 5.215 0 0 0 12.575 24V12.518a1.005 1.005 0 0 0-1.005-1.005zm5.723-5.756H5.736a5.215 5.215 0 0 0 5.215 5.214h2.129v2.058a5.218 5.218 0 0 0 5.215 5.214V6.758a1.001 1.001 0 0 0-1.001-1.001zM23.013 0H11.455a5.215 5.215 0 0 0 5.215 5.215h2.129v2.057A5.215 5.215 0 0 0 24 12.483V1.005A1.001 1.001 0 0 0 23.013 0z"
+          />
+        </svg>
       </span>
     );
   }
@@ -72,10 +78,12 @@ export function sourceOpenUrl(task: {
   slack_url: string | null;
   notion_url: string | null;
   notion_task_id: string | null;
+  jira_url?: string | null;
 }): string | null {
   if (task.source === 'slack') return task.slack_url ?? null;
   if (task.source === 'notion') {
     return task.notion_url ?? (task.notion_task_id ? getNotionPageUrl(task.notion_task_id) : null);
   }
+  if (task.source === 'jira') return task.jira_url ?? null;
   return null;
 }

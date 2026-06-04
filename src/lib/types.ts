@@ -49,6 +49,8 @@ export interface Task {
   slack_url: string | null;
   slack_channel: string | null;
   slack_sender: string | null;
+  jira_url: string | null;
+  jira_issue_key: string | null;
   delegate_to: string | null;
   follow_up_note: string | null;
   issue_id: string | null;

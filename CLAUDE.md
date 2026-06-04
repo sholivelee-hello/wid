@@ -18,7 +18,7 @@
 - **UI**: shadcn/ui v4 (base-ui 기반)
 - **상태관리**: Zustand (타이머), localStorage (캘린더 가시성, 사용자 뷰 등)
 - **데이터**: Supabase 실연결 완료 (2026-04-29). mock 파일 전부 삭제됨. 마이그레이션: `supabase/migrations/001_initial_schema.sql` + `002_hierarchy_and_issues.sql`
-- **외부 연동**: Slack 실연동 완료 (reaction_added → task 생성). Notion (2개 DB 동기화 — env `NOTION_DATABASE_ID_1`/`_2`, name_locked 이름 보호). Google Calendar — 미연동 (빈 상태)
+- **외부 연동**: Slack 실연동 완료 (reaction_added → task 생성). Notion (2개 DB 동기화 — env `NOTION_DATABASE_ID_1`/`_2`, name_locked 이름 보호, title 조각 전체 join — 첫 조각만 읽으면 긴 이름 잘림). JIRA 웹훅 실연동 (알림 3종 → task, `/api/jira/webhook?token=` — `docs/architecture/jira.md`). Google Calendar — 미연동 (빈 상태)
 - **개발 명령어**: `npm run dev` (Turbopack), `npm run build`, `npm run lint`
 - **Slack 로컬 개발**: cloudflared로 터널 열어야 Slack webhook이 도달함. `cloudflared tunnel --url http://localhost:3000` 실행 후 나오는 `https://xxx.trycloudflare.com` URL을 Slack App → Event Subscriptions → Request URL에 등록. 터널 재시작하면 URL이 바뀌므로 그때마다 재등록 필요. 봇이 이모지 달린 채널에 멤버로 들어가있어야 reaction_added 이벤트를 받을 수 있음 (`/invite @TASK줍줍봇`). 봇 토큰에 `users:read` 스코프 필요(요청자 이름 해석 — `users.info` 캐시).
 
@@ -28,7 +28,7 @@
 
 - **타이포**: Pretendard Variable single-system (self-host, `public/fonts/PretendardVariable.woff2`). serif 디스플레이 폐기. 위계는 **weight × tracking**으로만 — h1 800w `-0.04em` `lh 1.02`, h2 700w `-0.03em`, body 400~500w `-0.01em`, 숫자는 `tabular-nums`. 토큰: `--font-sans`, `--font-heading`, `--font-display` 모두 Pretendard.
 - **컬러**: 단일 키컬러 `#7D74F8` (oklch light `0.63 0.191 282.6` / dark `0.73 0.17 282`). 한 화면 액센트 1개 원칙 — amber/emerald/mustard 잔재 없음. `destructive`(빨강)만 의미적 예외. chart-2~5는 chroma 0.04~0.06 무채색.
-- **출처 브랜드 아이콘 예외** (2026-06-03): TASK 출처 식별용 브랜드 아이콘(슬랙 4색 로고, 노션 흰색 단색 N, WID 직접입력 키컬러 점, jira 회색 점 슬롯)은 "한 화면 액센트 1개" 원칙의 의도된 예외다. 브랜드 컬러는 `SourceIcon`(`src/components/tasks/source-icon.tsx`) SVG 내부에만, 표시 전용(클릭 동작 없음 — 원본 열기는 우클릭 메뉴 맨 위). 상세 → `docs/architecture/issues.md`.
+- **출처 브랜드 아이콘 예외** (2026-06-03): TASK 출처 식별용 브랜드 아이콘(슬랙 4색 로고, 노션 흰색 단색 N, WID 직접입력 키컬러 점, jira 공식 로고 #2684FF 단색)은 "한 화면 액센트 1개" 원칙의 의도된 예외다. 브랜드 컬러는 `SourceIcon`(`src/components/tasks/source-icon.tsx`) SVG 내부에만, 표시 전용(클릭 동작 없음 — 원본 열기는 우클릭 메뉴 맨 위). 상세 → `docs/architecture/issues.md`.
 - **표면**: 그림자 거의 0. border + `bg-card` / `bg-muted/40`로 위계. `card-hover-lift`는 bg 전환만, transform 없음.
 - **레이아웃**: 페이지 hero h1 안 씀. 콘텐츠 컬럼은 `max-width 860px` 중앙 정렬(`ContentColumn` client 래퍼가 경로별 결정) — 오늘/전체/이슈 공통, **돌아보기(/history)는 전폭 예외**(캘린더+패널 2단 레이아웃). 시작 화면은 `/today`(루트 `/`는 redirect). `/today`는 미세 progress bar 한 줄, `/inbox`(전체)는 상단 보기 칩(진행 중·보류·완료·휴지통) + 인라인 한 줄 요약 + 기본 접힘 도구바 + **평면 리스트**, `/issues`는 묶음 뷰(목록·상세), `/history`(돌아보기)는 월 네비게이터만. 사이드바는 메뉴 4개(오늘·전체·이슈·돌아보기, 이슈 아이콘 lucide `Folder`) + 하단 설정 톱니바퀴. 큰 숫자는 그 페이지의 단 하나의 핵심 지표에만.
 - **사이드바 = 무채색 면 + 로고 dot** (2026-06-03 갱신, 보라 기둥 폐기): 사용자 결정 — 앱을 100% 다크모드로 사용하며 보라 통판 사이드바가 "옛날 ERP 느낌"이라 폐기. 사이드바는 본문과 거의 같은 어두운 무채색 표면(`bg-sidebar`) + 오른쪽 `border-sidebar-border` hairline으로만 본문과 구분(그림자 0). 브랜드 식별("미션 컨트롤에서 창 구분")은 통판이 아니라 로고 옆 **키컬러 dot 한 점**(`bg-primary`)이 담당. 위계: 활성 = `bg-sidebar-accent` pill + 흰 글자 + **3px 키컬러 레일** + 키컬러 아이콘, 비활성 = `text-muted-foreground` + hover 시 `bg-sidebar-accent/60`. 컬러는 "현재 위치"를 가리키는 레일/아이콘에만 최소량. 카운트 뱃지 = `bg-primary/15 text-primary`. 모바일 헤더 Sheet nav도 동일 언어. 모든 색은 기존 토큰(`--sidebar*`, `primary`, `muted`, `border`)만 사용 — 새 색 없음, 라이트는 토큰으로 자동 따라옴.
@@ -100,6 +100,7 @@ DB 마이그레이션이 포함된 배포는 마이그레이션을 **먼저** Su
 | `docs/architecture/calendar-embed.md` | `GCalConfig` (oauth + subscribedCalendars), GIS implicit-flow OAuth, 활성 캘린더/색상 헬퍼. /calendar 페이지 제거되어 히스토리에 통합. |
 | `docs/architecture/mock-backend.md` | `__tasksRef` / `__issuesRef` 컨벤션, **POST는 반드시 push** 규칙, position 할당 룰, PATCH 가드 코드 카탈로그. |
 | `docs/architecture/pending.md` | 보류함 pending_at soft-flag invariant, pend/unpend 전파 규칙, 무게 인박스(getTaskWeight) 기준. |
+| `docs/architecture/jira.md` | JIRA 웹훅 연동 — 알림 3종(할당·멘션·내 이슈 댓글)→TASK 매핑, token 인증, jira_events dedup, 댓글 body wiki/ADF 처리, JIRA 쪽 웹훅 등록 절차. |
 
 새로운 아키텍처 결정이나 invariant이 생기면 위 문서 중 하나에 추가하거나 새 파일 만들고 이 표에 한 줄로 색인.
 
