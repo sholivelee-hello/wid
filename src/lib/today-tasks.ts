@@ -121,13 +121,46 @@ export function getDeadlineTodayTaskIds(
 }
 
 /**
+ * Completed-today auto-include: a task whose `completed_at` falls on today
+ * (local date) shows up in 오늘 even if it was never added to the explicit set
+ * — e.g. completed straight from /inbox. Mirrors the user's mental model of
+ * "what I finished today" so the 완료 section reflects all of today's wins.
+ *
+ * 완료만 — '취소'(cancel)는 끌어오지 않는다. The mental model is 오늘 완료한 일의
+ * 회고, not 처리한 일 전부. `isCompleted` checks the 완료 status specifically
+ * (not isTaskDone, which folds in 취소).
+ *
+ * Like deadline-auto, this is a derived layer — never written into the explicit
+ * localStorage set. So reverting a completion (되돌리기) drops it from 오늘 again,
+ * and /inbox hide-rules (which look at the explicit set only) are unaffected.
+ *
+ * "Today" is resolved via `localDateStr(new Date())` (local timezone) rather
+ * than a passed-in string — matching `countCompletedToday` / `pruneStaleTodayIds`
+ * — so completion (`completed_at`, local) is compared local-vs-local. The page's
+ * own `todayStr` is UTC-derived, which would mis-bucket completions late at night
+ * in eastern timezones; deriving local here keeps the comparison correct.
+ */
+export function getCompletedTodayTaskIds(tasks: Task[]): Set<string> {
+  const todayStr = localDateStr(new Date());
+  const out = new Set<string>();
+  for (const t of tasks) {
+    if (t.is_deleted) continue;
+    if (t.status !== '완료') continue;
+    if (!t.completed_at) continue;
+    if (localDateStr(new Date(t.completed_at)) === todayStr) out.add(t.id);
+  }
+  return out;
+}
+
+/**
  * Effective Today set = explicit ids ∪ all descendants (children, grandchildren…)
  * of those explicit ids. Adding a parent TASK to Today implicitly pulls its
  * sub-TASKs (and their sub-TASKs) along.
  *
- * When `todayStr` is provided, deadline-auto tasks (due today or past) are
- * folded in as additional roots and their descendants pulled along too — so a
- * task that is overdue shows up in 오늘 without an explicit Sun tap.
+ * When `todayStr` is provided, deadline-auto tasks (due today or past) and
+ * completed-today tasks (completed_at == today) are folded in as additional
+ * roots and their descendants pulled along too — so an overdue task, or one
+ * completed straight from /inbox, shows up in 오늘 without an explicit Sun tap.
  */
 export function getEffectiveTodayTaskIds(
   explicitIds: Set<string>,
@@ -137,6 +170,7 @@ export function getEffectiveTodayTaskIds(
   const seeds = new Set(explicitIds);
   if (todayStr) {
     for (const id of getDeadlineTodayTaskIds(tasks, todayStr)) seeds.add(id);
+    for (const id of getCompletedTodayTaskIds(tasks)) seeds.add(id);
   }
   if (seeds.size === 0) return new Set();
   const childrenByParent = new Map<string, string[]>();

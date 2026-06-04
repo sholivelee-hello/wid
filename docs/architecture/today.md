@@ -6,9 +6,17 @@
 |---|---|---|
 | **Explicit** | 사용자가 직접 "오늘에 추가" 한 task ID들 | `localStorage[wid-today-task-ids]` |
 | **Deadline-auto** | 마감일(due date)이 오늘이거나 지난, 미완료·미보류·미삭제 task | `getDeadlineTodayTaskIds(allTasks, todayStr)` (파생, 저장 안 함) |
-| **Effective** | (explicit ∪ deadline-auto) ∪ 그 자손 전부 | `getEffectiveTodayTaskIds(explicit, allTasks, todayStr)` |
+| **Completed-today-auto** | `completed_at`이 오늘(로컬)인 **완료** task (취소 제외) | `getCompletedTodayTaskIds(allTasks)` (파생, 저장 안 함) |
+| **Effective** | (explicit ∪ deadline-auto ∪ completed-today-auto) ∪ 그 자손 전부 | `getEffectiveTodayTaskIds(explicit, allTasks, todayStr)` |
 
-Explicit set이 단일 진실. Deadline-auto는 task 상태에서 매번 파생 — localStorage에 안 들어감 (마감 지나거나 완료되면 자동으로 빠지고, "사용자가 골랐나?"가 흐려지지 않게). Effective set은 매 렌더마다 계산: explicit + deadline-auto를 seed로 자손까지 펼침. 부모 TASK를 추가하면 sub-TASK들이 자동으로 따라오고, 부모를 빼면 같이 빠짐. `todayStr`은 today 페이지가 mount 시점에 고정한 로컬 날짜.
+Explicit set이 단일 진실. Deadline-auto는 task 상태에서 매번 파생 — localStorage에 안 들어감 (마감 지나거나 완료되면 자동으로 빠지고, "사용자가 골랐나?"가 흐려지지 않게). Effective set은 매 렌더마다 계산: explicit + deadline-auto + completed-today-auto를 seed로 자손까지 펼침. 부모 TASK를 추가하면 sub-TASK들이 자동으로 따라오고, 부모를 빼면 같이 빠짐. `todayStr`은 today 페이지가 mount 시점에 고정한 로컬 날짜.
+
+### 오늘 완료된 task 자동 포함 (2026-06-05)
+
+- 오늘(로컬 `completed_at`) **완료**된 task는 오늘에 explicit하게 추가하지 않았어도 /today의 완료 쪽에 자동 표시 — "오늘 완료한 일" 회고가 /today에 다 모이게. /inbox에서만 완료한 task도 여기 나타난다.
+- **완료만 — '취소'는 제외**. 멘탈모델이 "오늘 완료한 일"이라 취소까지 끌어오지 않음(`status === '완료'` 직접 체크, `isTaskDone` 아님 — 후자는 취소 포함).
+- deadline-auto와 동일하게 **파생 레이어** — explicit set(localStorage)은 불변. 되돌리기(완료 해제)하면 자동으로 빠지고, /inbox 등록 뷰 숨김 규칙(explicit set만 봄)은 영향 없음.
+- "오늘"은 `localDateStr(new Date())`(로컬)로 helper 안에서 자체 계산 — 페이지 `todayStr`(UTC 파생)이 아니라 `completed_at`(로컬)과 local-vs-local 비교. `countCompletedToday`/`pruneStaleTodayIds`와 같은 기준.
 
 ### 마감 자동 포함 (spec 결정 4, 2026-06-03)
 
