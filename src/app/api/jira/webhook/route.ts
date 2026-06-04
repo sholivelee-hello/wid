@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { broadcastTasksChanged } from '@/lib/realtime-broadcast';
 
 // JIRA 시스템 웹훅 수신 엔드포인트.
 // 알림 3종만 TASK로 만든다 (docs/architecture/jira.md):
@@ -158,6 +159,8 @@ export async function POST(request: NextRequest) {
     console.error('[jira/webhook] task insert failed', eventKey, insertErr);
     return NextResponse.json({ error: 'insert failed' }, { status: 500 });
   }
+
+  await broadcastTasksChanged('jira');
 
   return NextResponse.json({ ok: true });
 }

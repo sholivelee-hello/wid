@@ -8,6 +8,7 @@ import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
 import { QuickCaptureProvider } from "@/components/tasks/quick-capture-provider";
 import { ContentColumn } from "@/components/layout/content-column";
+import { RealtimeBridge } from "@/components/layout/realtime-bridge";
 
 // Mono — code-shaped UI (kbd, source-id snippets).
 const geistMono = Geist_Mono({
@@ -79,6 +80,7 @@ export default function RootLayout({
               </div>
             </div>
             <Toaster richColors closeButton position="bottom-right" />
+            <RealtimeBridge />
           </QuickCaptureProvider>
         </ThemeProvider>
       </body>

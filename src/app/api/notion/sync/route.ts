@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { broadcastTasksChanged } from '@/lib/realtime-broadcast';
 import { Client } from '@notionhq/client';
 
 const ASSIGNEE_FILTER = '이신희';
@@ -385,6 +386,8 @@ export async function POST() {
       errors.push({ dbId, message });
     }
   }
+
+  if (created + updated > 0) await broadcastTasksChanged('notion');
 
   return NextResponse.json({
     created,

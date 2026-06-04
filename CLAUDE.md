@@ -101,6 +101,7 @@ DB 마이그레이션이 포함된 배포는 마이그레이션을 **먼저** Su
 | `docs/architecture/mock-backend.md` | `__tasksRef` / `__issuesRef` 컨벤션, **POST는 반드시 push** 규칙, position 할당 룰, PATCH 가드 코드 카탈로그. |
 | `docs/architecture/pending.md` | 보류함 pending_at soft-flag invariant, pend/unpend 전파 규칙, 무게 인박스(getTaskWeight) 기준. |
 | `docs/architecture/jira.md` | JIRA 웹훅 연동 — 알림 3종(할당·멘션·내 이슈 댓글)→TASK 매핑, token 인증, jira_events dedup, 댓글 body wiki/ADF 처리, JIRA 쪽 웹훅 등록 절차. |
+| `docs/architecture/realtime.md` | 웹훅/sync→열린 화면 자동 갱신. Supabase Realtime Broadcast 채널 `wid-tasks`(데이터 미포함, 신호만), 송신 3곳(`broadcastTasksChanged`), 수신 bridge→`task-created` 이벤트, RLS 전제(anon 전면 차단·broadcast만 공개), service role 전환 보안 결정. |
 
 새로운 아키텍처 결정이나 invariant이 생기면 위 문서 중 하나에 추가하거나 새 파일 만들고 이 표에 한 줄로 색인.
 

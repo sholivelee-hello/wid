@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { broadcastTasksChanged } from '@/lib/realtime-broadcast';
 import crypto from 'crypto';
 
 async function verifySlackSignature(request: NextRequest, body: string): Promise<boolean> {
@@ -147,6 +148,7 @@ export async function POST(request: NextRequest) {
       requested_at: new Date(parseFloat(event.ts as string) * 1000).toISOString(),
     });
     if (insertErr) console.error('[slack/webhook] jira relay insert failed', slackUrl, insertErr);
+    else await broadcastTasksChanged('slack');
 
     return NextResponse.json({ ok: true });
   }
@@ -248,6 +250,8 @@ export async function POST(request: NextRequest) {
   });
   if (insertErr) {
     console.error('[slack/webhook] task insert failed', slackUrl, insertErr);
+  } else {
+    await broadcastTasksChanged('slack');
   }
 
   return NextResponse.json({ ok: true });
