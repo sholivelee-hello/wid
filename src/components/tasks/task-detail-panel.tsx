@@ -251,9 +251,19 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated, onNavigate }: 
             <div className={cn('space-y-5 mt-2', loading && 'opacity-50 transition-opacity')}>
               {/* Title */}
               <div>
-                <Input
+                {/* 긴 제목도 줄바꿈으로 전부 보이도록 한 줄 Input → 자동 높이
+                  * Textarea (field-sizing-content). Enter는 줄바꿈이 아니라
+                  * blur(저장)로 동작 — 제목은 개행 없는 평문이라는 계약 유지. */}
+                <Textarea
                   value={title}
+                  rows={1}
                   onChange={(e) => setTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      e.currentTarget.blur();
+                    }
+                  }}
                   onBlur={async () => {
                     if (task && title !== task.title && title.trim()) {
                       try {
@@ -270,7 +280,7 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated, onNavigate }: 
                       } catch {}
                     }
                   }}
-                  className="text-lg font-bold tracking-[-0.025em] border border-transparent hover:border-border focus:border-border px-2 py-1 rounded transition-colors shadow-none focus-visible:ring-1"
+                  className="text-lg md:text-lg font-bold tracking-[-0.025em] leading-snug resize-none min-h-0 bg-transparent dark:bg-transparent border border-transparent hover:border-border focus:border-border px-2 py-1 rounded transition-colors shadow-none focus-visible:ring-1"
                 />
                 <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
                   {task.source === 'notion' && <Badge className="bg-black text-white text-[10px] px-1.5 py-0 rounded">Notion</Badge>}

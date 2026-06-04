@@ -1,18 +1,14 @@
 'use client';
 
-import { useState } from 'react';
 import { toast } from 'sonner';
 import { TaskNode } from '@/lib/hierarchy';
-import { isTaskDone, type Task, type TaskStatus } from '@/lib/types';
+import { isTaskDone, type TaskStatus } from '@/lib/types';
 import { lockedSiblings, completionBlocked, incompleteChildCount } from '@/lib/lock-state';
 import { TaskCard } from '@/components/tasks/task-card';
+import { AddSubTaskRow } from '@/components/tasks/add-sub-task-row';
 import { useCollapsed } from '@/lib/use-tree-collapsed';
-import { ChevronDown, Plus, GripVertical } from 'lucide-react';
+import { ChevronDown, GripVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { apiFetch } from '@/lib/api';
-import { addTodayTask } from '@/lib/today-tasks';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import {
   SortableContext,
   useSortable,
@@ -63,100 +59,6 @@ interface Props extends TaskBranchHandlers {
    *  to today's list. Today page sets this so users don't need an extra
    *  Sun-icon click after capturing a sub-task in the Today view. */
   addToTodayOnCreate?: boolean;
-}
-
-function AddSubTaskRow({
-  parentId,
-  addToToday = false,
-}: {
-  parentId: string;
-  addToToday?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  const submit = async () => {
-    const t = title.trim();
-    if (!t || busy) return;
-    setBusy(true);
-    try {
-      // Append after the parent's existing sub-tasks. Server defaults to 0,
-      // which would stack new sub-tasks at the top — opposite of what users
-      // expect for a checklist.
-      let nextPosition = 0;
-      try {
-        const siblings = await apiFetch<Task[]>(
-          `/api/tasks?parent_task_id=${parentId}&deleted=false`,
-          { suppressToast: true },
-        );
-        nextPosition = siblings.reduce((m, s) => Math.max(m, s.position), -1) + 1;
-      } catch {
-        // Fall through with position 0 — visual order is the only casualty.
-      }
-      const created = await apiFetch<{ id: string }>('/api/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        // Explicit status — without this the mock-backend default used to
-        // create tasks with a status outside TASK_STATUSES, which then got
-        // silently filtered out of the Today page's status groups.
-        body: JSON.stringify({ title: t, parent_task_id: parentId, issue_id: null, status: '등록', position: nextPosition }),
-        suppressToast: true,
-      });
-      if (addToToday && created?.id) addTodayTask(created.id);
-      window.dispatchEvent(new CustomEvent('task-created'));
-      setTitle('');
-      setOpen(false);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={(e) => { e.stopPropagation(); setOpen(true); }}
-        onPointerDown={(e) => e.stopPropagation()}
-        className="text-[11px] text-muted-foreground/70 hover:text-foreground transition-colors inline-flex items-center gap-1 px-1.5 py-1 rounded-md hover:bg-accent/40"
-      >
-        <Plus className="h-3 w-3" /> 하위 task 추가
-      </button>
-    );
-  }
-
-  return (
-    <div
-      className="flex items-center gap-1.5"
-      onClick={(e) => e.stopPropagation()}
-      onPointerDown={(e) => e.stopPropagation()}
-      onKeyDown={(e) => e.stopPropagation()}
-    >
-      <Input
-        autoFocus
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') { e.preventDefault(); submit(); }
-          else if (e.key === 'Escape') { e.preventDefault(); setOpen(false); setTitle(''); }
-        }}
-        placeholder="하위 task 제목"
-        className="h-7 text-xs"
-      />
-      <Button type="button" size="sm" onClick={submit} disabled={!title.trim() || busy} className="h-7 text-xs">
-        추가
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        variant="ghost"
-        onClick={() => { setOpen(false); setTitle(''); }}
-        className="h-7 text-xs"
-      >
-        취소
-      </Button>
-    </div>
-  );
 }
 
 export const TASK_SORT_PREFIX = 'tsk:';

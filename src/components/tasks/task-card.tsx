@@ -20,6 +20,7 @@ import { toggleTodayTask, getTodayTaskIds } from '@/lib/today-tasks';
 import { TaskInlineEditor } from '@/components/tasks/task-inline-editor';
 import { getTaskWeight } from '@/lib/task-weight';
 import { SourceIcon, sourceOpenUrl } from '@/components/tasks/source-icon';
+import { AddSubTaskRow } from '@/components/tasks/add-sub-task-row';
 import {
   Circle,
   CheckCircle2,
@@ -32,6 +33,7 @@ import {
   Sun,
   PauseCircle,
   ListChecks,
+  Plus,
 } from 'lucide-react';
 
 interface TaskCardProps {
@@ -110,6 +112,9 @@ export function TaskCard({
 
   const [isTodayTask, setIsTodayTask] = useState(() => getTodayTaskIds().has(task.id));
   const [completePulse, setCompletePulse] = useState(0);
+  // 우클릭 "하위 task 추가" → 카드 아래 인라인 입력. 생성은 AddSubTaskRow가
+  // 처리하고 task-created 이벤트로 모든 페이지가 새로고침되므로 부모 wiring 불필요.
+  const [addingSub, setAddingSub] = useState(false);
 
   useEffect(() => {
     const handler = () => setIsTodayTask(getTodayTaskIds().has(task.id));
@@ -168,6 +173,15 @@ export function TaskCard({
         <Sun className={cn(isTodayTask && 'fill-primary text-primary')} />
         {isTodayTask ? '오늘에서 빼기' : '오늘로 보내기'}
       </ContextMenuItem>
+
+      {/* 하위 task 추가 — 3-level invariant상 top-level TASK에서만 허용
+        * (sub-TASK에 또 하위를 달면 MAX_DEPTH로 400). */}
+      {!task.parent_task_id && (
+        <ContextMenuItem onClick={() => setAddingSub(true)}>
+          <Plus />
+          하위 task 추가
+        </ContextMenuItem>
+      )}
 
       {onStatusChange && (
         <ContextMenuSub>
@@ -471,6 +485,19 @@ export function TaskCard({
             <TaskInlineEditor
               task={task}
               onClose={() => onCloseEdit?.()}
+            />
+          </div>
+        )}
+        {addingSub && !editing && (
+          <div
+            className="mt-2 pt-2 border-t border-border/40"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            <AddSubTaskRow
+              parentId={task.id}
+              startOpen
+              onClose={() => setAddingSub(false)}
             />
           </div>
         )}

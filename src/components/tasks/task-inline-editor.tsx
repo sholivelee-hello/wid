@@ -141,9 +141,18 @@ export function TaskInlineEditor({ task, onClose }: Props) {
         </div>
       </div>
 
-      <Input
+      {/* 긴 제목도 줄바꿈으로 전부 보이도록 자동 높이 Textarea.
+        * Enter는 줄바꿈이 아니라 blur(저장) — 제목은 개행 없는 평문. */}
+      <Textarea
         value={title}
+        rows={1}
         onChange={(e) => setTitle(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            e.currentTarget.blur();
+          }
+        }}
         onBlur={() => {
           if (title.trim() && title !== task.title) {
             // 노션発 task의 이름을 WID에서 고치면 이후 노션 제목 변경을 따르지
@@ -153,6 +162,7 @@ export function TaskInlineEditor({ task, onClose }: Props) {
             save(patch);
           }
         }}
+        className="resize-none min-h-0 leading-snug"
         aria-label="제목"
       />
 
