@@ -3,11 +3,12 @@ import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { broadcastTasksChanged } from '@/lib/realtime-broadcast';
 
 // JIRA 시스템 웹훅 수신 엔드포인트.
-// 알림 3종만 TASK로 만든다 (docs/architecture/jira.md):
-//   ① 나에게 새로 할당        (jira:issue_created / jira:issue_updated + changelog)
-//   ② 댓글에서 나를 멘션      (comment_created, body에 내 accountId 멘션)
-//   ③ 내가 담당자인 이슈에 새 댓글 (comment_created, assignee = 나)
-// 내가 직접 한 행동(스스로 할당·내가 쓴 댓글)은 알림이 아니므로 건너뛴다 —
+// 알림 4종만 TASK로 만든다 (docs/architecture/jira.md):
+//   ① 나에게 새로 할당             (jira:issue_created / jira:issue_updated + changelog)
+//   ② 댓글에서 나를 멘션           (comment_created, body에 내 accountId 멘션)
+//   ③ 내가 담당자인 이슈에 새 댓글  (comment_created, assignee = 나)
+//   ④ 내가 보고자인 이슈의 상태 변경 (jira:issue_updated + changelog status, reporter = 나)
+// 내가 직접 한 행동(스스로 할당·내가 쓴 댓글·내가 바꾼 상태)은 알림이 아니므로 건너뛴다 —
 // JIRA 자체 알림 정책과 동일.
 //
 // 인증: JIRA Cloud 시스템 웹훅은 서명을 지원하지 않으므로 URL 쿼리의
@@ -64,6 +65,7 @@ export async function POST(request: NextRequest) {
   const issueKey: string = issue.key;
   const summary: string = issue.fields?.summary ?? '';
   const assigneeId: string | null = issue.fields?.assignee?.accountId ?? null;
+  const reporterId: string | null = issue.fields?.reporter?.accountId ?? null;
 
   // 사이트 주소는 payload의 self URL에서 유도 (env 하드코딩 의존 최소화)
   let siteOrigin = JIRA_FALLBACK_SITE;
@@ -115,21 +117,37 @@ export async function POST(request: NextRequest) {
 
     let assignedToMe = false;
     let changeId: string = 'created';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let statusItem: any = null;
     if (webhookEvent === 'jira:issue_created') {
       assignedToMe = assigneeId === me;
     } else {
-      const items: { field?: string; fieldId?: string; to?: string }[] =
+      const items: { field?: string; fieldId?: string; to?: string; fromString?: string; toString?: string }[] =
         payload?.changelog?.items ?? [];
       assignedToMe = items.some(
         (it) => (it.fieldId === 'assignee' || it.field === 'assignee') && it.to === me,
       );
+      statusItem =
+        items.find((it) => it.fieldId === 'status' || it.field === 'status') ?? null;
       changeId = String(payload?.changelog?.id ?? payload?.timestamp ?? '');
     }
-    if (!assignedToMe) return NextResponse.json({ ok: true });
 
-    eventKey = `assign:${issue.id}:${changeId}`;
-    title = `${issueKey} 할당: ${summary}`;
-    requester = actorName;
+    if (assignedToMe) {
+      // ① 할당. 같은 changelog에 status 변경이 함께 있어도 할당 우선, task 1개만
+      //   (②③ 멘션 우선 규칙과 같은 단순화).
+      eventKey = `assign:${issue.id}:${changeId}`;
+      title = `${issueKey} 할당: ${summary}`;
+      requester = actorName;
+    } else if (statusItem && reporterId === me) {
+      // ④ 내가 보고자인 이슈의 상태가 타인에 의해 바뀜 (actorId === me 는 위에서 이미 제외).
+      const from = statusItem.fromString ?? '?';
+      const to = statusItem.toString ?? '?';
+      eventKey = `status:${issue.id}:${changeId}`;
+      title = `${issueKey} 상태: ${from} → ${to} — ${summary}`;
+      requester = actorName;
+    } else {
+      return NextResponse.json({ ok: true });
+    }
   }
 
   if (!eventKey || !title) return NextResponse.json({ ok: true });

@@ -1,18 +1,21 @@
 # JIRA 연동 (웹훅 → TASK)
 
-JIRA(mirapartners.atlassian.net)의 **알림 3종**을 WID TASK로 들여온다. 작업 목록 import가 아니라 Slack 이모지 흐름과 같은 "알림 → 인박스" 모델이다. (2026-06-04 브레인스토밍 결정: 웹훅 방식, 폴링 아님)
+JIRA(mirapartners.atlassian.net)의 **알림 4종**을 WID TASK로 들여온다. 작업 목록 import가 아니라 Slack 이모지 흐름과 같은 "알림 → 인박스" 모델이다. (2026-06-04 브레인스토밍 결정: 웹훅 방식, 폴링 아님)
 
-## 알림 3종 → TASK 매핑
+## 알림 4종 → TASK 매핑
 
 | 알림 | 감지 조건 | TASK title |
 |---|---|---|
 | ① 나에게 새로 할당 | `jira:issue_created`에서 assignee=나, 또는 `jira:issue_updated` changelog의 assignee `to`=나 | `{KEY} 할당: {summary}` |
 | ② 댓글에서 나를 멘션 | `comment_created` body에 내 accountId 멘션 | `{KEY} 멘션: {댓글 앞 140자}` |
 | ③ 내 이슈에 새 댓글 | `comment_created` + 이슈 assignee=나 (멘션 아닐 때) | `{KEY} 댓글: {댓글 앞 140자}` |
+| ④ 내 이슈의 상태 변경 | `jira:issue_updated` changelog에 `status` 항목 + reporter=나 (할당 아닐 때) | `{KEY} 상태: {fromString} → {toString} — {summary}` |
 
-- **내가 한 행동은 제외**: 스스로 할당(actor=나), 내가 쓴 댓글(author=나)은 건너뛴다 — JIRA 자체 알림 정책과 동일.
+- **내가 한 행동은 제외**: 스스로 할당(actor=나), 내가 쓴 댓글(author=나), 내가 바꾼 상태(actor=나)는 건너뛴다 — JIRA 자체 알림 정책과 동일.
 - 한 댓글이 ②와 ③에 동시 해당하면 **멘션(②) 우선**, task는 1개만.
-- requester = 행동한 사람(할당한 사람/댓글 작성자) displayName. requested_at = 웹훅 timestamp.
+- 한 `issue_updated` changelog에 assignee→나 와 status 변경이 함께 있으면 **할당(①) 우선**, task는 1개만 (②③ 멘션 우선과 같은 단순화).
+- reporter=나 이면서 assignee=나 인 이슈도 ④가 동작한다 (actor≠나 조건만으로 충분).
+- requester = 행동한 사람(할당한 사람/댓글 작성자/상태 변경자) displayName. requested_at = 웹훅 timestamp.
 
 ## 엔드포인트 계약 (`/api/jira/webhook`)
 
