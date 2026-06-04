@@ -1,8 +1,8 @@
 # JIRA 연동 (웹훅 → TASK)
 
-JIRA(mirapartners.atlassian.net)의 **알림 4종**을 WID TASK로 들여온다. 작업 목록 import가 아니라 Slack 이모지 흐름과 같은 "알림 → 인박스" 모델이다. (2026-06-04 브레인스토밍 결정: 웹훅 방식, 폴링 아님)
+JIRA(mirapartners.atlassian.net)의 **알림 5종**을 WID TASK로 들여온다. 작업 목록 import가 아니라 Slack 이모지 흐름과 같은 "알림 → 인박스" 모델이다. (2026-06-04 브레인스토밍 결정: 웹훅 방식, 폴링 아님)
 
-## 알림 4종 → TASK 매핑
+## 알림 5종 → TASK 매핑
 
 | 알림 | 감지 조건 | TASK title |
 |---|---|---|
@@ -10,11 +10,14 @@ JIRA(mirapartners.atlassian.net)의 **알림 4종**을 WID TASK로 들여온다.
 | ② 댓글에서 나를 멘션 | `comment_created` body에 내 accountId 멘션 | `{KEY} 멘션: {댓글 앞 140자}` |
 | ③ 내 이슈에 새 댓글 | `comment_created` + 이슈 assignee=나 (멘션 아닐 때) | `{KEY} 댓글: {댓글 앞 140자}` |
 | ④ 내 이슈의 상태 변경 | `jira:issue_updated` changelog에 `status` 항목 + reporter=나 (할당 아닐 때) | `{KEY} 상태: {fromString} → {toString} — {summary}` |
+| ⑤ 내가 담당하는 묶음 하위 상태 변경 | `jira:issue_updated` changelog에 `status` 항목 + 내가 담당자인 부모(EPIC 등) 아래의 하위 이슈 (reporter≠나·할당 아닐 때) | `{KEY} 상태: {fromString} → {toString} — {summary}` (④와 동일 형식) |
 
 - **내가 한 행동은 제외**: 스스로 할당(actor=나), 내가 쓴 댓글(author=나), 내가 바꾼 상태(actor=나)는 건너뛴다 — JIRA 자체 알림 정책과 동일.
 - 한 댓글이 ②와 ③에 동시 해당하면 **멘션(②) 우선**, task는 1개만.
 - 한 `issue_updated` changelog에 assignee→나 와 status 변경이 함께 있으면 **할당(①) 우선**, task는 1개만 (②③ 멘션 우선과 같은 단순화).
 - reporter=나 이면서 assignee=나 인 이슈도 ④가 동작한다 (actor≠나 조건만으로 충분).
+- ④와 ⑤는 **같은 상태 변경 생성 경로·같은 dedup key**(`status:{issue.id}:{changelog.id}`)를 쓴다 → 한 이벤트가 양쪽에 해당해도 task는 1개만. 적격 조건은 `statusItem && (reporterId === me || await isMyEpicChild(issue))` — **단락 평가**라 reporter=나면 JIRA API 호출 없이 즉시 생성(④ 비용 불변), 아닐 때만 parent 담당자 조회(⑤).
+- `isMyEpicChild(issue)` (`src/lib/jira-api.ts`): ① parent 키는 `issue.fields.parent`에서, 없으면 REST `GET /rest/api/3/issue/{KEY}?fields=parent`로 보강. ② parent 없으면 false. 있으면 `GET /rest/api/3/issue/{parentKey}?fields=assignee,issuetype`로 부모 담당자 조회. ③ 부모 담당자가 나면 true — issuetype이 Epic이 아니어도("내가 담당하는 묶음 아래의 변동"이라는 의도) true. Basic 인증(`JIRA_EMAIL`+`JIRA_API_TOKEN`) 미설정 시 조용히 false(⑤ 비활성). fetch는 `AbortSignal.timeout(3000)`, 실패 시 console.warn 후 false라 웹훅 200을 막지 않는다.
 - requester = 행동한 사람(할당한 사람/댓글 작성자/상태 변경자) displayName. requested_at = 웹훅 timestamp.
 
 ## 엔드포인트 계약 (`/api/jira/webhook`)
@@ -31,6 +34,8 @@ JIRA(mirapartners.atlassian.net)의 **알림 4종**을 WID TASK로 들여온다.
 |---|---|
 | `JIRA_WEBHOOK_SECRET` | 웹훅 URL token (openssl rand로 생성, .env.local + Vercel) |
 | `JIRA_OWNER_ACCOUNT_ID` | `712020:d5ec8d21-0173-41a8-8714-8a7d4813e601` (이신희) |
+| `JIRA_EMAIL` | Atlassian 계정 이메일 (⑤ EPIC 하위 상태변경 — parent 담당자 조회 Basic 인증용) |
+| `JIRA_API_TOKEN` | Atlassian API 토큰 (⑤용). 미설정 시 ⑤만 비활성, ④ 영향 없음 |
 
 ## JIRA 쪽 등록 (관리자)
 

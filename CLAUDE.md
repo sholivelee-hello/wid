@@ -18,7 +18,7 @@
 - **UI**: shadcn/ui v4 (base-ui 기반)
 - **상태관리**: Zustand (타이머), localStorage (캘린더 가시성, 사용자 뷰 등)
 - **데이터**: Supabase 실연결 완료 (2026-04-29). mock 파일 전부 삭제됨. 마이그레이션: `supabase/migrations/001_initial_schema.sql` + `002_hierarchy_and_issues.sql`
-- **외부 연동**: Slack 실연동 완료 (reaction_added → task 생성). Notion (2개 DB 동기화 — env `NOTION_DATABASE_ID_1`/`_2`, name_locked 이름 보호, title 조각 전체 join — 첫 조각만 읽으면 긴 이름 잘림). JIRA 웹훅 실연동 (알림 4종 → task, `/api/jira/webhook?token=` — `docs/architecture/jira.md`). Google Calendar — 서버 OAuth(Authorization Code flow, refresh_token 서버 보관)로 한 번 로그인하면 자동 유지 (env `GOOGLE_CLIENT_SECRET` 필요 — `docs/architecture/calendar-embed.md`)
+- **외부 연동**: Slack 실연동 완료 (reaction_added → task 생성). Notion (2개 DB 동기화 — env `NOTION_DATABASE_ID_1`/`_2`, name_locked 이름 보호, title 조각 전체 join — 첫 조각만 읽으면 긴 이름 잘림). JIRA 웹훅 실연동 (알림 5종 → task, `/api/jira/webhook?token=` — `docs/architecture/jira.md`). Google Calendar — 서버 OAuth(Authorization Code flow, refresh_token 서버 보관)로 한 번 로그인하면 자동 유지 (env `GOOGLE_CLIENT_SECRET` 필요 — `docs/architecture/calendar-embed.md`)
 - **개발 명령어**: `npm run dev` (Turbopack), `npm run build`, `npm run lint`
 - **Slack 로컬 개발**: cloudflared로 터널 열어야 Slack webhook이 도달함. `cloudflared tunnel --url http://localhost:3000` 실행 후 나오는 `https://xxx.trycloudflare.com` URL을 Slack App → Event Subscriptions → Request URL에 등록. 터널 재시작하면 URL이 바뀌므로 그때마다 재등록 필요. 봇이 이모지 달린 채널에 멤버로 들어가있어야 reaction_added 이벤트를 받을 수 있음 (`/invite @TASK줍줍봇`). 봇 토큰에 `users:read` 스코프 필요(요청자 이름 해석 — `users.info` 캐시).
 
@@ -100,7 +100,7 @@ DB 마이그레이션이 포함된 배포는 마이그레이션을 **먼저** Su
 | `docs/architecture/calendar-embed.md` | `GCalConfig` (oauth + subscribedCalendars), 서버 OAuth(code flow + refresh_token 자동 갱신, `ensureFreshOAuth()` 계약), 활성 캘린더/색상 헬퍼. /calendar 페이지 제거되어 히스토리에 통합. |
 | `docs/architecture/mock-backend.md` | `__tasksRef` / `__issuesRef` 컨벤션, **POST는 반드시 push** 규칙, position 할당 룰, PATCH 가드 코드 카탈로그. |
 | `docs/architecture/pending.md` | 보류함 pending_at soft-flag invariant, pend/unpend 전파 규칙, 무게 인박스(getTaskWeight) 기준. |
-| `docs/architecture/jira.md` | JIRA 웹훅 연동 — 알림 4종(할당·멘션·내 이슈 댓글·내 이슈 상태 변경)→TASK 매핑, token 인증, jira_events dedup, 댓글 body wiki/ADF 처리, JIRA 쪽 웹훅 등록 절차. |
+| `docs/architecture/jira.md` | JIRA 웹훅 연동 — 알림 5종(할당·멘션·내 이슈 댓글·내 이슈 상태 변경·내가 담당하는 묶음 하위 상태 변경)→TASK 매핑, token 인증, jira_events dedup, 댓글 body wiki/ADF 처리, EPIC 하위 판정(isMyEpicChild + JIRA_EMAIL/JIRA_API_TOKEN), JIRA 쪽 웹훅 등록 절차. |
 | `docs/architecture/realtime.md` | 웹훅/sync→열린 화면 자동 갱신. Supabase Realtime Broadcast 채널 `wid-tasks`(데이터 미포함, 신호만), 송신 3곳(`broadcastTasksChanged`), 수신 bridge→`task-created` 이벤트, RLS 전제(anon 전면 차단·broadcast만 공개), service role 전환 보안 결정. |
 
 새로운 아키텍처 결정이나 invariant이 생기면 위 문서 중 하나에 추가하거나 새 파일 만들고 이 표에 한 줄로 색인.

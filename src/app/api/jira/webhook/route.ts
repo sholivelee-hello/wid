@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { broadcastTasksChanged } from '@/lib/realtime-broadcast';
+import { isMyEpicChild } from '@/lib/jira-api';
 
 // JIRA 시스템 웹훅 수신 엔드포인트.
-// 알림 4종만 TASK로 만든다 (docs/architecture/jira.md):
+// 알림 5종만 TASK로 만든다 (docs/architecture/jira.md):
 //   ① 나에게 새로 할당             (jira:issue_created / jira:issue_updated + changelog)
 //   ② 댓글에서 나를 멘션           (comment_created, body에 내 accountId 멘션)
 //   ③ 내가 담당자인 이슈에 새 댓글  (comment_created, assignee = 나)
 //   ④ 내가 보고자인 이슈의 상태 변경 (jira:issue_updated + changelog status, reporter = 나)
+//   ⑤ 내가 담당하는 묶음(EPIC 등) 하위 이슈의 상태 변경 (parent assignee = 나)
 // 내가 직접 한 행동(스스로 할당·내가 쓴 댓글·내가 바꾼 상태)은 알림이 아니므로 건너뛴다 —
 // JIRA 자체 알림 정책과 동일.
 //
@@ -138,8 +140,11 @@ export async function POST(request: NextRequest) {
       eventKey = `assign:${issue.id}:${changeId}`;
       title = `${issueKey} 할당: ${summary}`;
       requester = actorName;
-    } else if (statusItem && reporterId === me) {
-      // ④ 내가 보고자인 이슈의 상태가 타인에 의해 바뀜 (actorId === me 는 위에서 이미 제외).
+    } else if (statusItem && (reporterId === me || (await isMyEpicChild(issue)))) {
+      // ④ 내가 보고자인 이슈의 상태가 타인에 의해 바뀜, 또는
+      // ⑤ 내가 담당하는 묶음(EPIC 등) 하위 이슈의 상태가 바뀜 (actorId === me 는 위에서 이미 제외).
+      //   단락 평가: reporter=나면 JIRA API 호출 없이 즉시 생성(④ 비용 불변),
+      //   아닐 때만 parent 담당자 조회(⑤). 같은 생성 경로/같은 dedup key라 중복 생성 불가.
       const from = statusItem.fromString ?? '?';
       const to = statusItem.toString ?? '?';
       eventKey = `status:${issue.id}:${changeId}`;
