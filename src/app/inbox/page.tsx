@@ -2,8 +2,37 @@
 
 import { Suspense, useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Issue, Task, TaskStatus, isTaskDone } from '@/lib/types';
 import { TaskCard } from '@/components/tasks/task-card';
+import {
+  SortableTaskItem,
+  taskSortId,
+  TASK_SORT_PREFIX,
+} from '@/components/tasks/task-branch';
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import type { DraggableAttributes } from '@dnd-kit/core';
+import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities';
+import {
+  INBOX_ORDER_KEY,
+  loadManualOrder,
+  saveManualOrder,
+  applyManualOrder,
+} from '@/lib/manual-order';
 import { TaskListSkeleton } from '@/components/loading/page-skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -16,13 +45,13 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { format, isToday, isYesterday, isSameYear } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import { Inbox, ChevronDown, Plus, Pencil, Trash2, Search, X } from 'lucide-react';
+import { Inbox, ChevronDown, Plus, Pencil, Trash2, Search, X, GripVertical } from 'lucide-react';
 import { PendingView } from '@/components/inbox/pending-view';
 import { TrashView } from '@/components/inbox/trash-view';
 import { TaskDetailPanel } from '@/components/tasks/task-detail-panel';
 import { IssueForm } from '@/components/issues/issue-form';
 import { IssueDeleteDialog } from '@/components/issues/issue-delete-dialog';
-import { promptNextInTodayIfNeeded } from '@/lib/today-tasks';
+import { promptNextInTodayIfNeeded, getTodayTaskIds } from '@/lib/today-tasks';
 import {
   loadViews, saveViews, loadInboxFilter, saveInboxFilter,
   type CustomTaskView,
@@ -98,6 +127,24 @@ function InboxPageInner() {
   const searchTimerRef = useRef<NodeJS.Timeout>(undefined);
 
   const [statusFilter, setStatusFilter] = useState<string[]>(() => loadInboxFilter());
+
+  // 오늘로 보낸 task는 등록 뷰에서 숨긴다 (사용자 요청 2026-06-04) — 오늘
+  // 탭이 담당. 오늘에서 빼면 today-tasks-changed로 즉시 되살아난다.
+  // explicit set만 본다: 마감 자동 포함(deadline-auto)은 사용자가 "보낸" 게
+  // 아니므로 인박스에서 사라지면 오히려 혼란.
+  const [todaySet, setTodaySet] = useState<Set<string>>(() => getTodayTaskIds());
+  useEffect(() => {
+    const handler = () => setTodaySet(getTodayTaskIds());
+    window.addEventListener('today-tasks-changed', handler);
+    return () => window.removeEventListener('today-tasks-changed', handler);
+  }, []);
+
+  // 드래그 수동 정렬 overlay (localStorage). 등록 뷰 + 필터 없음일 때만 적용.
+  const [manualOrder, setManualOrder] = useState<string[]>(() => loadManualOrder(INBOX_ORDER_KEY));
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
 
   const [customViews, setCustomViews] = useState<CustomTaskView[]>(() => loadViews('inbox'));
   const [addingView, setAddingView] = useState(false);
@@ -346,14 +393,26 @@ function InboxPageInner() {
   const flatTopTasks = useMemo(() => {
     const base = applyBaseFilter(treeFilteredTasks)
       .filter(t => !t.parent_task_id && !t.is_deleted)
-      .filter(t => isTaskDone(t.status) === showCompleted);
-    // 등록 뷰: created_at desc. 완료 뷰: completed_at desc(취소 등 null은 created_at fallback).
-    // id를 2차 키로 두어 동시 생성/완료 시 순서가 흔들리지 않게.
+      .filter(t => isTaskDone(t.status) === showCompleted)
+      // 오늘로 보낸(explicit today) task는 등록 뷰에서 숨김 — 오늘 탭 담당.
+      .filter(t => showCompleted || !todaySet.has(t.id));
+    // 등록 뷰: created_at desc + 수동 정렬 overlay. 완료 뷰: completed_at desc
+    // (취소 등 null은 created_at fallback). id를 2차 키로 두어 동시 생성/완료
+    // 시 순서가 흔들리지 않게.
     const key = (t: Task) => (showCompleted ? (t.completed_at ?? t.created_at) : t.created_at);
-    return base.sort(
+    const sorted = base.sort(
       (a, b) => key(b).localeCompare(key(a)) || b.id.localeCompare(a.id),
     );
-  }, [applyBaseFilter, treeFilteredTasks, showCompleted]);
+    return showCompleted ? sorted : applyManualOrder(sorted, manualOrder);
+  }, [applyBaseFilter, treeFilteredTasks, showCompleted, todaySet, manualOrder]);
+
+  // 등록 뷰에서 숨겨진 "오늘로 보낸" 미완료 top-level 수 — 리스트 아래 안내용.
+  const hiddenTodayCount = useMemo(() => {
+    if (showCompleted) return 0;
+    return applyBaseFilter(treeFilteredTasks).filter(
+      t => !t.parent_task_id && !t.is_deleted && !isTaskDone(t.status) && todaySet.has(t.id),
+    ).length;
+  }, [applyBaseFilter, treeFilteredTasks, showCompleted, todaySet]);
   const issueChipFor = (t: Task) => {
     if (!t.issue_id) return null;
     const i = issuesById.get(t.issue_id);
@@ -447,11 +506,32 @@ function InboxPageInner() {
   };
   const closeEdit = () => setEditingTaskId(null);
 
-  const renderFlatTask = (t: Task) => {
+  // 드래그 핸들 슬롯 — SortableTaskItem이 내려주는 activator 바인딩.
+  type RowHandle = {
+    listeners: SyntheticListenerMap | undefined;
+    attributes: DraggableAttributes;
+    setActivatorNodeRef?: (node: HTMLElement | null) => void;
+  };
+
+  const handleListDragEnd = (e: DragEndEvent) => {
+    const a = String(e.active.id);
+    const o = e.over ? String(e.over.id) : null;
+    if (!o || a === o) return;
+    if (!a.startsWith(TASK_SORT_PREFIX) || !o.startsWith(TASK_SORT_PREFIX)) return;
+    const ids = flatTopTasks.map(t => t.id);
+    const from = ids.indexOf(a.slice(TASK_SORT_PREFIX.length));
+    const to = ids.indexOf(o.slice(TASK_SORT_PREFIX.length));
+    if (from === -1 || to === -1) return;
+    const next = arrayMove(ids, from, to);
+    setManualOrder(next);
+    saveManualOrder(INBOX_ORDER_KEY, next);
+  };
+
+  const renderFlatTask = (t: Task, handle?: RowHandle) => {
     const subs = subsByParent.get(t.id) ?? [];
     const expanded = expandedSubs.has(t.id);
-    return (
-      <div key={t.id}>
+    const body = (
+      <div key={handle ? undefined : t.id} className={cn(handle && 'flex-1 min-w-0')}>
         <TaskCard
           task={t}
           {...taskHandlers}
@@ -480,6 +560,24 @@ function InboxPageInner() {
             ))}
           </div>
         )}
+      </div>
+    );
+    if (!handle) return body;
+    // 핸들 있는 행: grip(hover 시 노출) + 카드. 잡아서 끌면 순서 변경.
+    return (
+      <div className="group/row flex items-start gap-1">
+        <button
+          type="button"
+          ref={handle.setActivatorNodeRef}
+          {...handle.attributes}
+          {...handle.listeners}
+          aria-label="끌어서 순서 변경"
+          onClick={(e) => e.stopPropagation()}
+          className="mt-4 p-1 -m-1 rounded text-muted-foreground/60 opacity-30 group-hover/row:opacity-100 focus-visible:opacity-100 transition-opacity hover:bg-accent/50 cursor-grab active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        >
+          <GripVertical className="h-3.5 w-3.5" />
+        </button>
+        {body}
       </div>
     );
   };
@@ -752,10 +850,42 @@ function InboxPageInner() {
               </div>
             );
           })()
+        ) : !hasActiveFilter ? (
+          // 드래그 정렬 — 검색·필터가 없을 때만 (걸러진 리스트 위 reorder는
+          // 의미가 모호해 비활성). grip을 잡아 위/아래로 끌면 순서 저장.
+          <DndContext
+            sensors={dndSensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleListDragEnd}
+          >
+            <SortableContext
+              items={flatTopTasks.map(t => taskSortId(t.id))}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="divide-y divide-border">
+                {flatTopTasks.map(t => (
+                  <SortableTaskItem key={t.id} id={t.id}>
+                    {(handle) => renderFlatTask(t, handle)}
+                  </SortableTaskItem>
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
         ) : (
           <div className="divide-y divide-border">
-            {flatTopTasks.map(renderFlatTask)}
+            {flatTopTasks.map(t => renderFlatTask(t))}
           </div>
+        )}
+
+        {/* 오늘로 보낸 task 숨김 안내 — 어디 갔는지 자명하게. */}
+        {!showCompleted && hiddenTodayCount > 0 && (
+          <p className="text-[12px] text-muted-foreground mt-3 px-1">
+            오늘로 보낸 {hiddenTodayCount}개는 여기서 숨겨져 있어요 —{' '}
+            <Link href="/today" className="text-primary hover:underline">
+              오늘 탭에서 보기
+            </Link>
+            . 오늘에서 빼면 다시 나타나요.
+          </p>
         )}
       </div>
 

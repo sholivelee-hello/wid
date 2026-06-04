@@ -45,9 +45,17 @@ normalizeDepth(taskList)               // 모듈 로드 시 한번 깊이 평탄
 - sub-TASK가 forest root로 올라오는 경우(Today)에도 `isSubtask`(parent_task_id
   기준) 표시는 유지.
 
-### /inbox 정렬·그룹 (2026-06-03)
+### /inbox 정렬·그룹 (2026-06-03, 2026-06-04 개정)
 
-- 기본(등록 뷰): `created_at desc` 고정 — 정렬 컨트롤 없음(죽은 정렬 UI 제거).
+- 기본(등록 뷰): `created_at desc` base + **드래그 수동 정렬 overlay** (2026-06-04
+  사용자 요청 — "잡아서 끌어올리기"). grip 핸들은 검색·필터 없는 등록 뷰에서만.
+  순서는 `localStorage[wid-inbox-manual-order]` (`src/lib/manual-order.ts`) —
+  DB `position`은 이슈 상세 checklist 전용이므로 건드리지 않는다. 저장 후 새로
+  생긴 task는 base 순서로 맨 위.
+- **오늘로 보낸 task 숨김** (2026-06-04): explicit today set에 든 top-level task는
+  등록 뷰에서 숨긴다(오늘 탭 담당). 오늘에서 빼면 `today-tasks-changed`로 즉시
+  복귀. deadline-auto 포함분은 사용자가 "보낸" 게 아니므로 숨기지 않음. 숨긴
+  개수는 리스트 아래 안내 줄로 표시.
 - 완료 칩 뷰(`showCompleted`): `completed_at desc`(null은 `created_at` fallback).
   순회하며 날짜가 바뀔 때 **오늘 / 어제 / M월 d일 / yyyy년 M월 d일** 그룹 헤더 삽입.
 - 커스텀 뷰는 자체 `view.sortBy`(기본 `created_at`)로 독립 정렬 — 메인 인박스

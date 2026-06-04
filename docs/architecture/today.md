@@ -18,6 +18,14 @@ Explicit set이 단일 진실. Deadline-auto는 task 상태에서 매번 파생 
   - deadline-auto-only 항목에서 Sun을 켜면 → explicit에도 들어가 sticky해짐(마감 지나도 유지).
   - deadline-auto 항목에서 Sun을 꺼도 → explicit에서만 빠지고, 마감 조건이 살아있는 한 오늘에 그대로 남는다 ("마감" 뱃지가 그 이유를 설명). 즉 마감 기반 자동 포함은 토글로 끌 수 없다 — 끄려면 task의 마감일/상태를 바꿔야 한다. 하루 숨김 같은 별도 persistence는 도입하지 않음(가장 단순 + pending invariant 불간섭).
 
+## Root 수동 정렬 (2026-06-04)
+
+status 그룹 헤더 드래그(그룹 순서)와 별개로, **그룹 안 개별 root TASK도 grip
+핸들로 드래그 reorder** 가능. 순서는 `localStorage[wid-today-root-order]`
+(`src/lib/manual-order.ts`) overlay — 같은 그룹 안에서만, cross-group 드래그는
+무시(상태 변경 아님). 한 DndContext가 두 네임스페이스를 받는다: 상태 문자열
+id = 그룹 reorder, `tsk:` prefix = root reorder.
+
 ## Today 렌더 = forest
 
 `today/page.tsx` 가 today에 속한 task만으로 트리 forest를 빌드:

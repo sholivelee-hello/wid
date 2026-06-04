@@ -5,7 +5,18 @@ import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { Issue, Task, TaskStatus, isTaskDone } from '@/lib/types';
 import type { GCalEvent } from '@/lib/types';
-import { TaskBranch } from '@/components/tasks/task-branch';
+import {
+  TaskBranch,
+  SortableTaskItem,
+  taskSortId,
+  TASK_SORT_PREFIX,
+} from '@/components/tasks/task-branch';
+import {
+  TODAY_ROOT_ORDER_KEY,
+  loadManualOrder,
+  saveManualOrder,
+  applyManualOrder,
+} from '@/lib/manual-order';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { apiFetch } from '@/lib/api';
@@ -99,6 +110,8 @@ export default function TodayPage() {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [todayIds, setTodayIds] = useState<Set<string>>(() => getTodayTaskIds());
   const [statusOrder, setStatusOrder] = useState<TaskStatus[]>(() => loadStatusOrder());
+  // 그룹 안 개별 TASK 드래그 순서 overlay (사용자 요청 2026-06-04).
+  const [rootOrder, setRootOrder] = useState<string[]>(() => loadManualOrder(TODAY_ROOT_ORDER_KEY));
   const [selectedDetailTaskId, setSelectedDetailTaskId] = useState<string | null>(null);
   const [gcalConfig, setGcalConfig] = useState<GCalConfig>(DEFAULT_GCAL_CONFIG);
   const [gcalEvents, setGcalEvents] = useState<GCalEvent[]>([]);
@@ -162,10 +175,41 @@ export default function TodayPage() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
+  // 한 DndContext가 두 종류의 드래그를 받는다:
+  //  - status 그룹 헤더 (id = 상태 문자열) → 그룹 순서 변경
+  //  - 그룹 안 개별 root TASK (id = `tsk:` prefix) → rootOrder overlay 갱신
   const handleStatusGroupDragEnd = (e: DragEndEvent) => {
-    const activeId = e.active.id;
-    const overId = e.over?.id;
+    const activeId = String(e.active.id);
+    const overId = e.over ? String(e.over.id) : null;
     if (!overId || activeId === overId) return;
+
+    if (activeId.startsWith(TASK_SORT_PREFIX)) {
+      if (!overId.startsWith(TASK_SORT_PREFIX)) return;
+      const aId = activeId.slice(TASK_SORT_PREFIX.length);
+      const oId = overId.slice(TASK_SORT_PREFIX.length);
+      // 같은 status 그룹 안에서만 reorder. cross-group 드래그는 상태 변경이
+      // 아니라 의도 불명이므로 무시.
+      for (const nodes of statusGroups.values()) {
+        const ids = orderRoots(nodes).map(n => n.task.id);
+        const from = ids.indexOf(aId);
+        const to = ids.indexOf(oId);
+        if (from !== -1 && to !== -1) {
+          const moved = arrayMove(ids, from, to);
+          // 전역 저장본 = 모든 그룹의 현재 순서 이어붙임 (이 그룹만 갱신).
+          const all: string[] = [];
+          for (const nodes2 of statusGroups.values()) {
+            const ids2 = orderRoots(nodes2).map(n => n.task.id);
+            all.push(...(ids2.includes(aId) ? moved : ids2));
+          }
+          setRootOrder(all);
+          saveManualOrder(TODAY_ROOT_ORDER_KEY, all);
+          return;
+        }
+        if (from !== -1 || to !== -1) return;
+      }
+      return;
+    }
+
     setStatusOrder(prev => {
       const oldIndex = prev.indexOf(activeId as TaskStatus);
       const newIndex = prev.indexOf(overId as TaskStatus);
@@ -275,6 +319,13 @@ export default function TodayPage() {
     }
     return groups;
   }, [todayForest]);
+
+  // 그룹 안 root 순서에 수동 정렬 overlay 적용 (모르는 항목은 base 순서로 맨 위).
+  const orderRoots = (nodes: TaskNode[]): TaskNode[] => {
+    if (rootOrder.length === 0) return nodes;
+    const wrapped = nodes.map(n => ({ id: n.task.id, node: n }));
+    return applyManualOrder(wrapped, rootOrder).map(w => w.node);
+  };
 
   const buildBreadcrumb = (task: Task) => {
     let issueName: string | null = null;
@@ -503,7 +554,7 @@ export default function TodayPage() {
               <SortableContext items={orderedStatuses} strategy={verticalListSortingStrategy}>
                 <div className="space-y-4">
                   {orderedStatuses.map(status => {
-                    const groupRoots = statusGroups.get(status)!;
+                    const groupRoots = orderRoots(statusGroups.get(status)!);
                     const collapsed = collapsedGroups.has(status);
                     return (
                       <SortableStatusSection key={status} id={status}>
@@ -544,28 +595,39 @@ export default function TodayPage() {
                               </button>
                             </div>
                             {!collapsed && (
-                              <div className="divide-y divide-border">
-                                {groupRoots.map(root => (
-                                  <TaskBranch
-                                    key={root.task.id}
-                                    node={root}
-                                    depth={0}
-                                    lockedIds={new Set<string>()}
-                                    editingTaskId={editingTaskId}
-                                    onCloseEdit={() => setEditingTaskId(null)}
-                                    breadcrumb={buildBreadcrumb(root.task)}
-                                    issueChip={buildIssueChip(root.task)}
-                                    reasonBadge={
-                                      // 마감으로 자동 포함됐고 사용자가 직접 고른 게 아닐 때만 "마감" 뱃지.
-                                      !todayIds.has(root.task.id) && deadlineTodayIds.has(root.task.id)
-                                        ? 'deadline'
-                                        : undefined
-                                    }
-                                    addToTodayOnCreate
-                                    {...taskHandlers}
-                                  />
-                                ))}
-                              </div>
+                              // 개별 TASK 드래그 — 같은 그룹 안에서 grip을 잡아
+                              // 위/아래로 끌어 우선순위를 바꾼다 (rootOrder overlay).
+                              <SortableContext
+                                items={groupRoots.map(r => taskSortId(r.task.id))}
+                                strategy={verticalListSortingStrategy}
+                              >
+                                <div className="divide-y divide-border">
+                                  {groupRoots.map(root => (
+                                    <SortableTaskItem key={root.task.id} id={root.task.id}>
+                                      {(handle) => (
+                                        <TaskBranch
+                                          node={root}
+                                          depth={0}
+                                          lockedIds={new Set<string>()}
+                                          editingTaskId={editingTaskId}
+                                          onCloseEdit={() => setEditingTaskId(null)}
+                                          breadcrumb={buildBreadcrumb(root.task)}
+                                          issueChip={buildIssueChip(root.task)}
+                                          reasonBadge={
+                                            // 마감으로 자동 포함됐고 사용자가 직접 고른 게 아닐 때만 "마감" 뱃지.
+                                            !todayIds.has(root.task.id) && deadlineTodayIds.has(root.task.id)
+                                              ? 'deadline'
+                                              : undefined
+                                          }
+                                          addToTodayOnCreate
+                                          dragHandle={handle}
+                                          {...taskHandlers}
+                                        />
+                                      )}
+                                    </SortableTaskItem>
+                                  ))}
+                                </div>
+                              </SortableContext>
                             )}
                           </section>
                         )}
