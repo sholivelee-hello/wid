@@ -80,7 +80,8 @@ export function IssueRow({
         <Link
           href={`/issues/${issue.id}`}
           onClick={(e) => e.stopPropagation()}
-          className="font-bold text-[12px] tracking-[0.1em] uppercase truncate hover:text-foreground text-muted-foreground transition-colors"
+          // 긴 ISSUE 이름도 잘리지 않고 끝까지 줄바꿈으로 보여준다 (사용자 요청).
+          className="font-bold text-[12px] tracking-[0.1em] uppercase min-w-0 whitespace-normal break-words hover:text-foreground text-muted-foreground transition-colors"
         >
           {issue.name}
         </Link>

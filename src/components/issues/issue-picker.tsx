@@ -158,7 +158,7 @@ export function IssuePicker({ open, onClose, currentIssueId, onPick, onCreate }:
                 <span className="inline-flex items-center justify-center text-[9px] font-semibold tracking-wide px-1.5 h-4 rounded-sm bg-primary/10 text-primary flex-shrink-0">
                   ISSUE
                 </span>
-                <span className={cn('text-sm flex-1 truncate', isClosed && 'line-through text-muted-foreground')}>
+                <span className={cn('text-sm flex-1 min-w-0 whitespace-normal break-words', isClosed && 'line-through text-muted-foreground')}>
                   {i.name}
                 </span>
                 {isClosed && (

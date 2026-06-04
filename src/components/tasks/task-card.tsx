@@ -216,7 +216,7 @@ export function TaskCard({
                     ) : (
                       <FolderOpen className="text-muted-foreground" />
                     )}
-                    <span className="truncate">{iss.name}</span>
+                    <span className="whitespace-normal break-words">{iss.name}</span>
                   </ContextMenuItem>
                 );
               })
@@ -349,7 +349,8 @@ export function TaskCard({
           {/* Title + metadata */}
           <div className="flex-1 min-w-0 space-y-1.5">
             {breadcrumb && (breadcrumb.issueName || breadcrumb.parentTaskTitle) && (
-              <div className="text-[11px] text-muted-foreground truncate flex items-center gap-1.5">
+              // ISSUE 이름은 길어도 잘리지 않고 끝까지 보여준다 (사용자 요청) — wrap 허용
+              <div className="text-[11px] text-muted-foreground flex flex-wrap items-center gap-1.5">
                 {/* When this row is a sub-TASK shown out of its tree (e.g.
                   * Today flat list), prefix the breadcrumb with a clear
                   * "하위" label so the type is identifiable without indent. */}
@@ -359,16 +360,16 @@ export function TaskCard({
                   </span>
                 )}
                 {breadcrumb.issueName && (
-                  <span className="inline-flex items-center gap-1 text-muted-foreground/90">
-                    <FolderOpen className="h-3 w-3" aria-hidden />
-                    <span className="truncate font-medium">{breadcrumb.issueName}</span>
+                  <span className="inline-flex items-start gap-1 min-w-0 text-muted-foreground/90">
+                    <FolderOpen className="h-3 w-3 flex-shrink-0 mt-[2px]" aria-hidden />
+                    <span className="whitespace-normal break-words font-medium">{breadcrumb.issueName}</span>
                   </span>
                 )}
                 {breadcrumb.issueName && breadcrumb.parentTaskTitle && (
                   <span className="text-muted-foreground/50">›</span>
                 )}
                 {breadcrumb.parentTaskTitle && (
-                  <span className="truncate text-muted-foreground/85">{breadcrumb.parentTaskTitle}</span>
+                  <span className="whitespace-normal break-words min-w-0 text-muted-foreground/85">{breadcrumb.parentTaskTitle}</span>
                 )}
               </div>
             )}
@@ -424,11 +425,12 @@ export function TaskCard({
                   <Link
                     href={`/issues/${issueChip.id}`}
                     onClick={(e) => e.stopPropagation()}
-                    className="inline-flex items-center gap-1 max-w-[180px] px-1.5 h-5 rounded-full bg-primary/10 text-primary hover:bg-primary/15 transition-colors"
+                    // ISSUE 이름은 길어도 칩 안에서 줄바꿈으로 전부 보여준다 (사용자 요청).
+                    className="inline-flex items-start gap-1 min-w-0 px-1.5 min-h-5 py-0.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/15 transition-colors"
                     title={issueChip.name}
                   >
-                    <FolderOpen className="h-3 w-3 flex-shrink-0" aria-hidden />
-                    <span className="truncate font-medium">{issueChip.name}</span>
+                    <FolderOpen className="h-3 w-3 flex-shrink-0 mt-[2px]" aria-hidden />
+                    <span className="whitespace-normal break-words font-medium leading-tight">{issueChip.name}</span>
                   </Link>
                 )}
                 {task.deadline && (
