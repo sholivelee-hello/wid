@@ -51,7 +51,7 @@ import { TrashView } from '@/components/inbox/trash-view';
 import { TaskDetailPanel } from '@/components/tasks/task-detail-panel';
 import { IssueForm } from '@/components/issues/issue-form';
 import { IssueDeleteDialog } from '@/components/issues/issue-delete-dialog';
-import { promptNextInTodayIfNeeded, getTodayTaskIds } from '@/lib/today-tasks';
+import { promptNextInTodayIfNeeded, getTodayTaskIds, removeTodayTaskWithDescendants } from '@/lib/today-tasks';
 import {
   loadViews, saveViews, loadInboxFilter, saveInboxFilter,
   type CustomTaskView,
@@ -263,6 +263,9 @@ function InboxPageInner() {
   const handlePend = async (taskId: string) => {
     // 낙관적 제거: 본인 + 직계 sub-task. 실패 시 fetchTasks로 원복.
     setTasks(prev => prev.filter(t => t.id !== taskId && t.parent_task_id !== taskId));
+    // 보류한 task는 오늘에서도 빼낸다 — 안 그러면 복귀(unpend) 후에도 인박스가
+    // today set 기준으로 계속 숨겨 "복귀가 안 된 것처럼" 보인다.
+    removeTodayTaskWithDescendants(taskId, tasks);
     try {
       await apiFetch(`/api/tasks/${taskId}/pend`, { method: 'POST' });
       window.dispatchEvent(new CustomEvent('task-updated'));

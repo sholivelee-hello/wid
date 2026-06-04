@@ -16,7 +16,7 @@ import { formatDate, cn, getNotionPageUrl } from '@/lib/utils';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
 import { IssuePicker } from '@/components/issues/issue-picker';
-import { toggleTodayTask, getTodayTaskIds } from '@/lib/today-tasks';
+import { toggleTodayTask, getTodayTaskIds, removeTodayTaskWithDescendants } from '@/lib/today-tasks';
 import { Trash2, ExternalLink, ChevronDown, Save, X, FolderPlus, ArrowUpRight, CornerLeftUp, CheckCircle2, Circle, PauseCircle, Sun } from 'lucide-react';
 
 // `<input type="datetime-local">` round-trip: the input wants a naive
@@ -565,6 +565,9 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated, onNavigate }: 
                     onClick={async () => {
                       if (!taskId) return;
                       const pendedId = taskId;
+                      // 보류 = 오늘에서도 빼냄 (복귀 시 인박스가 today set으로
+                      // 계속 숨기는 버그 방지). 자손=직계 children (3-level invariant).
+                      removeTodayTaskWithDescendants(pendedId, children);
                       try {
                         await apiFetch(`/api/tasks/${pendedId}/pend`, { method: 'POST' });
                       } catch {

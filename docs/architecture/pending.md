@@ -22,6 +22,13 @@
   보류됐던 task도 같이 복귀 (보류 출처 비구분 단순화, spec 2026-06-03).
 - 복귀는 position/issue_id를 건드리지 않음 → 원래 자리 복원.
 - 휴지통 복구(restore)는 pending_at도 null로 — 복구는 항상 인박스로.
+- **보류 = 오늘에서도 제거** (2026-06-04): pend 시 클라이언트가 explicit today
+  set(`wid-today-task-ids`)에서 그 task+자손을 빼낸다 (`removeTodayTaskWithDescendants`,
+  pend 진입점 inbox `handlePend`·`TaskDetailPanel` 둘 다). 안 그러면 "오늘로
+  보낸" task를 보류→복귀해도 /inbox가 today set 기준으로 계속 숨겨 "복귀가 안
+  된 것처럼" 보인다 (hierarchy.md "오늘로 보낸 task 숨김" 규칙과 충돌). 복귀=
+  전체로 돌아온다는 멘탈모델 유지. unpend는 today set을 되돌리지 않음 — 복귀는
+  인박스로(오늘 재지정은 사용자 몫).
 
 ## 쿼리 계약
 

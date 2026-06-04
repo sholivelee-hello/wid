@@ -35,6 +35,28 @@ export function addTodayTask(id: string) {
   saveTodayTaskIds(ids);
 }
 
+/**
+ * Drop a task (and its descendants) from the explicit Today set. Called on
+ * 보류(pend): a pended task is "치워둔 일", so it must leave 오늘 too —
+ * otherwise unpend(복귀) returns it but /inbox keeps hiding it (it's still in
+ * the today set), so it looks like 복귀 did nothing. Mirrors pend's server-side
+ * propagation to direct children (3-level invariant ⇒ descendants = children).
+ * No-op (skips save/event) if nothing changed. Pure aside from localStorage.
+ */
+export function removeTodayTaskWithDescendants(rootId: string, tasks: Task[]) {
+  const ids = getTodayTaskIds();
+  if (ids.size === 0) return;
+  const toRemove = new Set<string>([rootId]);
+  for (const t of tasks) {
+    if (t.parent_task_id && toRemove.has(t.parent_task_id)) toRemove.add(t.id);
+  }
+  let changed = false;
+  for (const id of toRemove) {
+    if (ids.delete(id)) changed = true;
+  }
+  if (changed) saveTodayTaskIds(ids);
+}
+
 function localDateStr(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
