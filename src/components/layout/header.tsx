@@ -16,6 +16,7 @@ import {
 import { cn } from '@/lib/utils';
 import { navItems } from '@/lib/nav-items';
 import { useQuickCapture } from '@/components/tasks/quick-capture-provider';
+import { SyncButton } from '@/components/layout/sync-button';
 
 const pageTitles: Record<string, string> = {
   '/inbox': '전체',
@@ -84,6 +85,10 @@ export function Header() {
                     </Link>
                   );
                 })}
+                {/* 모바일에서도 전역 수동 동기화 — 사이드바와 동일 시각 언어. */}
+                <div className="mt-2 pt-2 border-t border-border">
+                  <SyncButton />
+                </div>
               </nav>
             </SheetContent>
           </Sheet>

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { navItems } from '@/lib/nav-items';
+import { SyncButton } from '@/components/layout/sync-button';
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -128,25 +129,31 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* 설정 — 글자 메뉴에서 빠지고 하단 고정 톱니바퀴 아이콘으로 (collapsed에서도 동일 위치). */}
-      <Link
-        href="/settings"
-        title="설정"
-        aria-label="설정"
-        className={cn(
-          'mt-auto relative flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-          collapsed ? 'justify-center px-0' : '',
-          settingsActive
-            ? 'bg-sidebar-accent text-foreground font-semibold'
-            : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground'
-        )}
-      >
-        {settingsActive && !collapsed && (
-          <span aria-hidden className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full bg-primary" />
-        )}
-        <Settings className={cn('h-4 w-4 flex-shrink-0', settingsActive && 'text-primary')} />
-        {!collapsed && '설정'}
-      </Link>
+      {/* 하단 고정: 동기화 버튼 + 설정. mt-auto는 묶음 컨테이너로 옮겨 둘이 함께 바닥에 붙는다. */}
+      <div className="mt-auto flex flex-col gap-1">
+        {/* 전역 수동 동기화 — 어느 페이지에서도 Notion pull + 목록 갱신. */}
+        <SyncButton collapsed={collapsed} />
+
+        {/* 설정 — 글자 메뉴에서 빠지고 하단 고정 톱니바퀴 아이콘으로 (collapsed에서도 동일 위치). */}
+        <Link
+          href="/settings"
+          title="설정"
+          aria-label="설정"
+          className={cn(
+            'relative flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            collapsed ? 'justify-center px-0' : '',
+            settingsActive
+              ? 'bg-sidebar-accent text-foreground font-semibold'
+              : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground'
+          )}
+        >
+          {settingsActive && !collapsed && (
+            <span aria-hidden className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full bg-primary" />
+          )}
+          <Settings className={cn('h-4 w-4 flex-shrink-0', settingsActive && 'text-primary')} />
+          {!collapsed && '설정'}
+        </Link>
+      </div>
     </aside>
   );
 }

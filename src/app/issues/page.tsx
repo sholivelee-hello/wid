@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Issue, Task } from '@/lib/types';
 import { apiFetch } from '@/lib/api';
@@ -67,20 +67,31 @@ export default function IssuesListPage() {
   // 완료 이슈 섹션은 기본 접힘. 접힘 상태는 저장하지 않음 (매번 접힘).
   const [doneOpen, setDoneOpen] = useState(false);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const [i, t] = await Promise.all([
-          apiFetch<Issue[]>('/api/issues', { suppressToast: true }),
-          apiFetch<Task[]>('/api/tasks?deleted=false', { suppressToast: true }),
-        ]);
-        setIssues(i);
-        setTasks(t);
-      } catch {} finally {
-        setLoading(false);
-      }
-    })();
+  const fetchAll = useCallback(async () => {
+    try {
+      const [i, t] = await Promise.all([
+        apiFetch<Issue[]>('/api/issues', { suppressToast: true }),
+        apiFetch<Task[]>('/api/tasks?deleted=false', { suppressToast: true }),
+      ]);
+      setIssues(i);
+      setTasks(t);
+    } catch {} finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  // 전역 동기화 버튼/기타 변경 이벤트에 반응해 목록을 다시 불러온다.
+  useEffect(() => {
+    const handler = () => fetchAll();
+    window.addEventListener('task-created', handler);
+    window.addEventListener('task-updated', handler);
+    return () => {
+      window.removeEventListener('task-created', handler);
+      window.removeEventListener('task-updated', handler);
+    };
+  }, [fetchAll]);
 
   const stats = useMemo<IssueStat[]>(() => {
     // 직속 + (부모 경유) 하위 TASK 전부에서 집계 (취소 제외). 상세 페이지와
