@@ -4,6 +4,15 @@ import { Client } from '@notionhq/client';
 
 const ASSIGNEE_FILTER = '이신희';
 
+// Notion의 title/rich_text는 서식·멘션·링크가 섞이면 여러 조각(segment)으로
+// 쪼개져 온다. 첫 조각([0])만 읽으면 긴 이름이 중간에서 잘리므로, 항상 전체
+// 조각의 plain_text를 이어 붙여 완전한 문자열을 복원한다.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function joinPlainText(segments: any[] | undefined | null): string {
+  if (!Array.isArray(segments)) return '';
+  return segments.map((s) => s?.plain_text ?? '').join('');
+}
+
 interface IssueRow {
   id: string;
   notion_issue_id: string;
@@ -99,7 +108,7 @@ export async function POST() {
       const title: string =
         (titleProp as { type?: string })?.type === 'title'
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ? ((titleProp as any).title?.[0]?.plain_text ?? '')
+          ? joinPlainText((titleProp as any).title)
           : '';
       issueTitleCache.set(relationPageId, title);
       return title;
@@ -180,7 +189,7 @@ export async function POST() {
           Object.values(props).find(
             (p: unknown) => (p as { type?: string })?.type === 'title',
           );
-        const title: string = titleProp?.title?.[0]?.plain_text ?? '';
+        const title: string = joinPlainText(titleProp?.title);
 
         const deadline: string | null =
           (props['마감일'] ?? props['Due'] ?? props['Deadline'])?.type === 'date'
@@ -227,7 +236,7 @@ export async function POST() {
           }
         } else if (issueProp?.type === 'rich_text') {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          notionIssueLabel = (issueProp as any).rich_text?.[0]?.plain_text ?? null;
+          notionIssueLabel = joinPlainText((issueProp as any).rich_text) || null;
         }
 
         const assignees: string[] =
@@ -265,7 +274,7 @@ export async function POST() {
           requester = people?.[0]?.name ?? null;
         } else if (requesterProp?.type === 'rich_text') {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          requester = (requesterProp as any).rich_text?.[0]?.plain_text ?? null;
+          requester = joinPlainText((requesterProp as any).rich_text) || null;
         } else if (requesterProp?.type === 'select') {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           requester = (requesterProp as any).select?.name ?? null;
