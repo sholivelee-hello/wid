@@ -35,7 +35,7 @@ import {
   DEFAULT_GCAL_CONFIG,
   type GCalConfig,
 } from '@/lib/gcal-embed';
-import { isTokenExpired } from '@/lib/gcal-oauth';
+import { ensureFreshOAuth } from '@/lib/gcal-oauth';
 import { fetchEventsForRange } from '@/lib/gcal-events';
 import {
   DndContext,
@@ -131,14 +131,15 @@ export default function TodayPage() {
   const fetchGCalEvents = useCallback(async () => {
     const config = getGCalConfig();
     const activeIds = getActiveCalendarIds(config);
-    const oauthValid = config.oauth !== null && !isTokenExpired(config.oauth);
-    if (!oauthValid || activeIds.length === 0) {
+    // 만료됐으면 서버가 refresh_token으로 자동 재발급 — 사용자 재로그인 불필요.
+    const oauth = activeIds.length > 0 ? await ensureFreshOAuth() : null;
+    if (!oauth || activeIds.length === 0) {
       setGcalEvents([]);
       return;
     }
     try {
       const events = await fetchEventsForRange(
-        config.oauth!.accessToken,
+        oauth.accessToken,
         activeIds,
         todayStr,
         todayStr,

@@ -18,7 +18,7 @@ import type { Task, Issue } from '@/lib/types';
 import type { GCalEvent } from '@/lib/types';
 import type { CalendarSubscription } from '@/lib/types';
 import { getGCalConfig, setGCalConfig, getActiveCalendarIds, GCAL_EMBED_EVENT } from '@/lib/gcal-embed';
-import { isTokenExpired } from '@/lib/gcal-oauth';
+import { ensureFreshOAuth } from '@/lib/gcal-oauth';
 import { fetchEventsForRange } from '@/lib/gcal-events';
 import { Search, X } from 'lucide-react';
 
@@ -81,15 +81,16 @@ export default function HistoryPage() {
     try {
       const config = getGCalConfig();
       const activeIds = getActiveCalendarIds(config);
-      const oauthValid = config.oauth !== null && !isTokenExpired(config.oauth);
+      // 만료됐으면 서버가 refresh_token으로 자동 재발급 — 사용자 재로그인 불필요.
+      const oauth = activeIds.length > 0 ? await ensureFreshOAuth() : null;
 
       let eventsPromise: Promise<GCalEvent[]>;
-      if (oauthValid && activeIds.length > 0) {
-        eventsPromise = fetchEventsForRange(config.oauth!.accessToken, activeIds, from, to).catch(
+      if (oauth && activeIds.length > 0) {
+        eventsPromise = fetchEventsForRange(oauth.accessToken, activeIds, from, to).catch(
           (err: unknown) => {
             if (err instanceof Error && err.message === 'unauthorized') {
-              // Token expired between client check and fetch — clear and fall back
-              setGCalConfig({ ...config, oauth: null });
+              // 서버 재발급 직후에도 401 = 구글에서 권한 자체가 회수된 경우
+              setGCalConfig({ ...getGCalConfig(), oauth: null });
             }
             // Fall back to mock for this load
             return apiFetch<GCalEvent[]>(`/api/gcal/events?from=${from}&to=${to}`, { suppressToast: true });

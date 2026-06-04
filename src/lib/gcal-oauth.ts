@@ -1,24 +1,23 @@
 /**
- * Google Calendar OAuth — client-side implicit flow via Google Identity Services (GIS).
+ * Google Calendar OAuth — server-managed Authorization Code flow.
  *
- * Model: single-user personal app. No backend. The access token is obtained
- * entirely in the browser using `google.accounts.oauth2.initTokenClient` and
- * stored in localStorage via `GCalConfig.oauth` (see `gcal-embed.ts`).
+ * 2026-06-04 전환: 기존 GIS implicit flow(브라우저에서 1시간짜리 access token만
+ * 발급, localStorage 보관)는 만료마다 사용자가 다시 로그인해야 했다. 이제
+ * 서버가 refresh_token을 보관(`gcal_oauth` 테이블)하고 `/api/gcal/token`이
+ * access token을 자동 갱신한다 — 한 번 연동하면 계속 이어진다.
  *
- * Security trade-off: implicit / token flow exposes the access token to
- * JavaScript running in the page. This is acceptable for a personal,
- * single-user app with no multi-tenant data, but would be inappropriate for a
- * production multi-user service (which should use an Authorization Code + PKCE
- * flow with a backend token store instead).
+ * 클라이언트 계약:
+ * - 연동 시작: `/api/gcal/oauth/start`로 이동 (full page redirect)
+ * - API 호출 전: `ensureFreshOAuth()`로 유효한 토큰 확보 (만료 시 서버에서
+ *   재발급받아 GCalConfig.oauth에 갱신 저장)
+ * - 연동 해제: POST `/api/gcal/disconnect`
  */
 
-import type { GCalOAuthState } from './gcal-embed';
-
-export const GCAL_OAUTH_SCOPE =
-  'openid email profile https://www.googleapis.com/auth/calendar.readonly';
-
-/** Cached promise for the GSI script load so concurrent callers share it. */
-let _gsiLoadPromise: Promise<void> | null = null;
+import {
+  getGCalConfig,
+  setGCalConfig,
+  type GCalOAuthState,
+} from './gcal-embed';
 
 // ---------------------------------------------------------------------------
 // Configuration helpers
@@ -36,157 +35,65 @@ export function isGoogleOAuthConfigured(): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// GSI script loader
-// ---------------------------------------------------------------------------
-
-/**
- * Idempotently injects the GIS script into `document.head` and resolves once
- * `window.google.accounts.oauth2` is available. Rejects after 10 s.
- *
- * SSR-safe: rejects immediately if called outside a browser context.
- */
-export async function loadGsiScript(): Promise<void> {
-  if (typeof window === 'undefined') {
-    return Promise.reject(new Error('loadGsiScript must be called in a browser context'));
-  }
-
-  // Already loaded — fast path.
-  if (window.google?.accounts?.oauth2) return;
-
-  // Return the in-flight promise if one exists.
-  if (_gsiLoadPromise) return _gsiLoadPromise;
-
-  _gsiLoadPromise = new Promise<void>((resolve, reject) => {
-    const GSI_SRC = 'https://accounts.google.com/gsi/client';
-
-    // Inject script only once.
-    if (!document.querySelector(`script[src="${GSI_SRC}"]`)) {
-      const script = document.createElement('script');
-      script.src = GSI_SRC;
-      script.async = true;
-      script.defer = true;
-      document.head.appendChild(script);
-    }
-
-    const TIMEOUT_MS = 10_000;
-    const deadline = Date.now() + TIMEOUT_MS;
-
-    const poll = () => {
-      if (window.google?.accounts?.oauth2) {
-        resolve();
-        return;
-      }
-      if (Date.now() >= deadline) {
-        reject(new Error('Timed out waiting for Google Identity Services script'));
-        return;
-      }
-      setTimeout(poll, 100);
-    };
-
-    poll();
-  });
-
-  return _gsiLoadPromise;
-}
-
-// ---------------------------------------------------------------------------
-// Token request
-// ---------------------------------------------------------------------------
-
-/**
- * Requests a new Google OAuth access token using the GIS implicit flow.
- *
- * Ensures the GIS script is loaded, then wraps `initTokenClient` +
- * `requestAccessToken` in a Promise. The returned `GCalOAuthState` includes
- * the raw token, its expiry epoch (ms), and the granted scope.
- */
-export async function requestAccessToken(
-  opts?: { prompt?: 'none' | 'consent' | '' },
-): Promise<GCalOAuthState> {
-  await loadGsiScript();
-
-  const clientId = getGoogleClientId();
-  if (!clientId) {
-    throw new Error(
-      'NEXT_PUBLIC_GOOGLE_CLIENT_ID is not set. Cannot request a Google OAuth token.',
-    );
-  }
-
-  return new Promise<GCalOAuthState>((resolve, reject) => {
-    const tokenClient = window.google!.accounts!.oauth2!.initTokenClient({
-      client_id: clientId,
-      scope: GCAL_OAUTH_SCOPE,
-      callback: (response) => {
-        if (response.error) {
-          reject(new Error(response.error));
-          return;
-        }
-        const state: GCalOAuthState = {
-          accessToken: response.access_token,
-          expiresAt: Date.now() + response.expires_in * 1000,
-          scope: response.scope,
-        };
-        resolve(state);
-      },
-      error_callback: (detail) => {
-        reject(new Error(detail.message ?? 'oauth_error'));
-      },
-    });
-
-    tokenClient.requestAccessToken({ prompt: opts?.prompt ?? 'consent' });
-  });
-}
-
-// ---------------------------------------------------------------------------
 // Token utilities
 // ---------------------------------------------------------------------------
 
 /**
  * Returns true if the token state is absent or will expire within `skewMs`
- * milliseconds (default: 60 s). Use before every API call to decide whether
- * to refresh.
+ * milliseconds (default: 60 s).
  */
 export function isTokenExpired(state: GCalOAuthState | null, skewMs = 60_000): boolean {
   if (!state) return true;
   return Date.now() + skewMs >= state.expiresAt;
 }
 
+/** In-flight ensure promise — 동시 호출(오늘/히스토리 동시 마운트)이 토큰
+ *  fetch를 공유하게 한다. */
+let _ensurePromise: Promise<GCalOAuthState | null> | null = null;
+
 /**
- * Revokes the given access token via Google's revocation endpoint.
- * Errors are swallowed — this is best-effort cleanup (e.g. on sign-out).
+ * Returns a valid OAuth state, refreshing from the server when the local one
+ * is missing/expired. Updates GCalConfig.oauth (and broadcasts
+ * GCAL_EMBED_EVENT) when a new token is obtained. Returns null when the
+ * server has no connection (사용자가 아직 연동 안 함 / 권한 회수).
  */
-export async function revokeAccessToken(token: string): Promise<void> {
-  try {
-    await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(token)}`, {
-      method: 'POST',
-    });
-  } catch {
-    // Best-effort: ignore network or CORS errors on revocation.
-  }
-}
+export async function ensureFreshOAuth(): Promise<GCalOAuthState | null> {
+  const config = getGCalConfig();
+  if (config.oauth && !isTokenExpired(config.oauth)) return config.oauth;
 
-// ---------------------------------------------------------------------------
-// Window type augmentation
-// ---------------------------------------------------------------------------
+  if (_ensurePromise) return _ensurePromise;
 
-declare global {
-  interface Window {
-    google?: {
-      accounts?: {
-        oauth2?: {
-          initTokenClient(config: {
-            client_id: string;
-            scope: string;
-            callback: (resp: {
-              access_token: string;
-              expires_in: number;
-              scope: string;
-              error?: string;
-            }) => void;
-            error_callback?: (err: { type: string; message?: string }) => void;
-          }): { requestAccessToken: (overrideConfig?: { prompt?: string }) => void };
-        };
+  _ensurePromise = (async () => {
+    try {
+      const res = await fetch('/api/gcal/token');
+      const data = (await res.json()) as {
+        connected: boolean;
+        accessToken?: string;
+        expiresAt?: number;
+        email?: string | null;
       };
-    };
-  }
+
+      const current = getGCalConfig();
+      if (!data.connected || !data.accessToken || !data.expiresAt) {
+        // 서버에 연동 없음 — 만료된 로컬 토큰이 남아있으면 정리해서
+        // UI가 "연동됨"으로 거짓말하지 않게 한다.
+        if (current.oauth) setGCalConfig({ ...current, oauth: null });
+        return null;
+      }
+
+      const oauth: GCalOAuthState = {
+        accessToken: data.accessToken,
+        expiresAt: data.expiresAt,
+        email: data.email ?? current.oauth?.email,
+      };
+      setGCalConfig({ ...current, oauth });
+      return oauth;
+    } catch {
+      return null;
+    } finally {
+      _ensurePromise = null;
+    }
+  })();
+
+  return _ensurePromise;
 }

@@ -46,22 +46,29 @@ interface GCalOAuthState {
 
 히스토리 페이지에서 이벤트 목록을 렌더링할 때 이 헬퍼로 캘린더별 색상과 레이블을 결정한다.
 
-## OAuth 흐름 (Google Identity Services, implicit)
+## OAuth 흐름 (server-managed Authorization Code flow — 2026-06-04 전환)
 
-`src/lib/gcal-oauth.ts`:
-- `loadGsiScript()` 가 `https://accounts.google.com/gsi/client` 를 lazy 로드 (10s 타임아웃, 모듈 단일톤 promise 캐시)
-- `requestAccessToken()` → `google.accounts.oauth2.initTokenClient` + `requestAccessToken({prompt:'consent'})` 콜백을 promise 로 감쌈
+기존 GIS implicit flow(브라우저 1시간 토큰, 만료마다 재로그인)는 폐기.
+서버가 refresh_token을 보관하고 access token을 자동 갱신한다 — **한 번 연동하면 영구 유지**.
+
+서버 라우트 (`src/app/api/gcal/oauth/*`, `token`, `disconnect`):
+- `GET /api/gcal/oauth/start` — 구글 동의 화면으로 redirect. `access_type=offline&prompt=consent` (refresh_token 발급 보장). CSRF state 쿠키(`gcal_oauth_state`).
+- `GET /api/gcal/oauth/callback` — code→토큰 교환, refresh_token을 `gcal_oauth` 테이블(단일 행 id='default', migration 010)에 upsert, `/settings?gcal=connected`로 복귀.
+- `GET /api/gcal/token` — refresh_token으로 access token 재발급 후 `{connected, accessToken, expiresAt, email}` 반환. 모듈 캐시(만료 60초 전까지 재사용). `invalid_grant`(사용자가 구글에서 권한 회수) 시 행 삭제 후 `connected:false`.
+- `POST /api/gcal/disconnect` — revoke(best-effort) + 행 삭제.
+
+클라이언트 (`src/lib/gcal-oauth.ts`):
+- `ensureFreshOAuth()` — 로컬 토큰 유효하면 그대로, 만료/없음이면 `/api/gcal/token` 호출해 `GCalConfig.oauth` 갱신(+`GCAL_EMBED_EVENT` broadcast). 동시 호출은 in-flight promise 공유. 서버에 연동 없으면 stale 로컬 oauth를 지워 UI 거짓 "연동됨" 방지.
 - 만료 검사: `isTokenExpired(state, skewMs=60_000)` (60초 여유)
-- 해제: `revokeAccessToken(token)` → `https://oauth2.googleapis.com/revoke` (best-effort)
+- 호출 계약: **Google API를 부르는 모든 곳은 `config.oauth`를 직접 읽지 말고 `ensureFreshOAuth()`를 거친다** (today/history 페이지, 설정 카드 적용됨).
 
-스코프: `https://www.googleapis.com/auth/calendar.readonly`
-필수 env: `NEXT_PUBLIC_GOOGLE_CLIENT_ID` (없으면 OAuth UI 자체가 비활성화 안내로 대체)
+스코프: `openid email https://www.googleapis.com/auth/calendar.readonly`
+필수 env: `NEXT_PUBLIC_GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` (서버 전용, 없으면 start가 `?gcal=error&reason=not_configured`로 복귀)
+Google Cloud Console에 redirect URI 등록 필요: `{origin}/api/gcal/oauth/callback` (prod + localhost:3000).
 
 `src/lib/gcal-api.ts`:
 - `fetchSubscribedCalendars(token)` → `calendarList?minAccessRole=reader&maxResults=250`
-- `fetchUserEmail(token)` → `oauth2/v2/userinfo` (signed-in-as 표시용)
-
-보안 trade-off: implicit flow 는 access token 이 JS 컨텍스트에 노출됨. 1인 personal 앱 + read-only scope 라 수용. SaaS 화 한다면 server-side authorization code flow + httpOnly 쿠키로 전환 필요.
+- `fetchUserEmail(token)` → `oauth2/v2/userinfo` (현재 미사용 — email은 callback에서 저장)
 
 ## 설정 UI (`src/components/settings/gcal-settings.tsx`)
 
@@ -76,14 +83,15 @@ interface GCalOAuthState {
 ## 관련 파일
 
 - `src/lib/gcal-embed.ts` — config get/set, 활성 캘린더/색상/레이블 헬퍼
-- `src/lib/gcal-oauth.ts` — GIS script 로더, token 발급/만료/취소
+- `src/lib/gcal-oauth.ts` — `ensureFreshOAuth()`, 만료 검사
+- `src/app/api/gcal/oauth/start|callback`, `api/gcal/token`, `api/gcal/disconnect` — 서버 OAuth + 자동 갱신
 - `src/lib/gcal-api.ts` — calendarList.list, userinfo fetch
 - `src/components/settings/gcal-settings.tsx` — Google 로그인 단일 카드
 
 ## 운영 메모
 
 - `NEXT_PUBLIC_GOOGLE_CLIENT_ID` 가 없으면 OAuth UI 가 안내 블록으로 자동 대체됨.
-- access token 만료(기본 1시간) 후엔 사용자가 다시 로그인해야 함 — refresh token 은 implicit flow 에선 발급 안 됨. 매일 한 번 정도 재로그인 필요. 자동 갱신 원하면 server-side authorization code flow 로 마이그레이션 필요.
+- access token 만료는 사용자에게 보이지 않음 — `ensureFreshOAuth()`가 서버 재발급으로 흡수. 재로그인이 다시 필요해지는 유일한 경우는 구글 보안 화면에서 앱 권한을 직접 회수했을 때(`invalid_grant`).
 - 구독 캘린더 목록은 캐시 — 새 캘린더 구독했으면 "구독 목록 새로고침" 클릭.
 
 ## 미정리 영역

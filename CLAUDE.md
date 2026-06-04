@@ -18,7 +18,7 @@
 - **UI**: shadcn/ui v4 (base-ui 기반)
 - **상태관리**: Zustand (타이머), localStorage (캘린더 가시성, 사용자 뷰 등)
 - **데이터**: Supabase 실연결 완료 (2026-04-29). mock 파일 전부 삭제됨. 마이그레이션: `supabase/migrations/001_initial_schema.sql` + `002_hierarchy_and_issues.sql`
-- **외부 연동**: Slack 실연동 완료 (reaction_added → task 생성). Notion (2개 DB 동기화 — env `NOTION_DATABASE_ID_1`/`_2`, name_locked 이름 보호, title 조각 전체 join — 첫 조각만 읽으면 긴 이름 잘림). JIRA 웹훅 실연동 (알림 3종 → task, `/api/jira/webhook?token=` — `docs/architecture/jira.md`). Google Calendar — 미연동 (빈 상태)
+- **외부 연동**: Slack 실연동 완료 (reaction_added → task 생성). Notion (2개 DB 동기화 — env `NOTION_DATABASE_ID_1`/`_2`, name_locked 이름 보호, title 조각 전체 join — 첫 조각만 읽으면 긴 이름 잘림). JIRA 웹훅 실연동 (알림 3종 → task, `/api/jira/webhook?token=` — `docs/architecture/jira.md`). Google Calendar — 서버 OAuth(Authorization Code flow, refresh_token 서버 보관)로 한 번 로그인하면 자동 유지 (env `GOOGLE_CLIENT_SECRET` 필요 — `docs/architecture/calendar-embed.md`)
 - **개발 명령어**: `npm run dev` (Turbopack), `npm run build`, `npm run lint`
 - **Slack 로컬 개발**: cloudflared로 터널 열어야 Slack webhook이 도달함. `cloudflared tunnel --url http://localhost:3000` 실행 후 나오는 `https://xxx.trycloudflare.com` URL을 Slack App → Event Subscriptions → Request URL에 등록. 터널 재시작하면 URL이 바뀌므로 그때마다 재등록 필요. 봇이 이모지 달린 채널에 멤버로 들어가있어야 reaction_added 이벤트를 받을 수 있음 (`/invite @TASK줍줍봇`). 봇 토큰에 `users:read` 스코프 필요(요청자 이름 해석 — `users.info` 캐시).
 
@@ -97,7 +97,7 @@ DB 마이그레이션이 포함된 배포는 마이그레이션을 **먼저** Su
 | `docs/architecture/today.md` | explicit/effective today set 의 두 모델, today forest 빌드, prompt-next-on-complete 토스트 발동 조건. |
 | `docs/architecture/dnd.md` | `@dnd-kit` ID 네임스페이스 (`iss:`, `dropiss:`, `tsk:`, `unlinked`), 4-context sortable, grip handle 패턴, KeyboardSensor 와이어링. |
 | `docs/architecture/inline-editing.md` | TaskCard 클릭 시맨틱 (카드=에디터 / chevron=expand / grip=drag), TaskInlineEditor save 라이프사이클 (저장 중 / 저장됨 / 토스트). |
-| `docs/architecture/calendar-embed.md` | `GCalConfig` (oauth + subscribedCalendars), GIS implicit-flow OAuth, 활성 캘린더/색상 헬퍼. /calendar 페이지 제거되어 히스토리에 통합. |
+| `docs/architecture/calendar-embed.md` | `GCalConfig` (oauth + subscribedCalendars), 서버 OAuth(code flow + refresh_token 자동 갱신, `ensureFreshOAuth()` 계약), 활성 캘린더/색상 헬퍼. /calendar 페이지 제거되어 히스토리에 통합. |
 | `docs/architecture/mock-backend.md` | `__tasksRef` / `__issuesRef` 컨벤션, **POST는 반드시 push** 규칙, position 할당 룰, PATCH 가드 코드 카탈로그. |
 | `docs/architecture/pending.md` | 보류함 pending_at soft-flag invariant, pend/unpend 전파 규칙, 무게 인박스(getTaskWeight) 기준. |
 | `docs/architecture/jira.md` | JIRA 웹훅 연동 — 알림 3종(할당·멘션·내 이슈 댓글)→TASK 매핑, token 인증, jira_events dedup, 댓글 body wiki/ADF 처리, JIRA 쪽 웹훅 등록 절차. |

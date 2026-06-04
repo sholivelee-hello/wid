@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   CalendarDays,
   Loader2,
-  XCircle,
   Clock,
   MinusCircle,
 } from 'lucide-react';
@@ -23,13 +22,8 @@ import {
   DEFAULT_GCAL_CONFIG,
   type GCalConfig,
 } from '@/lib/gcal-embed';
-import {
-  isGoogleOAuthConfigured,
-  requestAccessToken,
-  isTokenExpired,
-  revokeAccessToken,
-} from '@/lib/gcal-oauth';
-import { fetchSubscribedCalendars, fetchUserEmail } from '@/lib/gcal-api';
+import { isGoogleOAuthConfigured, ensureFreshOAuth } from '@/lib/gcal-oauth';
+import { fetchSubscribedCalendars } from '@/lib/gcal-api';
 
 type LoadingState = 'idle' | 'auth' | 'fetch' | 'revoke';
 
@@ -77,7 +71,6 @@ function pushHistory(prev: HistoryEntry[], entry: HistoryEntry): HistoryEntry[] 
 function getGCalStatus(
   oauthConfigured: boolean,
   isSignedIn: boolean,
-  hasExpiredToken: boolean,
   activeCount: number,
 ): {
   pillClass: string;
@@ -91,14 +84,6 @@ function getGCalStatus(
       Icon: MinusCircle,
       label: '미연결',
       state: 'never',
-    };
-  }
-  if (hasExpiredToken) {
-    return {
-      pillClass: 'bg-red-500/10 text-red-700 dark:text-red-400',
-      Icon: XCircle,
-      label: '실패',
-      state: 'failed',
     };
   }
   if (!isSignedIn) {
@@ -161,14 +146,57 @@ export function GCalSettings() {
   const [error, setError] = useState<string | null>(null);
   const [lastFetch, setLastFetch] = useState<Date | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [now, setNow] = useState<number>(0);
 
   useEffect(() => {
     setConfig(getGCalConfig());
-    setNow(Date.now());
     const handler = () => setConfig(getGCalConfig());
     window.addEventListener(GCAL_EMBED_EVENT, handler);
     return () => window.removeEventListener(GCAL_EMBED_EVENT, handler);
+  }, []);
+
+  // OAuth redirect 복귀 처리(?gcal=connected|error) + 서버 연동 상태 동기화.
+  // 연동 직후 캘린더 목록이 비어 있으면 자동으로 한 번 가져온다 — 사용자가
+  // "구독 목록 새로고침"을 따로 누를 필요 없게.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const flag = params.get('gcal');
+    if (flag) {
+      if (flag === 'connected') {
+        toast.success('Google 계정 연동 완료 — 이제 자동으로 유지돼요');
+      } else {
+        toast.error(`Google 연동 실패: ${params.get('reason') ?? '알 수 없는 오류'}`);
+      }
+      params.delete('gcal');
+      params.delete('reason');
+      const qs = params.toString();
+      window.history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : ''));
+    }
+
+    let cancelled = false;
+    (async () => {
+      const oauth = await ensureFreshOAuth();
+      if (cancelled || !oauth) return;
+      const current = getGCalConfig();
+      setConfig(current);
+      if (current.subscribedCalendars.length === 0) {
+        setLoading('fetch');
+        try {
+          const subscribedCalendars = await fetchSubscribedCalendars(oauth.accessToken);
+          if (cancelled) return;
+          const next: GCalConfig = { ...getGCalConfig(), subscribedCalendars };
+          setGCalConfig(next);
+          setConfig(next);
+          recordFetch('success');
+        } catch {
+          if (!cancelled) recordFetch('failed');
+        } finally {
+          if (!cancelled) setLoading('idle');
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -180,25 +208,14 @@ export function GCalSettings() {
     setHistory(loadHistory());
   }, []);
 
-  // tick once a minute so "토큰 만료까지 N분" stays fresh
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 30_000);
-    return () => window.clearInterval(id);
-  }, []);
-
   const oauthConfigured = isGoogleOAuthConfigured();
-  const hasExpiredToken = !!config.oauth && isTokenExpired(config.oauth);
-  const isSignedIn = !!config.oauth && !isTokenExpired(config.oauth);
+  // 서버가 refresh_token으로 자동 갱신하므로 로컬 만료는 "끊김"이 아니다 —
+  // oauth 존재 여부만 본다 (만료분은 마운트 시 ensureFreshOAuth가 채움).
+  const isSignedIn = !!config.oauth;
   const disabledSet = new Set(config.disabled);
   const activeCount = config.subscribedCalendars.filter(c => !disabledSet.has(c.id)).length;
-  const gcalStatus = getGCalStatus(oauthConfigured, isSignedIn, hasExpiredToken, activeCount);
+  const gcalStatus = getGCalStatus(oauthConfigured, isSignedIn, activeCount);
   const StatusIcon = gcalStatus.Icon;
-
-  // 토큰 만료 임박 (30분 이내) → muted-foreground 보강 텍스트
-  const tokenExpiresAt = config.oauth?.expiresAt ?? null;
-  const minutesUntilExpiry =
-    tokenExpiresAt && isSignedIn ? Math.max(0, Math.round((tokenExpiresAt - now) / 60_000)) : null;
-  const expiryWarning = minutesUntilExpiry !== null && minutesUntilExpiry <= 30;
 
   const recordFetch = (result: FetchResult) => {
     const ts = Date.now();
@@ -223,41 +240,20 @@ export function GCalSettings() {
     }
   };
 
-  const handleSignIn = async () => {
+  const handleSignIn = () => {
     setError(null);
     setLoading('auth');
-    try {
-      const tokenState = await requestAccessToken({ prompt: 'consent' });
-      setLoading('fetch');
-      const [email, subscribedCalendars] = await Promise.all([
-        fetchUserEmail(tokenState.accessToken),
-        fetchSubscribedCalendars(tokenState.accessToken),
-      ]);
-      const next: GCalConfig = {
-        oauth: { ...tokenState, email: email ?? undefined },
-        subscribedCalendars,
-        disabled: config.disabled,
-      };
-      setGCalConfig(next);
-      setConfig(next);
-      recordFetch('success');
-      toast.success('Google 계정 연동 완료');
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : '알 수 없는 오류';
-      setError(msg);
-      recordFetch('failed');
-      toast.error(`Google 로그인 실패: ${msg}`);
-    } finally {
-      setLoading('idle');
-    }
+    // 서버 주도 Authorization Code flow — 구글 동의 후 /settings로 복귀한다.
+    window.location.href = '/api/gcal/oauth/start';
   };
 
   const handleRefreshCalendars = async () => {
-    if (!config.oauth) return;
     setError(null);
     setLoading('fetch');
     try {
-      const subscribedCalendars = await fetchSubscribedCalendars(config.oauth.accessToken);
+      const oauth = await ensureFreshOAuth();
+      if (!oauth) throw new Error('연동이 필요해요');
+      const subscribedCalendars = await fetchSubscribedCalendars(oauth.accessToken);
       const next: GCalConfig = { ...config, subscribedCalendars };
       setGCalConfig(next);
       setConfig(next);
@@ -274,11 +270,12 @@ export function GCalSettings() {
   };
 
   const handleRevoke = async () => {
-    if (!config.oauth) return;
     setError(null);
     setLoading('revoke');
     try {
-      await revokeAccessToken(config.oauth.accessToken);
+      const res = await fetch('/api/gcal/disconnect', { method: 'POST' });
+      const data = (await res.json()) as { ok: boolean; error?: string };
+      if (!data.ok) throw new Error(data.error ?? '서버 오류');
       const next: GCalConfig = { oauth: null, subscribedCalendars: [], disabled: [] };
       setGCalConfig(next);
       setConfig(next);
@@ -312,11 +309,6 @@ export function GCalSettings() {
                 · {formatDistanceToNow(lastFetch, { locale: ko, addSuffix: true })}
               </span>
             )}
-            {expiryWarning && minutesUntilExpiry !== null && (
-              <span className="text-xs text-muted-foreground">
-                · 토큰 만료까지 {minutesUntilExpiry}분
-              </span>
-            )}
             <HistorySparkline history={history} />
           </div>
         </div>
@@ -328,7 +320,8 @@ export function GCalSettings() {
             <p className="text-xs text-muted-foreground leading-relaxed">
               Google OAuth가 설정되지 않았습니다.{' '}
               <code className="text-xs bg-muted px-1 rounded">.env.local</code>에{' '}
-              <code className="text-xs bg-muted px-1 rounded">NEXT_PUBLIC_GOOGLE_CLIENT_ID</code>를
+              <code className="text-xs bg-muted px-1 rounded">NEXT_PUBLIC_GOOGLE_CLIENT_ID</code>와{' '}
+              <code className="text-xs bg-muted px-1 rounded">GOOGLE_CLIENT_SECRET</code>을
               추가하면 구독 중인 캘린더 목록을 자동으로 가져올 수 있어요.
             </p>
             <p className="text-xs text-muted-foreground leading-relaxed">
@@ -418,7 +411,7 @@ export function GCalSettings() {
           <div className="space-y-3">
             <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
               <CalendarDays className="h-4 w-4" />
-              <span>Google 계정으로 로그인하면 구독 중인 캘린더 목록을 자동으로 가져옵니다.</span>
+              <span>Google 계정으로 한 번만 로그인하면 연동이 계속 유지돼요. 구독 중인 캘린더 목록도 자동으로 가져옵니다.</span>
             </div>
             {error && <p className="text-xs text-destructive">{error}</p>}
             <Button
