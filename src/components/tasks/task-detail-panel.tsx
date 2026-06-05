@@ -385,6 +385,10 @@ export function TaskDetailPanel({
                 </div>
               </div>
 
+              {/* 본문 정렬 래퍼 — 헤더의 로고(20px)+간격(10px) 때문에 제목 글자가
+                * 30px에서 시작하므로, 아래 모든 섹션을 같은 시작선에 맞춘다
+                * (사용자 피드백 2026-06-05: 좌측 라인 들쭉날쭉). 푸터는 전폭 유지. */}
+              <div className="ml-[30px] space-y-5">
               {/* ── 칩 줄: 상태 / 마감(D-n) / 요청자 / 오늘 — 전부 그 자리 수정 ── */}
               <div className="flex items-center gap-1.5 flex-wrap">
                 <Popover open={statusOpen} onOpenChange={setStatusOpen}>
@@ -651,6 +655,8 @@ export function TaskDetailPanel({
                     </div>
                   </div>
                 )}
+              </div>
+
               </div>
 
               {/* ── 푸터: 가벼운 액션만. 저장 버튼 없음 (자동 저장) ── */}
