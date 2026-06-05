@@ -1,29 +1,34 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Issue, Task, TASK_STATUSES } from '@/lib/types';
-import { formatDate, cn, getNotionPageUrl } from '@/lib/utils';
-import { apiFetch } from '@/lib/api';
-import { toast } from 'sonner';
 import { IssuePicker } from '@/components/issues/issue-picker';
-import { toggleTodayTask, getTodayTaskIds, removeTodayTaskWithDescendants } from '@/lib/today-tasks';
-import { Trash2, ExternalLink, ChevronDown, Save, X, FolderPlus, ArrowUpRight, CornerLeftUp, CheckCircle2, Circle, PauseCircle, Sun } from 'lucide-react';
+import { TaskChipButton } from '@/components/tasks/task-chip-button';
+import { DeadlinePopover } from '@/components/tasks/deadline-popover';
+import { AddSubTaskRow } from '@/components/tasks/add-sub-task-row';
+import { SourceIcon, sourceOpenUrl } from '@/components/tasks/source-icon';
+import { Issue, Task, TASK_STATUSES, isTaskDone, isTaskStatus } from '@/lib/types';
+import { apiFetch } from '@/lib/api';
+import { formatDate, cn } from '@/lib/utils';
+import {
+  toggleTodayTask, getTodayTaskIds, removeTodayTaskWithDescendants,
+  promptNextInTodayIfNeeded,
+} from '@/lib/today-tasks';
+import { toast } from 'sonner';
+import {
+  Check, Loader2, CheckCircle2, Circle, CornerLeftUp, ExternalLink,
+  ChevronDown, ChevronRight, PauseCircle, Sun, Trash2, User, X, Plus,
+} from 'lucide-react';
 
-// `<input type="datetime-local">` round-trip: the input wants a naive
-// "YYYY-MM-DDTHH:mm" string in the user's local timezone, and ISO strings
-// from the server are UTC. Convert both ways without dropping the user's
-// intent — opening the dialog should show the same wall-clock time the
-// user saw in history; saving should persist it as the same instant.
+// `<input type="datetime-local">` round-trip — 기존 구현 그대로 유지.
 function isoToLocalDateTime(iso: string | null | undefined): string {
   if (!iso) return '';
   const d = new Date(iso);
@@ -39,134 +44,118 @@ function localDateTimeToIso(local: string): string | null {
   return d.toISOString();
 }
 
+/** 마감 칩의 D-n 꼬리표. 오늘=D-DAY, 지남=D+n. */
+function dDayLabel(deadline: string | null): string | null {
+  if (!deadline) return null;
+  const d = new Date(deadline);
+  if (isNaN(d.getTime())) return null;
+  d.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diff = Math.round((d.getTime() - today.getTime()) / 86400000);
+  if (diff === 0) return 'D-DAY';
+  return diff > 0 ? `D-${diff}` : `D+${-diff}`;
+}
+
+/** 위계 뱃지 — ISSUE(보라) / 하위 TASK·부모 TASK(회색). */
+function HierarchyBadge({ tone, children }: { tone: 'issue' | 'sub'; children: React.ReactNode }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center flex-shrink-0 text-[10px] font-bold tracking-[0.07em] px-1.5 h-[17px] rounded',
+        tone === 'issue' ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground',
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
 interface TaskDetailPanelProps {
   taskId: string | null;
   onClose: () => void;
   onTaskUpdated?: () => void;
-  /** Optional: lets the panel navigate to a related task (parent / sibling /
-   * child) without closing. Today page wires this so users can drill up to
-   * the parent TASK context from a hoisted sub-TASK row. */
+  /** 모달 안에서 부모/하위 task 상세로 전환 (taskId 교체). */
   onNavigate?: (taskId: string) => void;
+  /** 호출 페이지가 이미 들고 있는 task 목록 — 전달되면 첫 페인트가 네트워크
+   *  없이 즉시 일어난다 (성능 개편의 핵심). 백그라운드 fetch가 진실원본. */
+  tasks?: Task[];
+  /** 호출 페이지가 이미 들고 있는 ISSUE 목록 — ISSUE 줄 즉시 표시용. */
+  issues?: Issue[];
 }
 
-export function TaskDetailPanel({ taskId, onClose, onTaskUpdated, onNavigate }: TaskDetailPanelProps) {
-  const [task, setTask] = useState<Task | null>(null);
-  const [issues, setIssues] = useState<Issue[]>([]);
-  const [parentTask, setParentTask] = useState<Task | null>(null);
-  const [siblings, setSiblings] = useState<Task[]>([]);
-  const [children, setChildren] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [showExtras, setShowExtras] = useState(false);
-  const [issuePickerOpen, setIssuePickerOpen] = useState(false);
+export function TaskDetailPanel({
+  taskId, onClose, onTaskUpdated, onNavigate, tasks: tasksProp, issues: issuesProp,
+}: TaskDetailPanelProps) {
+  // ── 데이터: prop 시드로 즉시 그리고, 백그라운드 fetch로 재검증 ──
+  const seed = useMemo(
+    () => (taskId && tasksProp ? tasksProp.find(t => t.id === taskId) ?? null : null),
+    [taskId, tasksProp],
+  );
+  const [fetchedTask, setFetchedTask] = useState<Task | null>(null);
+  const [fetchedPool, setFetchedPool] = useState<Task[] | null>(null);
+  const [fetchedIssues, setFetchedIssues] = useState<Issue[] | null>(null);
+  const task = fetchedTask ?? seed;
+  const pool = fetchedPool ?? tasksProp ?? null;
+  const issues = fetchedIssues ?? issuesProp ?? [];
 
+  // ── 편집 필드 (per-field 자동 저장) ──
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [status, setStatus] = useState('');
-  const [delegateTo, setDelegateTo] = useState('');
-  const [deadline, setDeadline] = useState('');
-  const [completedAt, setCompletedAt] = useState('');
+  const [status, setStatus] = useState<string>('등록');
   const [requester, setRequester] = useState('');
+  const [delegateTo, setDelegateTo] = useState('');
+  const [deadline, setDeadline] = useState<string | null>(null);
+  const [completedAt, setCompletedAt] = useState('');
   const [followUpNote, setFollowUpNote] = useState('');
-  const [saving, setSaving] = useState(false);
-  // 오늘 묶음 포함 여부 — task-card 우클릭과 같은 localStorage 헬퍼를 쓰며,
-  // 다른 화면에서 토글돼도 'today-tasks-changed' 이벤트로 동기화된다.
+
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [requesterOpen, setRequesterOpen] = useState(false);
+  const [issuePickerOpen, setIssuePickerOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [showExtras, setShowExtras] = useState(false);
+  const [addingSub, setAddingSub] = useState(false);
   const [isTodayTask, setIsTodayTask] = useState(false);
 
-  const fetchTask = useCallback(async () => {
-    if (!taskId) return;
-    setLoading(true);
-    try {
-      const [taskData, issueData, allTasks] = await Promise.all([
-        apiFetch<Task>(`/api/tasks/${taskId}`, { suppressToast: true }),
-        apiFetch<Issue[]>('/api/issues', { suppressToast: true }),
-        apiFetch<Task[]>(`/api/tasks?deleted=false`, { suppressToast: true }),
-      ]);
-      setTask(taskData);
-      setIssues(issueData);
-      setTitle(taskData.title);
-      setDescription(taskData.description ?? '');
-      setStatus(taskData.status);
-      setDelegateTo(taskData.delegate_to ?? '');
-      setDeadline(taskData.deadline?.slice(0, 10) ?? '');
-      setCompletedAt(isoToLocalDateTime(taskData.completed_at));
-      setRequester(taskData.requester ?? '');
-      setFollowUpNote(taskData.follow_up_note ?? '');
+  // 저장 인디케이터 — TaskInlineEditor와 동일 라이프사이클.
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const savedAtTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-      // Build relationship context — parent + siblings for sub-TASKs, or
-      // children for parent TASKs. This is the answer to "오늘 탭에서 보이는
-      // sub-task의 부모/형제/요청자 어떻게 봐?": one fetch, three views.
-      if (taskData.parent_task_id) {
-        const parent = allTasks.find(t => t.id === taskData.parent_task_id) ?? null;
-        setParentTask(parent);
-        setSiblings(
-          allTasks
-            .filter(t => t.parent_task_id === taskData.parent_task_id && t.id !== taskData.id)
-            .sort((a, b) => a.position - b.position),
-        );
-        setChildren([]);
-      } else {
-        setParentTask(null);
-        setSiblings([]);
-        setChildren(
-          allTasks
-            .filter(t => t.parent_task_id === taskData.id)
-            .sort((a, b) => a.position - b.position),
-        );
-      }
-    } catch {
-      onClose();
-    } finally {
-      setLoading(false);
-    }
-  }, [taskId, onClose]);
-
-  const currentIssue = task?.issue_id
-    ? issues.find(i => i.id === task.issue_id) ?? null
-    : null;
-
-  const attachToIssue = async (issueId: string) => {
-    if (!taskId) return;
-    try {
-      const updated = await apiFetch<Task>(`/api/tasks/${taskId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ issue_id: issueId, parent_task_id: null }),
-      });
-      setTask(updated);
-      onTaskUpdated?.();
-    } catch {}
-  };
-
-  const createAndAttach = async (name: string) => {
-    if (!taskId) return;
-    try {
-      const issue = await apiFetch<Issue>('/api/issues', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
-      });
-      setIssues(prev => [...prev, issue]);
-      await attachToIssue(issue.id);
-    } catch {}
-  };
-
-  const unlinkFromIssue = async () => {
-    if (!taskId) return;
-    try {
-      const updated = await apiFetch<Task>(`/api/tasks/${taskId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ issue_id: null }),
-      });
-      setTask(updated);
-      onTaskUpdated?.();
-    } catch {}
-  };
-
+  // taskId가 바뀌거나(모달 전환 포함) 재검증 결과가 도착하면 필드 동기화.
   useEffect(() => {
-    if (taskId) fetchTask();
-  }, [taskId, fetchTask]);
+    if (!task) return;
+    setTitle(task.title);
+    setDescription(task.description ?? '');
+    setStatus(task.status);
+    setRequester(task.requester ?? '');
+    setDelegateTo(task.delegate_to ?? '');
+    setDeadline(task.deadline?.slice(0, 10) ?? null);
+    setCompletedAt(isoToLocalDateTime(task.completed_at));
+    setFollowUpNote(task.follow_up_note ?? '');
+    setShowExtras(!!(task.delegate_to || task.follow_up_note));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task?.id, fetchedTask]);
+
+  // 백그라운드 재검증 — 시드가 있으면 화면은 이미 그려져 있고, 이 fetch는
+  // 조용히 최신화만 한다. 시드가 없을 때(딥링크성 진입)만 스켈레톤.
+  useEffect(() => {
+    if (!taskId) return;
+    let cancelled = false;
+    setFetchedTask(null);
+    setAddingSub(false);
+    apiFetch<Task>(`/api/tasks/${taskId}`, { suppressToast: true })
+      .then(t => { if (!cancelled) setFetchedTask(t); })
+      .catch(() => { if (!cancelled && !seed) onClose(); });
+    apiFetch<Task[]>('/api/tasks?deleted=false', { suppressToast: true })
+      .then(ts => { if (!cancelled) setFetchedPool(ts); })
+      .catch(() => {});
+    apiFetch<Issue[]>('/api/issues', { suppressToast: true })
+      .then(is => { if (!cancelled) setFetchedIssues(is); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskId]);
 
   useEffect(() => {
     const sync = () => setIsTodayTask(taskId ? getTodayTaskIds().has(taskId) : false);
@@ -175,46 +164,71 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated, onNavigate }: 
     return () => window.removeEventListener('today-tasks-changed', sync);
   }, [taskId]);
 
-  const handleInstantSave = async (field: string, value: string) => {
-    if (!taskId) return;
+  useEffect(() => {
+    if (savedAt === null) return;
+    if (savedAtTimerRef.current) clearTimeout(savedAtTimerRef.current);
+    savedAtTimerRef.current = setTimeout(() => setSavedAt(null), 1500);
+    return () => { if (savedAtTimerRef.current) clearTimeout(savedAtTimerRef.current); };
+  }, [savedAt]);
+
+  // ── 관계 계산 (pool 기반 — prop이든 fetch든 같은 코드) ──
+  const parentTask = useMemo(
+    () => (task?.parent_task_id && pool ? pool.find(t => t.id === task.parent_task_id) ?? null : null),
+    [task?.parent_task_id, pool],
+  );
+  const siblings = useMemo(
+    () => (task?.parent_task_id && pool
+      ? pool.filter(t => t.parent_task_id === task.parent_task_id && t.id !== task.id)
+          .sort((a, b) => a.position - b.position)
+      : []),
+    [task?.parent_task_id, task?.id, pool],
+  );
+  const children = useMemo(
+    () => (task && !task.parent_task_id && pool
+      ? pool.filter(t => t.parent_task_id === task.id).sort((a, b) => a.position - b.position)
+      : []),
+    [task, pool],
+  );
+  // "N개 중 M개 완료" — issueTaskProgress와 같은 규약: 취소는 분모에서 제외.
+  const subDenominator = children.filter(c => c.status !== '취소').length;
+  const subDone = children.filter(c => c.status === '완료').length;
+
+  const currentIssue = task?.issue_id ? issues.find(i => i.id === task.issue_id) ?? null : null;
+  const openUrl = task ? sourceOpenUrl(task) : null;
+
+  // ── 자동 저장 (TaskInlineEditor 패턴) ──
+  const save = async (patch: Record<string, unknown>) => {
+    if (!taskId || !task) return;
     try {
-      await apiFetch(`/api/tasks/${taskId}`, {
+      setSaving(true);
+      const updated = await apiFetch<Task>(`/api/tasks/${taskId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [field]: value }),
+        body: JSON.stringify(patch),
       });
+      setFetchedTask(updated);
+      window.dispatchEvent(new CustomEvent('task-updated'));
+      setSavedAt(Date.now());
       onTaskUpdated?.();
-    } catch {}
-  };
-
-  const handleStatusChange = (v: string | null) => {
-    if (!v) return;
-    setStatus(v);
-    handleInstantSave('status', v);
-  };
-
-  const handleSave = async () => {
-    if (!taskId) return;
-    setSaving(true);
-    try {
-      await apiFetch(`/api/tasks/${taskId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title, description: description || null,
-          delegate_to: delegateTo || null,
-          deadline: deadline || null,
-          completed_at: localDateTimeToIso(completedAt),
-          requester: requester || null,
-          follow_up_note: followUpNote || null,
-        }),
-      });
-      onTaskUpdated?.();
-      onClose();
-    } catch {
+      if (isTaskStatus(patch.status) && isTaskDone(patch.status) && !isTaskDone(task.status)) {
+        promptNextInTodayIfNeeded({ ...task, status: patch.status });
+      }
     } finally {
       setSaving(false);
     }
+  };
+
+  const attachToIssue = async (issueId: string) => {
+    await save({ issue_id: issueId, parent_task_id: null });
+  };
+  const createAndAttach = async (name: string) => {
+    const issue = await apiFetch<Issue>('/api/issues', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    setFetchedIssues(prev => [...(prev ?? issues), issue]);
+    await attachToIssue(issue.id);
   };
 
   const handleDelete = async () => {
@@ -222,389 +236,434 @@ export function TaskDetailPanel({ taskId, onClose, onTaskUpdated, onNavigate }: 
     try {
       await apiFetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
       onClose();
+      window.dispatchEvent(new CustomEvent('task-updated'));
       onTaskUpdated?.();
     } catch {}
   };
 
+  const handlePend = async () => {
+    if (!taskId) return;
+    const pendedId = taskId;
+    // 보류 = 오늘에서도 빼냄 (기존 계약 유지). 자손 = 직계 children.
+    removeTodayTaskWithDescendants(pendedId, children);
+    try {
+      await apiFetch(`/api/tasks/${pendedId}/pend`, { method: 'POST' });
+    } catch {
+      return; // 실패 토스트는 apiFetch가 띄움 — 모달은 열린 채 유지.
+    }
+    window.dispatchEvent(new CustomEvent('task-updated'));
+    onTaskUpdated?.();
+    onClose();
+    toast('보류함으로 이동했어요', {
+      action: {
+        label: '되돌리기',
+        onClick: async () => {
+          try {
+            await apiFetch(`/api/tasks/${pendedId}/unpend`, { method: 'POST' });
+          } finally {
+            window.dispatchEvent(new CustomEvent('task-updated'));
+            onTaskUpdated?.();
+          }
+        },
+      },
+    });
+  };
+
+  // 모달 안에서 하위 task를 만든 직후 children에 바로 보이게 pool만 재요청.
+  const refreshPool = () => {
+    apiFetch<Task[]>('/api/tasks?deleted=false', { suppressToast: true })
+      .then(ts => setFetchedPool(ts))
+      .catch(() => {});
+  };
+
+  // 하위/부모/형제 줄 공통 렌더러.
+  const relationRow = (t: Task) => (
+    <button
+      key={t.id}
+      type="button"
+      onClick={() => onNavigate?.(t.id)}
+      disabled={!onNavigate}
+      className={cn(
+        'group/rel w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left transition-colors',
+        onNavigate && 'hover:bg-primary/5 active:bg-primary/10',
+      )}
+    >
+      {isTaskDone(t.status)
+        ? <CheckCircle2 className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+        : <Circle className="h-3.5 w-3.5 text-muted-foreground/60 flex-shrink-0" />}
+      <span className={cn(
+        'flex-1 truncate text-[13px]',
+        isTaskDone(t.status) && 'line-through text-muted-foreground',
+      )}>
+        {t.title}
+      </span>
+      {onNavigate && (
+        <span className="flex-shrink-0 text-[11px] text-muted-foreground/0 group-hover/rel:text-primary transition-colors">
+          상세 보기 ›
+        </span>
+      )}
+    </button>
+  );
 
   return (
     <>
       <Dialog open={!!taskId} onOpenChange={(open) => { if (!open) onClose(); }}>
-        {/* Center modal — wider than the default sm:max-w-sm so the relation
-          * sections (parent / siblings / children) breathe; capped at 85vh so
-          * long content scrolls inside the modal instead of pushing the page. */}
-        <DialogContent className="!max-w-2xl w-full max-h-[85vh] overflow-y-auto p-5 gap-4">
-          <DialogHeader>
-            <DialogTitle className="text-left text-[15px]">
-              {task?.parent_task_id ? 'sub-TASK 상세' : 'TASK 상세'}
-            </DialogTitle>
+        <DialogContent className="!max-w-xl w-full max-h-[85vh] overflow-y-auto p-6 gap-0">
+          {/* 접근성용 제목 — 시각적 헤더는 본문의 로고+제목이 담당. */}
+          <DialogHeader className="sr-only">
+            <DialogTitle>{task ? task.title : 'TASK 상세'}</DialogTitle>
           </DialogHeader>
 
-          {loading && !task ? (
-            <div className="space-y-4 mt-2">
-              <Skeleton className="h-8 w-full" />
-              <Skeleton className="h-10 w-1/2" />
-              <Skeleton className="h-10 w-1/2" />
+          {!task ? (
+            <div className="space-y-4">
+              <Skeleton className="h-8 w-3/4" />
+              <Skeleton className="h-7 w-1/2" />
               <Skeleton className="h-24 w-full" />
             </div>
-          ) : task ? (
-            <div className={cn('space-y-5 mt-2', loading && 'opacity-50 transition-opacity')}>
-              {/* Title */}
+          ) : (
+            <div className="space-y-5">
+              {/* 저장 인디케이터 — 우상단 X 옆에 떠 있게 절대배치 */}
+              <div className="absolute top-4 right-12 h-6 flex items-center">
+                {savedAt !== null && (
+                  <span className="text-[11px] text-primary inline-flex items-center gap-1 animate-in fade-in">
+                    <Check className="h-3 w-3" /> 저장됨
+                  </span>
+                )}
+                {saving && savedAt === null && (
+                  <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1 animate-in fade-in">
+                    <Loader2 className="h-3 w-3 animate-spin" /> 저장 중…
+                  </span>
+                )}
+              </div>
+
+              {/* ── 헤더: 브랜드 로고(출처) + 제목. 출처 텍스트는 쓰지 않는다 ── */}
               <div>
-                {/* 긴 제목도 줄바꿈으로 전부 보이도록 한 줄 Input → 자동 높이
-                  * Textarea (field-sizing-content). Enter는 줄바꿈이 아니라
-                  * blur(저장)로 동작 — 제목은 개행 없는 평문이라는 계약 유지. */}
-                <Textarea
-                  value={title}
-                  rows={1}
-                  onChange={(e) => setTitle(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      e.currentTarget.blur();
-                    }
-                  }}
-                  onBlur={async () => {
-                    if (task && title !== task.title && title.trim()) {
-                      try {
-                        // 노션発 task는 이름을 고치면 name_locked로 잠가 이후 노션
-                        // 제목 변경을 따르지 않게 한다.
-                        const patch: Record<string, unknown> = { title };
+                <div className="flex items-start gap-2.5">
+                  <SourceIcon source={task.source} className="mt-[7px] text-[20px]" />
+                  <Textarea
+                    value={title}
+                    rows={1}
+                    onChange={(e) => setTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); }
+                    }}
+                    onBlur={() => {
+                      if (title.trim() && title !== task.title) {
+                        // 노션発 task는 이름을 고치면 name_locked로 잠근다.
+                        const patch: Record<string, unknown> = { title: title.trim() };
                         if (task.source === 'notion') patch.name_locked = true;
-                        await apiFetch(`/api/tasks/${taskId}`, {
-                          method: 'PATCH',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify(patch),
-                        });
-                        onTaskUpdated?.();
-                      } catch {}
-                    }
-                  }}
-                  className="text-lg md:text-lg font-bold tracking-[-0.025em] leading-snug resize-none min-h-0 bg-transparent dark:bg-transparent border border-transparent hover:border-border focus:border-border px-2 py-1 rounded transition-colors shadow-none focus-visible:ring-1"
-                />
-                <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                  {task.source === 'notion' && <Badge className="bg-black text-white text-[10px] px-1.5 py-0 rounded">Notion</Badge>}
-                  {task.source === 'slack' && <Badge className="bg-purple-600 text-white text-[10px] px-1.5 py-0 rounded">Slack</Badge>}
-                  {task.source === 'notion' && task.notion_task_id && (
-                    <a href={task.notion_url ?? getNotionPageUrl(task.notion_task_id)} target="_blank" rel="noopener noreferrer"
-                       className="text-xs text-primary hover:underline flex items-center gap-1">
-                      <ExternalLink className="h-3 w-3" /> Notion에서 보기
-                    </a>
+                        save(patch);
+                      }
+                    }}
+                    className="text-[19px] md:text-[19px] font-extrabold tracking-[-0.035em] leading-tight resize-none min-h-0 bg-transparent dark:bg-transparent border border-transparent hover:border-border focus:border-border px-2 py-1 -ml-2 rounded transition-colors shadow-none focus-visible:ring-1"
+                    aria-label="제목"
+                  />
+                </div>
+                <div className="flex items-center gap-2 mt-1 ml-[30px] text-[12px] text-muted-foreground">
+                  <span>{formatDate(task.created_at, 'M월 d일')} 등록</span>
+                  {openUrl && (
+                    <>
+                      <span className="text-muted-foreground/40">·</span>
+                      <a
+                        href={openUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary font-medium hover:underline inline-flex items-center gap-1"
+                      >
+                        원본 열기 <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </>
                   )}
-                  {task.source === 'slack' && task.slack_url && (
-                    <a href={task.slack_url} target="_blank" rel="noopener noreferrer"
-                       className="text-xs text-primary hover:underline flex items-center gap-1">
-                      <ExternalLink className="h-3 w-3" /> Slack에서 보기
-                    </a>
-                  )}
-                  <span>생성: {formatDate(task.created_at, 'yyyy-MM-dd HH:mm')}</span>
                 </div>
               </div>
 
-              {/* Parent context — only for sub-TASKs. Click navigates to the
-                * parent's detail; this resolves "I'm looking at a sub-task in
-                * Today, how do I see the parent's requester / other subs?" */}
-              {parentTask && (
-                <div>
-                  <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
-                    <CornerLeftUp className="h-3 w-3" />
-                    부모 TASK
-                  </Label>
-                  <button
-                    type="button"
-                    onClick={() => onNavigate?.(parentTask.id)}
-                    disabled={!onNavigate}
-                    className={cn(
-                      'mt-1 w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-border/60 bg-card text-left transition-colors',
-                      onNavigate && 'hover:border-border hover:bg-accent/40 active:scale-[0.99]',
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        'flex-shrink-0 inline-grid place-items-center h-5 w-5 rounded-full text-[10px] font-semibold',
-                        parentTask.status === '완료'
-                          ? 'bg-primary/10 text-primary'
-                          : 'bg-muted text-muted-foreground',
-                      )}
-                      aria-hidden
+              {/* ── 칩 줄: 상태 / 마감(D-n) / 요청자 / 오늘 — 전부 그 자리 수정 ── */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <Popover open={statusOpen} onOpenChange={setStatusOpen}>
+                  <PopoverTrigger render={<TaskChipButton active>{status}</TaskChipButton>} />
+                  <PopoverContent className="w-36 p-1" align="start">
+                    <div className="flex flex-col">
+                      {TASK_STATUSES.map(s => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => {
+                            setStatusOpen(false);
+                            if (s === status) return;
+                            setStatus(s);
+                            save({ status: s });
+                          }}
+                          className={cn(
+                            'text-left px-2 py-1.5 rounded text-xs hover:bg-accent transition-colors',
+                            s === status && 'font-semibold',
+                          )}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                <DeadlinePopover
+                  value={deadline}
+                  onChange={(v) => { setDeadline(v); save({ deadline: v }); }}
+                />
+                {deadline && dDayLabel(deadline) && (
+                  <span className={cn(
+                    'text-[11px] font-semibold tabular-nums -ml-0.5 mr-0.5',
+                    dDayLabel(deadline) === 'D-DAY' || dDayLabel(deadline)!.startsWith('D+')
+                      ? 'text-primary' : 'text-muted-foreground',
+                  )}>
+                    {dDayLabel(deadline)}
+                  </span>
+                )}
+
+                <Popover open={requesterOpen} onOpenChange={setRequesterOpen}>
+                  <PopoverTrigger
+                    render={
+                      <TaskChipButton active={!!requester} icon={<User className="h-3 w-3" />} caret={!requester}>
+                        {requester || '요청자'}
+                      </TaskChipButton>
+                    }
+                  />
+                  <PopoverContent className="w-52 p-2" align="start">
+                    <Input
+                      value={requester}
+                      autoFocus
+                      placeholder="요청자 이름"
+                      onChange={(e) => setRequester(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { e.preventDefault(); setRequesterOpen(false); }
+                      }}
+                      onBlur={() => {
+                        if ((requester || null) !== (task.requester || null)) {
+                          save({ requester: requester || null });
+                        }
+                      }}
+                    />
+                  </PopoverContent>
+                </Popover>
+
+                <TaskChipButton
+                  active={isTodayTask}
+                  icon={<Sun className={cn('h-3 w-3', isTodayTask && 'fill-primary text-primary')} />}
+                  caret={false}
+                  onClick={() => { if (taskId) toggleTodayTask(taskId); }}
+                >
+                  {isTodayTask ? '오늘에 있음' : '오늘로 보내기'}
+                </TaskChipButton>
+              </div>
+
+              {/* ── 관계 (정보 1순위) ── */}
+
+              {/* top-level: 소속 ISSUE 줄 */}
+              {!task.parent_task_id && (
+                currentIssue ? (
+                  <div className="flex items-center gap-2.5 rounded-xl border border-border/60 bg-card px-3.5 py-3">
+                    <HierarchyBadge tone="issue">ISSUE</HierarchyBadge>
+                    <Link
+                      href={`/issues/${currentIssue.id}`}
+                      onClick={onClose}
+                      className="flex-1 min-w-0 group/issue"
                     >
-                      {parentTask.status === '완료' ? '✓' : '○'}
-                    </span>
-                    <span className="flex-1 min-w-0">
-                      <span className="block text-[14px] font-semibold truncate">{parentTask.title}</span>
-                      <span className="block text-[11px] text-muted-foreground mt-0.5 truncate">
-                        {parentTask.status}
-                        {parentTask.requester ? ` · 요청 ${parentTask.requester}` : ''}
-                        {parentTask.deadline ? ` · 마감 ${formatDate(parentTask.deadline, 'M월 d일')}` : ''}
+                      <span className="block text-[13.5px] font-semibold truncate group-hover/issue:text-primary transition-colors">
+                        {currentIssue.name}
                       </span>
-                    </span>
-                    {onNavigate && (
-                      <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" aria-hidden />
-                    )}
-                  </button>
-                </div>
-              )}
-
-              {/* Sibling sub-TASKs — under the same parent, sorted by position. */}
-              {siblings.length > 0 && (
-                <div>
-                  <Label className="text-xs text-muted-foreground">
-                    같은 부모의 다른 하위 task <span className="text-muted-foreground/70 tabular-nums">({siblings.length})</span>
-                  </Label>
-                  <ul className="mt-1.5 rounded-lg border border-border/60 divide-y divide-border bg-card overflow-hidden">
-                    {siblings.map(s => (
-                      <li key={s.id}>
-                        <button
-                          type="button"
-                          onClick={() => onNavigate?.(s.id)}
-                          disabled={!onNavigate}
-                          className={cn(
-                            'w-full flex items-center gap-2 px-3 py-2 text-left transition-colors',
-                            onNavigate && 'hover:bg-accent/40 active:bg-accent/60',
-                            s.status === '완료' && 'opacity-60',
-                          )}
-                        >
-                          {s.status === '완료'
-                            ? <CheckCircle2 className="h-3.5 w-3.5 text-primary flex-shrink-0" />
-                            : <Circle className="h-3.5 w-3.5 text-muted-foreground/60 flex-shrink-0" />}
-                          <span className={cn('flex-1 truncate text-[13px]', s.status === '완료' && 'line-through text-muted-foreground')}>
-                            {s.title}
-                          </span>
-                          <span className="text-[10px] text-muted-foreground/80 flex-shrink-0">
-                            {s.status}
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Children — for parent TASKs that have sub-TASKs. */}
-              {children.length > 0 && (
-                <div>
-                  <Label className="text-xs text-muted-foreground">
-                    하위 task <span className="text-muted-foreground/70 tabular-nums">({children.length})</span>
-                  </Label>
-                  <ul className="mt-1.5 rounded-lg border border-border/60 divide-y divide-border bg-card overflow-hidden">
-                    {children.map(c => (
-                      <li key={c.id}>
-                        <button
-                          type="button"
-                          onClick={() => onNavigate?.(c.id)}
-                          disabled={!onNavigate}
-                          className={cn(
-                            'w-full flex items-center gap-2 px-3 py-2 text-left transition-colors',
-                            onNavigate && 'hover:bg-accent/40 active:bg-accent/60',
-                            c.status === '완료' && 'opacity-60',
-                          )}
-                        >
-                          {c.status === '완료'
-                            ? <CheckCircle2 className="h-3.5 w-3.5 text-primary flex-shrink-0" />
-                            : <Circle className="h-3.5 w-3.5 text-muted-foreground/60 flex-shrink-0" />}
-                          <span className={cn('flex-1 truncate text-[13px]', c.status === '완료' && 'line-through text-muted-foreground')}>
-                            {c.title}
-                          </span>
-                          <span className="text-[10px] text-muted-foreground/80 flex-shrink-0">
-                            {c.status}
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* ISSUE */}
-              <div>
-                <Label className="text-xs text-muted-foreground">ISSUE</Label>
-                {task.parent_task_id ? (
-                  <div className="mt-1 text-xs text-muted-foreground px-2 py-1.5">
-                    sub-TASK는 부모 TASK를 통해 ISSUE에 연결됩니다.
-                  </div>
-                ) : currentIssue ? (
-                  <div className="mt-1 flex items-center gap-2 px-2 py-1.5 rounded-md bg-accent/30 border border-border/40">
-                    <span className="inline-flex items-center justify-center text-[9px] font-semibold tracking-wide px-1.5 h-4 rounded-sm bg-primary/10 text-primary flex-shrink-0">
-                      ISSUE
-                    </span>
-                    <span className="text-sm flex-1 truncate">{currentIssue.name}</span>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="h-6 px-2 text-xs"
-                      onClick={() => setIssuePickerOpen(true)}
-                    >
+                      <span className="block text-[11px] text-muted-foreground mt-0.5">
+                        이 task가 속한 묶음 · 이슈로 가기 ›
+                      </span>
+                    </Link>
+                    <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-xs flex-shrink-0"
+                      onClick={() => setIssuePickerOpen(true)}>
                       변경
                     </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
-                      onClick={unlinkFromIssue}
-                    >
-                      <X className="h-3 w-3 mr-0.5" />
-                      분리
+                    <Button type="button" size="sm" variant="ghost"
+                      className="h-6 px-2 text-xs flex-shrink-0 text-muted-foreground hover:text-foreground"
+                      onClick={() => save({ issue_id: null })}>
+                      <X className="h-3 w-3 mr-0.5" /> 분리
                     </Button>
                   </div>
                 ) : (
-                  <div className="mt-1">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setIssuePickerOpen(true)}
-                    >
-                      <FolderPlus className="h-3.5 w-3.5 mr-1.5" />
+                  <div className="flex items-center gap-2.5 rounded-xl border border-dashed border-border/60 px-3.5 py-3">
+                    <HierarchyBadge tone="issue">ISSUE</HierarchyBadge>
+                    <span className="flex-1 text-[12px] text-muted-foreground">아직 어떤 묶음에도 속하지 않았어요</span>
+                    <Button type="button" size="sm" variant="outline" className="h-7 text-xs"
+                      onClick={() => setIssuePickerOpen(true)}>
                       ISSUE 연결
                     </Button>
                   </div>
-                )}
-              </div>
+                )
+              )}
 
-              <div>
-                <Label className="text-xs text-muted-foreground">상태</Label>
-                <Select value={status} onValueChange={handleStatusChange}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {TASK_STATUSES.map(s => (
-                      <SelectItem key={s} value={s}>{s}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs text-muted-foreground">마감일</Label>
-                  <Input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">요청자</Label>
-                  <Input value={requester} onChange={(e) => setRequester(e.target.value)} placeholder="요청자 없음" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs text-muted-foreground">위임 대상</Label>
-                  <Input value={delegateTo} onChange={(e) => setDelegateTo(e.target.value)} placeholder="담당자 없음" />
-                </div>
-                {status === '완료' && (
-                  <div>
-                    <Label className="text-xs text-muted-foreground">완료일시</Label>
-                    <Input
-                      type="datetime-local"
-                      value={completedAt}
-                      onChange={(e) => setCompletedAt(e.target.value)}
-                    />
+              {/* sub-TASK: 부모 카드 + 형제 목록 */}
+              {task.parent_task_id && (
+                <div className="rounded-xl border border-border/60 bg-card px-3.5 py-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <HierarchyBadge tone="sub">부모 TASK</HierarchyBadge>
+                    <CornerLeftUp className="h-3 w-3 text-muted-foreground" aria-hidden />
                   </div>
-                )}
-              </div>
-
-              <Separator />
-
-              <div>
-                <Label className="text-xs text-muted-foreground">설명</Label>
-                <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="task 설명..." rows={3} className="mt-1" />
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setShowExtras(!showExtras)}
-                aria-expanded={showExtras}
-                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <ChevronDown className={`h-3 w-3 transition-transform ${showExtras ? 'rotate-180' : ''}`} />
-                추가 정보
-              </button>
-
-              {showExtras && (
-                <div className="space-y-3 animate-fade-in">
-                  <div>
-                    <Label className="text-xs text-muted-foreground">후속 작업 메모</Label>
-                    <Textarea value={followUpNote} onChange={(e) => setFollowUpNote(e.target.value)} rows={2} />
-                  </div>
-                  {task.slack_url && (
-                    <a href={task.slack_url} target="_blank" rel="noopener noreferrer"
-                       className="flex items-center gap-1 text-sm text-primary hover:underline">
-                      <ExternalLink className="h-3 w-3" /> Slack 메시지 보기
-                    </a>
+                  {parentTask ? (
+                    <>
+                      {relationRow(parentTask)}
+                      {siblings.length > 0 && (
+                        <div className="pt-1 border-t border-border/40">
+                          <span className="block px-2 pb-1 text-[11px] text-muted-foreground">
+                            같은 부모의 다른 하위 task ({siblings.length})
+                          </span>
+                          {siblings.map(relationRow)}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <Skeleton className="h-7 w-full" />
                   )}
                 </div>
               )}
 
-              <Separator />
-
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className={cn(
-                      'hover:text-foreground',
-                      isTodayTask ? 'text-primary' : 'text-muted-foreground',
+              {/* top-level: 하위 TASK 구역 */}
+              {!task.parent_task_id && (
+                <div className="rounded-xl border border-border/60 bg-card px-3.5 py-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <HierarchyBadge tone="sub">하위 TASK</HierarchyBadge>
+                    {children.length > 0 ? (
+                      <span className="text-[12px] text-muted-foreground font-medium tabular-nums">
+                        {subDenominator}개 중 <b className="text-primary font-semibold">{subDone}개 완료</b>
+                      </span>
+                    ) : (
+                      <span className="text-[12px] text-muted-foreground">아직 없음</span>
                     )}
-                    aria-pressed={isTodayTask}
-                    onClick={() => {
-                      if (!taskId) return;
-                      toggleTodayTask(taskId);
-                    }}
-                  >
-                    <Sun className={cn('h-4 w-4 mr-1', isTodayTask && 'fill-primary')} />
-                    {isTodayTask ? '오늘에서 빼기' : '오늘로 보내기'}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="text-muted-foreground hover:text-foreground"
-                    onClick={async () => {
-                      if (!taskId) return;
-                      const pendedId = taskId;
-                      // 보류 = 오늘에서도 빼냄 (복귀 시 인박스가 today set으로
-                      // 계속 숨기는 버그 방지). 자손=직계 children (3-level invariant).
-                      removeTodayTaskWithDescendants(pendedId, children);
-                      try {
-                        await apiFetch(`/api/tasks/${pendedId}/pend`, { method: 'POST' });
-                      } catch {
-                        return; // 실패 토스트는 apiFetch가 띄움 — 패널은 열린 채 유지.
-                      }
-                      window.dispatchEvent(new CustomEvent('task-updated'));
-                      onTaskUpdated?.();
-                      onClose();
-                      toast('보류함으로 이동했어요', {
-                        action: {
-                          label: '되돌리기',
-                          onClick: async () => {
-                            try {
-                              await apiFetch(`/api/tasks/${pendedId}/unpend`, { method: 'POST' });
-                            } finally {
-                              window.dispatchEvent(new CustomEvent('task-updated'));
-                              onTaskUpdated?.();
-                            }
-                          },
-                        },
-                      });
-                    }}
-                  >
-                    <PauseCircle className="h-4 w-4 mr-1" />
-                    보류
-                  </Button>
-                  <Button variant="destructive" size="sm" onClick={() => setConfirmDelete(true)}>
-                    <Trash2 className="h-4 w-4 mr-1" /> 삭제
-                  </Button>
+                  </div>
+                  {children.length > 0 && subDenominator > 0 && (
+                    <div className="h-1 rounded-full bg-muted overflow-hidden mb-2">
+                      <div
+                        className="h-full bg-primary rounded-full transition-[width]"
+                        style={{ width: `${Math.round((subDone / subDenominator) * 100)}%` }}
+                      />
+                    </div>
+                  )}
+                  {children.map(relationRow)}
+                  {addingSub ? (
+                    <div className="mt-1 pt-2 border-t border-border/40">
+                      <AddSubTaskRow
+                        parentId={task.id}
+                        startOpen
+                        onClose={() => { setAddingSub(false); refreshPool(); }}
+                      />
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setAddingSub(true)}
+                      className="mt-0.5 w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-[12px] text-muted-foreground hover:text-foreground hover:bg-primary/5 transition-colors"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> 하위 task 추가
+                    </button>
+                  )}
                 </div>
-                <Button size="sm" onClick={handleSave} disabled={saving}>
-                  <Save className="h-4 w-4 mr-1" />
-                  {saving ? '저장 중...' : '저장'}
+              )}
+
+              {/* ── 설명: 그 자리 편집 ── */}
+              <div>
+                <Label className="text-[10px] font-bold tracking-[0.08em] text-muted-foreground">설명</Label>
+                <Textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  onBlur={() => {
+                    if ((description || null) !== (task.description || null)) {
+                      save({ description: description || null });
+                    }
+                  }}
+                  rows={2}
+                  placeholder="task 설명…"
+                  className="mt-1 bg-transparent dark:bg-transparent border border-transparent hover:border-border focus:border-border shadow-none focus-visible:ring-1 px-2 -ml-2 transition-colors"
+                />
+              </div>
+
+              {/* ── 추가 정보 (기본 접힘) ── */}
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setShowExtras(!showExtras)}
+                  aria-expanded={showExtras}
+                  className="flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {showExtras
+                    ? <ChevronDown className="h-3 w-3" />
+                    : <ChevronRight className="h-3 w-3" />}
+                  추가 정보
+                  {!showExtras && (
+                    <span className="text-muted-foreground/60">(위임 대상 · 후속 메모{status === '완료' ? ' · 완료일시' : ''})</span>
+                  )}
+                </button>
+                {showExtras && (
+                  <div className="mt-3 space-y-3 animate-in fade-in-0 duration-150">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <Label className="text-xs text-muted-foreground">위임 대상</Label>
+                        <Input
+                          value={delegateTo}
+                          onChange={(e) => setDelegateTo(e.target.value)}
+                          onBlur={() => {
+                            if ((delegateTo || null) !== (task.delegate_to || null)) {
+                              save({ delegate_to: delegateTo || null });
+                            }
+                          }}
+                          placeholder="담당자 없음"
+                        />
+                      </div>
+                      {status === '완료' && (
+                        <div>
+                          <Label className="text-xs text-muted-foreground">완료일시</Label>
+                          <Input
+                            type="datetime-local"
+                            value={completedAt}
+                            onChange={(e) => setCompletedAt(e.target.value)}
+                            onBlur={() => {
+                              if (localDateTimeToIso(completedAt) !== task.completed_at) {
+                                save({ completed_at: localDateTimeToIso(completedAt) });
+                              }
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">후속 작업 메모</Label>
+                      <Textarea
+                        value={followUpNote}
+                        onChange={(e) => setFollowUpNote(e.target.value)}
+                        onBlur={() => {
+                          if ((followUpNote || null) !== (task.follow_up_note || null)) {
+                            save({ follow_up_note: followUpNote || null });
+                          }
+                        }}
+                        rows={2}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ── 푸터: 가벼운 액션만. 저장 버튼 없음 (자동 저장) ── */}
+              <div className="flex items-center gap-2 pt-3 border-t border-border/60">
+                <Button
+                  type="button" variant="ghost" size="sm"
+                  className="text-muted-foreground hover:text-foreground"
+                  onClick={handlePend}
+                >
+                  <PauseCircle className="h-4 w-4 mr-1" /> 보류
+                </Button>
+                <Button
+                  type="button" variant="ghost" size="sm"
+                  className="ml-auto text-muted-foreground hover:text-destructive"
+                  onClick={() => setConfirmDelete(true)}
+                >
+                  <Trash2 className="h-4 w-4 mr-1" /> 휴지통
                 </Button>
               </div>
             </div>
-          ) : null}
+          )}
         </DialogContent>
       </Dialog>
 
