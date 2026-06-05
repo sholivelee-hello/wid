@@ -1,3 +1,35 @@
+# TASK 상세 모달 개편 Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** `TaskDetailPanel`을 "여는 즉시 그려지는, edit-in-place 자동 저장, 위계가 뱃지로 읽히는" 모달로 재작성한다.
+
+**Architecture:** 호출 페이지가 이미 들고 있는 `tasks`/`issues` 배열을 prop으로 받아 **첫 페인트를 네트워크 없이** 수행하고, 단건 task + 전체 풀은 백그라운드에서 재검증해 조용히 갱신한다. 편집은 `TaskInlineEditor`와 동일한 per-field PATCH 자동 저장(저장 버튼 폐지). 스펙: `docs/superpowers/specs/2026-06-05-task-detail-modal-redesign-design.md`.
+
+**Tech Stack:** Next.js App Router, TypeScript, Tailwind v4, shadcn/ui(Dialog·Popover), 기존 부품 재사용(`SourceIcon`, `TaskChipButton`, `DeadlinePopover`, `IssuePicker`, `AddSubTaskRow`, `ConfirmDialog`).
+
+**검증 방식:** 이 레포에는 테스트 프레임워크가 없다(`package.json`에 test 스크립트 없음 — 프로젝트 관례). 각 task의 검증은 `npm run build` exit 0 + `npm run lint` 신규 문제 0 + 수동 체크리스트로 한다. TDD 단계는 적용하지 않는다.
+
+**유지해야 할 기존 계약 (절대 깨지 말 것):**
+- 상태 3-값 모델 `등록/완료/취소` (`TASK_STATUSES`), 종결 판정 `isTaskDone` (`docs/architecture/status.md`)
+- sub-TASK는 부모를 통해 ISSUE에 연결 — sub-TASK에 ISSUE 연결 UI 노출 금지 (`docs/architecture/hierarchy.md`)
+- 노션発 task 제목 수정 시 `name_locked: true` 패치 동봉
+- 보류 시 `removeTodayTaskWithDescendants` 호출 + 되돌리기 토스트
+- 저장 성공 시 `window.dispatchEvent(new CustomEvent('task-updated'))` (열린 페이지 갱신)
+- 완료 전환 시 `promptNextInTodayIfNeeded` (today prompt-next 계약, `docs/architecture/today.md`)
+
+---
+
+### Task 1: `task-detail-panel.tsx` 재작성
+
+**Files:**
+- Rewrite: `src/components/tasks/task-detail-panel.tsx` (파일명·컴포넌트명·기존 props 유지, `tasks?`/`issues?` 추가)
+
+- [ ] **Step 1: 컴포넌트 전체를 아래 코드로 교체**
+
+참고: 작성 전에 `src/components/tasks/add-sub-task-row.tsx`와 `src/components/tasks/deadline-popover.tsx`의 props를 열어 아래 사용부와 일치하는지 확인하고, 다르면 사용부를 그쪽에 맞춘다 (`AddSubTaskRow`는 task-card.tsx:499-503에서 `parentId`/`startOpen`/`onClose`로 사용 중, `DeadlinePopover`는 task-inline-editor.tsx:205-211에서 `value`/`onChange`로 사용 중).
+
+```tsx
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -122,15 +154,9 @@ export function TaskDetailPanel({
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const savedAtTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 같은 task로 이미 필드를 채웠는지 추적 — save()의 setFetchedTask나 백그라운드
-  // 재검증이 같은 id로 다시 도착해도 입력 중인 필드를 서버 값으로 덮지 않게 한다.
-  const syncedIdRef = useRef<string | null>(null);
-
-  // task 전환 시 1회만 필드 동기화. 같은 task 재도착(저장/재검증)은 무시.
+  // taskId가 바뀌거나(모달 전환 포함) 재검증 결과가 도착하면 필드 동기화.
   useEffect(() => {
     if (!task) return;
-    if (syncedIdRef.current === task.id) return;
-    syncedIdRef.current = task.id;
     setTitle(task.title);
     setDescription(task.description ?? '');
     setStatus(task.status);
@@ -140,12 +166,13 @@ export function TaskDetailPanel({
     setCompletedAt(isoToLocalDateTime(task.completed_at));
     setFollowUpNote(task.follow_up_note ?? '');
     setShowExtras(!!(task.delegate_to || task.follow_up_note));
-  }, [task]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task?.id, fetchedTask]);
 
   // 백그라운드 재검증 — 시드가 있으면 화면은 이미 그려져 있고, 이 fetch는
   // 조용히 최신화만 한다. 시드가 없을 때(딥링크성 진입)만 스켈레톤.
   useEffect(() => {
-    if (!taskId) { syncedIdRef.current = null; return; }
+    if (!taskId) return;
     let cancelled = false;
     setFetchedTask(null);
     setAddingSub(false);
@@ -274,13 +301,6 @@ export function TaskDetailPanel({
     });
   };
 
-  // 모달 안에서 하위 task를 만든 직후 children에 바로 보이게 pool만 재요청.
-  const refreshPool = () => {
-    apiFetch<Task[]>('/api/tasks?deleted=false', { suppressToast: true })
-      .then(ts => setFetchedPool(ts))
-      .catch(() => {});
-  };
-
   // 하위/부모/형제 줄 공통 렌더러.
   const relationRow = (t: Task) => (
     <button
@@ -313,9 +333,7 @@ export function TaskDetailPanel({
   return (
     <>
       <Dialog open={!!taskId} onOpenChange={(open) => { if (!open) onClose(); }}>
-        {/* 닫기 X 없음 (사용자 결정 2026-06-05) — 바깥 클릭·ESC로만 닫는다.
-          * X를 두면 제목 첫 줄이 X를 피해 좁아져 어색했음. */}
-        <DialogContent showCloseButton={false} className="!max-w-xl w-full max-h-[85vh] overflow-y-auto p-6 gap-0">
+        <DialogContent className="!max-w-xl w-full max-h-[85vh] overflow-y-auto p-6 gap-0">
           {/* 접근성용 제목 — 시각적 헤더는 본문의 로고+제목이 담당. */}
           <DialogHeader className="sr-only">
             <DialogTitle>{task ? task.title : 'TASK 상세'}</DialogTitle>
@@ -329,12 +347,24 @@ export function TaskDetailPanel({
             </div>
           ) : (
             <div className="space-y-5">
-              {/* ── 헤더: 제목 전폭 + 메타 줄 맨 앞 브랜드 로고(출처).
-                * 로고를 제목 옆에 두면 본문과 시작선이 어긋나 좌측 여백이
-                * 과해짐(사용자 피드백 2026-06-05) — 메타 줄로 내려 전 섹션을
-                * 왼쪽 끝 단일 정렬로. 출처 텍스트는 쓰지 않는다. ── */}
+              {/* 저장 인디케이터 — 우상단 X 옆에 떠 있게 절대배치 */}
+              <div className="absolute top-4 right-12 h-6 flex items-center">
+                {savedAt !== null && (
+                  <span className="text-[11px] text-primary inline-flex items-center gap-1 animate-in fade-in">
+                    <Check className="h-3 w-3" /> 저장됨
+                  </span>
+                )}
+                {saving && savedAt === null && (
+                  <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1 animate-in fade-in">
+                    <Loader2 className="h-3 w-3 animate-spin" /> 저장 중…
+                  </span>
+                )}
+              </div>
+
+              {/* ── 헤더: 브랜드 로고(출처) + 제목. 출처 텍스트는 쓰지 않는다 ── */}
               <div>
-                <div className="flex items-start">
+                <div className="flex items-start gap-2.5">
+                  <SourceIcon source={task.source} className="mt-[7px] [&_svg]:h-[20px] [&_svg]:w-[20px]" />
                   <Textarea
                     value={title}
                     rows={1}
@@ -350,15 +380,11 @@ export function TaskDetailPanel({
                         save(patch);
                       }
                     }}
-                    // 설명 박스와 동일한 기본 Textarea 테두리/패딩 — 좌우 라인이
-                    // 다른 박스들과 픽셀 단위로 일치 (-ml-2 bleed는 좌 8px 튀고
-                    // 우 8px 모자라는 원인이라 폐기, 사용자 피드백 2026-06-05).
-                    className="text-[19px] md:text-[19px] font-extrabold tracking-[-0.035em] leading-tight resize-none min-h-0"
+                    className="text-[19px] md:text-[19px] font-extrabold tracking-[-0.035em] leading-tight resize-none min-h-0 bg-transparent dark:bg-transparent border border-transparent hover:border-border focus:border-border px-2 py-1 -ml-2 rounded transition-colors shadow-none focus-visible:ring-1"
                     aria-label="제목"
                   />
                 </div>
-                <div className="flex items-center gap-2 mt-1.5 text-[12px] text-muted-foreground">
-                  <SourceIcon source={task.source} className="text-[15px]" />
+                <div className="flex items-center gap-2 mt-1 ml-[30px] text-[12px] text-muted-foreground">
                   <span>{formatDate(task.created_at, 'M월 d일')} 등록</span>
                   {openUrl && (
                     <>
@@ -373,20 +399,6 @@ export function TaskDetailPanel({
                       </a>
                     </>
                   )}
-                  {/* 저장 인디케이터 — X 제거 후 메타 줄 오른쪽 끝에 상주 (절대배치였던
-                    * 우상단 자리는 제목과 겹쳐서 폐기). */}
-                  <span className="ml-auto h-4 inline-flex items-center">
-                    {savedAt !== null && (
-                      <span className="text-[11px] text-primary inline-flex items-center gap-1 animate-in fade-in">
-                        <Check className="h-3 w-3" /> 저장됨
-                      </span>
-                    )}
-                    {saving && savedAt === null && (
-                      <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1 animate-in fade-in">
-                        <Loader2 className="h-3 w-3 animate-spin" /> 저장 중…
-                      </span>
-                    )}
-                  </span>
                 </div>
               </div>
 
@@ -561,7 +573,7 @@ export function TaskDetailPanel({
                       <AddSubTaskRow
                         parentId={task.id}
                         startOpen
-                        onClose={() => { setAddingSub(false); refreshPool(); }}
+                        onClose={() => setAddingSub(false)}
                       />
                     </div>
                   ) : (
@@ -589,9 +601,7 @@ export function TaskDetailPanel({
                   }}
                   rows={2}
                   placeholder="task 설명…"
-                  // 박스 테두리가 ISSUE/하위 박스와 같은 좌측 라인에 서도록
-                  // 기본 스타일 사용 — bleed(-ml-2)는 좌측이 8px 튀어서 폐기.
-                  className="mt-1"
+                  className="mt-1 bg-transparent dark:bg-transparent border border-transparent hover:border-border focus:border-border shadow-none focus-visible:ring-1 px-2 -ml-2 transition-colors"
                 />
               </div>
 
@@ -664,16 +674,14 @@ export function TaskDetailPanel({
               <div className="flex items-center gap-2 pt-3 border-t border-border/60">
                 <Button
                   type="button" variant="ghost" size="sm"
-                  // -ml-3 = ghost 버튼 안쪽 px-3 보정 — 아이콘이 본문 좌측 라인에 맞게.
-                  className="-ml-3 text-muted-foreground hover:text-foreground"
+                  className="text-muted-foreground hover:text-foreground"
                   onClick={handlePend}
                 >
                   <PauseCircle className="h-4 w-4 mr-1" /> 보류
                 </Button>
                 <Button
                   type="button" variant="ghost" size="sm"
-                  // -mr-3 = ghost 버튼 안쪽 px-3 보정 — 글자가 본문 우측 라인에 맞게.
-                  className="ml-auto -mr-3 text-muted-foreground hover:text-destructive"
+                  className="ml-auto text-muted-foreground hover:text-destructive"
                   onClick={() => setConfirmDelete(true)}
                 >
                   <Trash2 className="h-4 w-4 mr-1" /> 휴지통
@@ -707,3 +715,165 @@ export function TaskDetailPanel({
     </>
   );
 }
+```
+
+구현 시 주의:
+- `SourceIcon`은 내부 svg가 14px 고정이므로 `[&_svg]:h-[20px] [&_svg]:w-[20px]` 클래스 오버라이드가 실제로 적용되는지 확인. 안 되면 `SourceIcon`에 기존 `className` prop을 그대로 쓰되 14px로 타협하지 말고, `source-icon.tsx`의 svg 클래스를 `h-[14px] w-[14px]` → `h-[1em] w-[1em]` + 래퍼 `text-[14px]` 기본값으로 바꿔 크기를 호출부가 정할 수 있게 한다 (manual 점도 동일 비율 확대).
+- `PopoverTrigger render={...}` 패턴은 base-ui 기반 shadcn v4 문법 — `task-inline-editor.tsx:172-179`와 동일하게.
+- 모달 안 `AddSubTaskRow`는 생성 후 `task-created` 이벤트로 페이지가 갱신되고, 모달 pool은 `task-updated`/재열기로 따라온다. 생성 직후 children에 바로 보이게 하려면 `onClose` 시 `apiFetch<Task[]>('/api/tasks?deleted=false')`로 pool만 재요청 (`setFetchedPool`).
+
+- [ ] **Step 2: 빌드 확인**
+
+Run: `npm run build`
+Expected: exit 0 (타입 에러 0). 실패 시 위 주의사항(컴포넌트 props 불일치)부터 의심.
+
+- [ ] **Step 3: 커밋**
+
+```bash
+git add src/components/tasks/task-detail-panel.tsx src/components/tasks/source-icon.tsx
+git commit -m "feat: TASK 상세 모달 전면 개편 — 즉시 렌더 + edit-in-place + 위계 뱃지 (스펙 2026-06-05)"
+```
+
+---
+
+### Task 2: 호출부 4곳에서 `tasks`/`issues` 전달 (즉시 렌더 와이어링)
+
+**Files:**
+- Modify: `src/app/today/page.tsx:666-671`
+- Modify: `src/app/inbox/page.tsx:1034-1039`
+- Modify: `src/app/issues/[id]/page.tsx:419-424`
+- Modify: `src/app/history/page.tsx:477-482`
+
+- [ ] **Step 1: today/page.tsx — `tasks`·`issues` state를 그대로 전달**
+
+```tsx
+      <TaskDetailPanel
+        taskId={selectedDetailTaskId}
+        onClose={() => setSelectedDetailTaskId(null)}
+        onTaskUpdated={fetchAll}
+        onNavigate={(id) => setSelectedDetailTaskId(id)}
+        tasks={tasks}
+        issues={issues}
+      />
+```
+
+- [ ] **Step 2: inbox/page.tsx — 동일 패턴**
+
+```tsx
+      <TaskDetailPanel
+        taskId={selectedDetailTaskId}
+        onClose={() => setSelectedDetailTaskId(null)}
+        onTaskUpdated={fetchTasks}
+        onNavigate={(id) => setSelectedDetailTaskId(id)}
+        tasks={tasks}
+        issues={issues}
+      />
+```
+
+- [ ] **Step 3: issues/[id]/page.tsx — task 목록만 전달 (이 페이지의 `tasks`는 해당 이슈 소속 전체)**
+
+이 파일 상단에서 이슈 단건을 어떤 state로 들고 있는지 확인해 (`useState<Issue...`) 있으면 `issues={[그 이슈]}` 형태로 전달, 모호하면 `issues`는 생략 (모달이 백그라운드 fetch로 채움).
+
+```tsx
+      <TaskDetailPanel
+        taskId={selectedDetailTaskId}
+        onClose={() => setSelectedDetailTaskId(null)}
+        onTaskUpdated={fetchAll}
+        onNavigate={(tid) => setSelectedDetailTaskId(tid)}
+        tasks={tasks}
+      />
+```
+
+- [ ] **Step 4: history/page.tsx — 월 범위 `tasks` 전달**
+
+`globalTasks`는 검색 중에만 채워지는 lazy 목록이므로 쓰지 않는다. 월 범위 `tasks`로도 클릭된 task의 시드는 항상 잡히고(목록에서 클릭했으므로), 관계는 모달의 백그라운드 pool fetch가 채운다.
+
+```tsx
+      <TaskDetailPanel
+        taskId={selectedTaskId}
+        onClose={() => setSelectedTaskId(null)}
+        onTaskUpdated={fetchAll}
+        onNavigate={(id) => setSelectedTaskId(id)}
+        tasks={tasks}
+        issues={issues}
+      />
+```
+
+- [ ] **Step 5: 빌드 확인**
+
+Run: `npm run build`
+Expected: exit 0
+
+- [ ] **Step 6: 커밋**
+
+```bash
+git add src/app/today/page.tsx src/app/inbox/page.tsx "src/app/issues/[id]/page.tsx" src/app/history/page.tsx
+git commit -m "feat: 상세 모달에 페이지 보유 tasks/issues 전달 — 네트워크 대기 없는 첫 페인트"
+```
+
+---
+
+### Task 3: 아키텍처 문서 갱신
+
+**Files:**
+- Modify: `docs/architecture/inline-editing.md` (상세 모달 계약 섹션 추가)
+
+- [ ] **Step 1: inline-editing.md 끝에 아래 섹션 추가**
+
+```markdown
+## TaskDetailPanel (상세 모달) 계약 — 2026-06-05 개편
+
+- **즉시 렌더**: `tasks` prop에서 시드를 찾아 네트워크 없이 첫 페인트. 백그라운드에서
+  단건 task + 전체 pool(`/api/tasks?deleted=false`) + issues를 재검증해 조용히 갱신.
+  스켈레톤은 시드가 없는 진입(딥링크성)에서만.
+- **edit-in-place 자동 저장**: 저장 버튼 없음. 모든 필드는 blur/선택 시 per-field PATCH —
+  TaskInlineEditor와 동일 라이프사이클(저장 중/저장됨 인디케이터, `task-updated` dispatch,
+  노션発 제목 수정 시 `name_locked`, 완료 전환 시 promptNextInTodayIfNeeded).
+- **위계 뱃지**: 보라 `ISSUE` 뱃지 줄(top-level만, 클릭 시 /issues/[id] 이동 + 변경/분리),
+  회색 `하위 TASK` 구역("N개 중 M개 완료" — 분모는 취소 제외, issueTaskProgress 규약과 동일),
+  sub-TASK는 `부모 TASK` 카드 + 형제 목록. 줄 클릭 = onNavigate로 모달 내용 전환.
+- **출처**: 제목 옆 `SourceIcon` 20px (표시 전용 예외 그대로). 출처 텍스트("Slack에서 옴")는
+  쓰지 않는다 — 사용자 명시 결정. 메타 줄은 `등록일 · 원본 열기 ↗`(sourceOpenUrl).
+```
+
+- [ ] **Step 2: 커밋**
+
+```bash
+git add docs/architecture/inline-editing.md
+git commit -m "docs: 상세 모달 개편 계약을 inline-editing.md에 기록"
+```
+
+---
+
+### Task 4: 검증 (배포 전 필수)
+
+- [ ] **Step 1: 린트**
+
+Run: `npm run lint`
+Expected: 신규 경고/에러 0 (기존 베이스라인과 비교)
+
+- [ ] **Step 2: 빌드**
+
+Run: `npm run build`
+Expected: exit 0
+
+- [ ] **Step 3: 수동 체크리스트 (dev 서버)**
+
+Run: `npm run dev` 후 브라우저에서:
+
+1. `/inbox`에서 카드 클릭 → 모달 본문이 **스켈레톤 없이 즉시** 보인다 (네트워크 throttle Slow 3G로도 본문 즉시, 관계 구역만 잠깐 placeholder).
+2. 슬랙/노션/JIRA/직접입력 task 각각 열어 제목 옆 로고 확인, "Slack에서 옴" 류 텍스트 없음, "원본 열기 ↗" 동작 (직접 입력은 링크 자체가 없음).
+3. 제목 수정 → blur → "저장됨" 표시, 리스트에 반영. 노션 task 제목 수정 후에도 노션 sync가 이름을 되돌리지 않음(name_locked).
+4. 상태 칩 → 완료 선택 → 오늘 묶음에 있던 task면 prompt-next 토스트.
+5. 마감 칩 변경(D-n 갱신), 요청자 칩, ☀ 오늘 토글 각각 자동 저장.
+6. 하위 task 있는 TASK: "N개 중 M개 완료" + 진행률 바, 취소 상태 하위는 분모 제외. "상세 보기 ›" → 모달 전환, 그 sub-TASK에서 부모 TASK 카드로 복귀.
+7. sub-TASK에 ISSUE 연결 UI가 **안 보임** (부모 경유 invariant).
+8. "＋ 하위 task 추가" → 생성 → 구역에 반영.
+9. ISSUE 줄 클릭 → `/issues/[id]` 이동, 변경/분리 동작. 미연결 TASK는 "ISSUE 연결" 버튼.
+10. 보류 → 모달 닫힘 + 토스트 되돌리기. 휴지통 → 확인 다이얼로그 → 삭제.
+11. `/today`, `/issues/[id]`, `/history`에서도 1·6 재확인.
+
+- [ ] **Step 4: 미커밋 변경 없으면 종료**
+
+Run: `git status`
+Expected: clean (Task 1~3에서 모두 커밋됨). 이 브랜치는 `feat/issue-task-hierarchy` — 배포는 사용자 지시 후 CLAUDE.md 배포 프로세스(커밋→푸시→빌드 검증→배포) 순서로.

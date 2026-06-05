@@ -75,3 +75,19 @@ onSelect: (id) => setEditingTaskId(prev => (prev === id ? null : id))
 - `src/components/tasks/task-inline-editor.tsx` — 전체 에디터 + 저장 라이프사이클
 - `src/components/tasks/task-branch.tsx` — TaskCard에 `editing`/`onCloseEdit` 전달
 - `src/app/page.tsx`, `src/app/today/page.tsx`, `src/app/issues/[id]/page.tsx` — `editingTaskId` state
+
+## TaskDetailPanel (상세 모달) 계약 — 2026-06-05 개편
+
+- **즉시 렌더**: `tasks` prop에서 시드를 찾아 네트워크 없이 첫 페인트. 백그라운드에서
+  단건 task + 전체 pool(`/api/tasks?deleted=false`) + issues를 재검증해 조용히 갱신.
+  스켈레톤은 시드가 없는 진입(딥링크성)에서만. 필드 동기화는 task 전환 시 1회만
+  (`syncedIdRef`) — 저장/재검증 재도착이 입력 중인 값을 덮어쓰지 않는다.
+- **edit-in-place 자동 저장**: 저장 버튼 없음. 모든 필드는 blur/선택 시 per-field PATCH —
+  TaskInlineEditor와 동일 라이프사이클(저장 중/저장됨 인디케이터, `task-updated` dispatch,
+  노션発 제목 수정 시 `name_locked`, 완료 전환 시 promptNextInTodayIfNeeded).
+- **위계 뱃지**: 보라 `ISSUE` 뱃지 줄(top-level만, 클릭 시 /issues/[id] 이동 + 변경/분리),
+  회색 `하위 TASK` 구역("N개 중 M개 완료" — 분모는 취소 제외, issueTaskProgress 규약과 동일),
+  sub-TASK는 `부모 TASK` 카드 + 형제 목록. 줄 클릭 = onNavigate로 모달 내용 전환.
+- **출처**: 제목 옆 `SourceIcon` 20px (표시 전용 예외 그대로 — svg는 `1em` 기반으로 호출부가
+  크기 결정, 기본 14px). 출처 텍스트("Slack에서 옴")는 쓰지 않는다 — 사용자 명시 결정.
+  메타 줄은 `등록일 · 원본 열기 ↗`(sourceOpenUrl).

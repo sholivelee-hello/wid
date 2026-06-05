@@ -418,6 +418,8 @@ export default function IssueDetailPage({ params }: { params: Promise<{ id: stri
 
       <TaskDetailPanel
         taskId={selectedDetailTaskId}
+        tasks={tasks}
+        issues={issue ? [issue] : []}
         onClose={() => setSelectedDetailTaskId(null)}
         onTaskUpdated={fetchAll}
         onNavigate={(tid) => setSelectedDetailTaskId(tid)}

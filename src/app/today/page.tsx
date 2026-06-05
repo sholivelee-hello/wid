@@ -665,6 +665,8 @@ export default function TodayPage() {
         * up to the parent without closing the drawer. */}
       <TaskDetailPanel
         taskId={selectedDetailTaskId}
+        tasks={tasks}
+        issues={issues}
         onClose={() => setSelectedDetailTaskId(null)}
         onTaskUpdated={fetchAll}
         onNavigate={(id) => setSelectedDetailTaskId(id)}

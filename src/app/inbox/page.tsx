@@ -1033,6 +1033,8 @@ function InboxPageInner() {
         * siblings / children + full edit fields without leaving the page. */}
       <TaskDetailPanel
         taskId={selectedDetailTaskId}
+        tasks={tasks}
+        issues={issues}
         onClose={() => setSelectedDetailTaskId(null)}
         onTaskUpdated={fetchTasks}
         onNavigate={(id) => setSelectedDetailTaskId(id)}
