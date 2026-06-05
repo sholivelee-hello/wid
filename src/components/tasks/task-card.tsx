@@ -416,12 +416,14 @@ export function TaskCard({
                   // 긴 제목은 잘리지 않고 끝까지 줄바꿈으로 보여준다 (사용자 요청).
                   // 첫 줄 정렬 기준이 되도록 줄간격은 snug 유지.
                   'leading-snug whitespace-normal break-words tracking-[-0.012em]',
+                  // 2026-06-05 사용자 피드백: light/60·subtask/80이 너무 흐릿 —
+                  // 위계는 폰트 크기·굵기가 이미 담당하므로 투명도 바닥을 올린다.
                   isSubtask
-                    ? 'text-[14px] font-normal text-foreground/80'
+                    ? 'text-[14px] font-normal text-foreground/90'
                     : weight === 'heavy'
                       ? 'text-[15px] font-bold text-foreground'
                       : weight === 'light'
-                        ? 'text-[14px] font-normal text-foreground/60'
+                        ? 'text-[14px] font-normal text-foreground/80'
                         : hasChildren
                           ? 'text-[15px] font-semibold text-foreground'
                           : 'text-[15px] font-medium text-foreground',
