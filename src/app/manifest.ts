@@ -9,7 +9,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: '개인 업무일지 시스템',
     start_url: '/',
     display: 'standalone',
-    background_color: '#ffffff',
+    // 다크 전용 앱 — 설치형 시작 화면(splash)도 본문 배경색과 동일하게.
+    background_color: '#161621',
     theme_color: '#7D74F8',
     icons: [
       { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },

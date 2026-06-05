@@ -115,21 +115,24 @@
 
 .dark {
   /* Dark variant — periwinkle indigo 키컬러를 어두운 환경으로 이식.
-   * primary는 밝기 올려(0.73) 어두운 bg에서 대비 확보. */
-  --background: oklch(0.155 0.014 282);
-  --foreground: oklch(0.94 0.006 220);
-  --card: oklch(0.205 0.016 282);
-  --card-foreground: oklch(0.94 0.006 220);
-  --popover: oklch(0.215 0.016 282);
-  --popover-foreground: oklch(0.94 0.006 220);
+   * primary는 밝기 올려(0.73) 어두운 bg에서 대비 확보.
+   * 2026-06-05 사용자 요청: bg를 #161621(≈oklch 0.206 0.022 285)로 — 기존보다
+   * 한 단계 밝고 보라끼 있는 네이비. 표면 위계(card/popover/muted/sidebar)는
+   * 같은 간격으로 동반 상승, 텍스트(foreground/muted-foreground)도 더 밝게. */
+  --background: #161621;
+  --foreground: oklch(0.97 0.005 220);
+  --card: oklch(0.25 0.020 284);
+  --card-foreground: oklch(0.97 0.005 220);
+  --popover: oklch(0.26 0.020 284);
+  --popover-foreground: oklch(0.97 0.005 220);
   --primary: oklch(0.73 0.17 282);
   --primary-foreground: oklch(0.13 0.02 282);
-  --secondary: oklch(0.265 0.016 282);
-  --secondary-foreground: oklch(0.90 0.007 220);
-  --muted: oklch(0.248 0.014 282);
-  --muted-foreground: oklch(0.68 0.014 220);
-  --accent: oklch(0.29 0.055 282);
-  --accent-foreground: oklch(0.90 0.045 282);
+  --secondary: oklch(0.305 0.020 284);
+  --secondary-foreground: oklch(0.93 0.007 220);
+  --muted: oklch(0.29 0.018 284);
+  --muted-foreground: oklch(0.74 0.013 220);
+  --accent: oklch(0.33 0.055 282);
+  --accent-foreground: oklch(0.93 0.045 282);
   --destructive: oklch(0.68 0.20 22);
   --border: oklch(1 0 0 / 13%);
   --input: oklch(1 0 0 / 15%);
@@ -141,12 +144,12 @@
   --chart-4: oklch(0.55 0.06 282);
   --chart-5: oklch(0.78 0.04 282);
   --color-shadow: rgba(0, 0, 0, 0.42);
-  --sidebar: oklch(0.148 0.020 282);
-  --sidebar-foreground: oklch(0.90 0.006 220);
+  --sidebar: oklch(0.196 0.024 285);
+  --sidebar-foreground: oklch(0.93 0.006 220);
   --sidebar-primary: oklch(0.73 0.17 282);
   --sidebar-primary-foreground: oklch(0.13 0.02 282);
-  --sidebar-accent: oklch(0.228 0.020 282);
-  --sidebar-accent-foreground: oklch(0.90 0.006 220);
+  --sidebar-accent: oklch(0.27 0.024 284);
+  --sidebar-accent-foreground: oklch(0.93 0.006 220);
   --sidebar-border: oklch(1 0 0 / 9%);
   --sidebar-ring: oklch(0.73 0.17 282);
 }
@@ -303,7 +306,7 @@
     border: 1px solid oklch(0.88 0.008 282);
   }
   .dark .surface-soft {
-    background: oklch(0.205 0.016 282);
+    background: oklch(0.25 0.020 284);
     border: 1px solid oklch(1 0 0 / 0.09);
   }
 
@@ -311,7 +314,7 @@
     background: oklch(0.975 0.004 282);
   }
   .dark .surface-soft:where(.is-hoverable):hover {
-    background: oklch(0.225 0.016 282);
+    background: oklch(0.27 0.020 284);
   }
 }
 
