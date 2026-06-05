@@ -122,9 +122,15 @@ export function TaskDetailPanel({
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const savedAtTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // taskId가 바뀌거나(모달 전환 포함) 재검증 결과가 도착하면 필드 동기화.
+  // 같은 task로 이미 필드를 채웠는지 추적 — save()의 setFetchedTask나 백그라운드
+  // 재검증이 같은 id로 다시 도착해도 입력 중인 필드를 서버 값으로 덮지 않게 한다.
+  const syncedIdRef = useRef<string | null>(null);
+
+  // task 전환 시 1회만 필드 동기화. 같은 task 재도착(저장/재검증)은 무시.
   useEffect(() => {
     if (!task) return;
+    if (syncedIdRef.current === task.id) return;
+    syncedIdRef.current = task.id;
     setTitle(task.title);
     setDescription(task.description ?? '');
     setStatus(task.status);
@@ -134,13 +140,12 @@ export function TaskDetailPanel({
     setCompletedAt(isoToLocalDateTime(task.completed_at));
     setFollowUpNote(task.follow_up_note ?? '');
     setShowExtras(!!(task.delegate_to || task.follow_up_note));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [task?.id, fetchedTask]);
+  }, [task]);
 
   // 백그라운드 재검증 — 시드가 있으면 화면은 이미 그려져 있고, 이 fetch는
   // 조용히 최신화만 한다. 시드가 없을 때(딥링크성 진입)만 스켈레톤.
   useEffect(() => {
-    if (!taskId) return;
+    if (!taskId) { syncedIdRef.current = null; return; }
     let cancelled = false;
     setFetchedTask(null);
     setAddingSub(false);
