@@ -313,7 +313,9 @@ export function TaskDetailPanel({
   return (
     <>
       <Dialog open={!!taskId} onOpenChange={(open) => { if (!open) onClose(); }}>
-        <DialogContent className="!max-w-xl w-full max-h-[85vh] overflow-y-auto p-6 gap-0">
+        {/* 닫기 X 없음 (사용자 결정 2026-06-05) — 바깥 클릭·ESC로만 닫는다.
+          * X를 두면 제목 첫 줄이 X를 피해 좁아져 어색했음. */}
+        <DialogContent showCloseButton={false} className="!max-w-xl w-full max-h-[85vh] overflow-y-auto p-6 gap-0">
           {/* 접근성용 제목 — 시각적 헤더는 본문의 로고+제목이 담당. */}
           <DialogHeader className="sr-only">
             <DialogTitle>{task ? task.title : 'TASK 상세'}</DialogTitle>
@@ -327,25 +329,10 @@ export function TaskDetailPanel({
             </div>
           ) : (
             <div className="space-y-5">
-              {/* 저장 인디케이터 — 우상단 X 옆에 떠 있게 절대배치 */}
-              <div className="absolute top-4 right-12 h-6 flex items-center">
-                {savedAt !== null && (
-                  <span className="text-[11px] text-primary inline-flex items-center gap-1 animate-in fade-in">
-                    <Check className="h-3 w-3" /> 저장됨
-                  </span>
-                )}
-                {saving && savedAt === null && (
-                  <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1 animate-in fade-in">
-                    <Loader2 className="h-3 w-3 animate-spin" /> 저장 중…
-                  </span>
-                )}
-              </div>
-
-              {/* ── 헤더: 브랜드 로고(출처) + 제목. 출처 텍스트는 쓰지 않는다 ── */}
+              {/* ── 헤더: 브랜드 로고(출처) + 제목. 출처 텍스트는 쓰지 않는다.
+                * 닫기 X가 없으므로 제목이 전폭을 쓴다. ── */}
               <div>
-                {/* pr-14 — 우상단 닫기 X(top-2 right-2)·저장 인디케이터(right-12)와
-                  * 제목 입력칸이 겹치지 않게 첫 줄만 오른쪽 여백 확보. */}
-                <div className="flex items-start gap-2.5 pr-14">
+                <div className="flex items-start gap-2.5">
                   <SourceIcon source={task.source} className="mt-[7px] text-[20px]" />
                   <Textarea
                     value={title}
@@ -381,6 +368,20 @@ export function TaskDetailPanel({
                       </a>
                     </>
                   )}
+                  {/* 저장 인디케이터 — X 제거 후 메타 줄 오른쪽 끝에 상주 (절대배치였던
+                    * 우상단 자리는 제목과 겹쳐서 폐기). */}
+                  <span className="ml-auto h-4 inline-flex items-center">
+                    {savedAt !== null && (
+                      <span className="text-[11px] text-primary inline-flex items-center gap-1 animate-in fade-in">
+                        <Check className="h-3 w-3" /> 저장됨
+                      </span>
+                    )}
+                    {saving && savedAt === null && (
+                      <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1 animate-in fade-in">
+                        <Loader2 className="h-3 w-3 animate-spin" /> 저장 중…
+                      </span>
+                    )}
+                  </span>
                 </div>
               </div>
 
