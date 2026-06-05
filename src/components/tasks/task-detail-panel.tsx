@@ -350,7 +350,10 @@ export function TaskDetailPanel({
                         save(patch);
                       }
                     }}
-                    className="text-[19px] md:text-[19px] font-extrabold tracking-[-0.035em] leading-tight resize-none min-h-0 bg-transparent dark:bg-transparent border border-transparent hover:border-border focus:border-border px-2 py-1 -ml-2 rounded transition-colors shadow-none focus-visible:ring-1"
+                    // 설명 박스와 동일한 기본 Textarea 테두리/패딩 — 좌우 라인이
+                    // 다른 박스들과 픽셀 단위로 일치 (-ml-2 bleed는 좌 8px 튀고
+                    // 우 8px 모자라는 원인이라 폐기, 사용자 피드백 2026-06-05).
+                    className="text-[19px] md:text-[19px] font-extrabold tracking-[-0.035em] leading-tight resize-none min-h-0"
                     aria-label="제목"
                   />
                 </div>
