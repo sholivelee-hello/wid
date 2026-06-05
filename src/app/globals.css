@@ -130,7 +130,8 @@
   --secondary: oklch(0.305 0.020 284);
   --secondary-foreground: oklch(0.93 0.007 220);
   --muted: oklch(0.29 0.018 284);
-  --muted-foreground: oklch(0.74 0.013 220);
+  /* 2026-06-05 사용자 피드백: 0.74(≈#999CA0)도 어둡다 → 0.82로 추가 상향. */
+  --muted-foreground: oklch(0.82 0.012 220);
   --accent: oklch(0.33 0.055 282);
   --accent-foreground: oklch(0.93 0.045 282);
   --destructive: oklch(0.68 0.20 22);
