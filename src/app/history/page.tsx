@@ -476,6 +476,8 @@ export default function HistoryPage() {
 
       <TaskDetailPanel
         taskId={selectedTaskId}
+        tasks={tasks}
+        issues={issues}
         onClose={() => setSelectedTaskId(null)}
         onTaskUpdated={fetchAll}
         onNavigate={(id) => setSelectedTaskId(id)}
