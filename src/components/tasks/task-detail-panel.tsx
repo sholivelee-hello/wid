@@ -586,7 +586,9 @@ export function TaskDetailPanel({
                   }}
                   rows={2}
                   placeholder="task 설명…"
-                  className="mt-1 bg-transparent dark:bg-transparent border border-transparent hover:border-border focus:border-border shadow-none focus-visible:ring-1 px-2 -ml-2 transition-colors"
+                  // 박스 테두리가 ISSUE/하위 박스와 같은 좌측 라인에 서도록
+                  // 기본 스타일 사용 — bleed(-ml-2)는 좌측이 8px 튀어서 폐기.
+                  className="mt-1"
                 />
               </div>
 
@@ -659,14 +661,16 @@ export function TaskDetailPanel({
               <div className="flex items-center gap-2 pt-3 border-t border-border/60">
                 <Button
                   type="button" variant="ghost" size="sm"
-                  className="text-muted-foreground hover:text-foreground"
+                  // -ml-3 = ghost 버튼 안쪽 px-3 보정 — 아이콘이 본문 좌측 라인에 맞게.
+                  className="-ml-3 text-muted-foreground hover:text-foreground"
                   onClick={handlePend}
                 >
                   <PauseCircle className="h-4 w-4 mr-1" /> 보류
                 </Button>
                 <Button
                   type="button" variant="ghost" size="sm"
-                  className="ml-auto text-muted-foreground hover:text-destructive"
+                  // -mr-3 = ghost 버튼 안쪽 px-3 보정 — 글자가 본문 우측 라인에 맞게.
+                  className="ml-auto -mr-3 text-muted-foreground hover:text-destructive"
                   onClick={() => setConfirmDelete(true)}
                 >
                   <Trash2 className="h-4 w-4 mr-1" /> 휴지통
