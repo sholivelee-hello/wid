@@ -343,7 +343,9 @@ export function TaskDetailPanel({
 
               {/* ── 헤더: 브랜드 로고(출처) + 제목. 출처 텍스트는 쓰지 않는다 ── */}
               <div>
-                <div className="flex items-start gap-2.5">
+                {/* pr-14 — 우상단 닫기 X(top-2 right-2)·저장 인디케이터(right-12)와
+                  * 제목 입력칸이 겹치지 않게 첫 줄만 오른쪽 여백 확보. */}
+                <div className="flex items-start gap-2.5 pr-14">
                   <SourceIcon source={task.source} className="mt-[7px] text-[20px]" />
                   <Textarea
                     value={title}
