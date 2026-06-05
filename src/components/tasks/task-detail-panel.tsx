@@ -329,11 +329,12 @@ export function TaskDetailPanel({
             </div>
           ) : (
             <div className="space-y-5">
-              {/* ── 헤더: 브랜드 로고(출처) + 제목. 출처 텍스트는 쓰지 않는다.
-                * 닫기 X가 없으므로 제목이 전폭을 쓴다. ── */}
+              {/* ── 헤더: 제목 전폭 + 메타 줄 맨 앞 브랜드 로고(출처).
+                * 로고를 제목 옆에 두면 본문과 시작선이 어긋나 좌측 여백이
+                * 과해짐(사용자 피드백 2026-06-05) — 메타 줄로 내려 전 섹션을
+                * 왼쪽 끝 단일 정렬로. 출처 텍스트는 쓰지 않는다. ── */}
               <div>
-                <div className="flex items-start gap-2.5">
-                  <SourceIcon source={task.source} className="mt-[7px] text-[20px]" />
+                <div className="flex items-start">
                   <Textarea
                     value={title}
                     rows={1}
@@ -353,7 +354,8 @@ export function TaskDetailPanel({
                     aria-label="제목"
                   />
                 </div>
-                <div className="flex items-center gap-2 mt-1 ml-[30px] text-[12px] text-muted-foreground">
+                <div className="flex items-center gap-2 mt-1.5 text-[12px] text-muted-foreground">
+                  <SourceIcon source={task.source} className="text-[15px]" />
                   <span>{formatDate(task.created_at, 'M월 d일')} 등록</span>
                   {openUrl && (
                     <>
@@ -385,10 +387,6 @@ export function TaskDetailPanel({
                 </div>
               </div>
 
-              {/* 본문 정렬 래퍼 — 헤더의 로고(20px)+간격(10px) 때문에 제목 글자가
-                * 30px에서 시작하므로, 아래 모든 섹션을 같은 시작선에 맞춘다
-                * (사용자 피드백 2026-06-05: 좌측 라인 들쭉날쭉). 푸터는 전폭 유지. */}
-              <div className="ml-[30px] space-y-5">
               {/* ── 칩 줄: 상태 / 마감(D-n) / 요청자 / 오늘 — 전부 그 자리 수정 ── */}
               <div className="flex items-center gap-1.5 flex-wrap">
                 <Popover open={statusOpen} onOpenChange={setStatusOpen}>
@@ -655,8 +653,6 @@ export function TaskDetailPanel({
                     </div>
                   </div>
                 )}
-              </div>
-
               </div>
 
               {/* ── 푸터: 가벼운 액션만. 저장 버튼 없음 (자동 저장) ── */}
