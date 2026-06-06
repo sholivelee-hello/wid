@@ -4,17 +4,9 @@ import { usePathname } from 'next/navigation';
 import { buttonVariants } from '@/components/ui/button';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { Plus, Menu, ChevronsDownUp, ChevronsUpDown, Settings } from 'lucide-react';
+import { Plus, ChevronsDownUp, ChevronsUpDown, Settings } from 'lucide-react';
 import { broadcastTreeSetAll } from '@/lib/use-tree-collapsed';
-import {
-  Sheet,
-  SheetContent,
-  SheetTrigger,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
-import { navItems } from '@/lib/nav-items';
 import { useQuickCapture } from '@/components/tasks/quick-capture-provider';
 import { SyncButton } from '@/components/layout/sync-button';
 
@@ -40,58 +32,7 @@ export function Header() {
     <>
       <header className="sticky top-0 z-30 h-14 border-b border-border bg-background/90 dark:bg-background/85 backdrop-blur-md backdrop-saturate-150 flex items-center justify-between px-4 md:px-6">
         <div className="flex items-center gap-2">
-          {/* Mobile menu trigger */}
-          <Sheet>
-            <SheetTrigger
-              className={cn(
-                buttonVariants({ variant: 'ghost', size: 'icon' }),
-                'lg:hidden'
-              )}
-              aria-label="메뉴 열기"
-            >
-              <Menu className="h-5 w-5" />
-            </SheetTrigger>
-            <SheetContent side="left" className="w-64 p-0">
-              <SheetHeader className="p-4 border-b">
-                <SheetTitle className="inline-flex items-baseline gap-1 font-black tracking-[-0.055em]">
-                  WID
-                  {/* 키컬러 dot — 사이드바와 동일한 브랜드 시그니처. */}
-                  <span
-                    aria-hidden
-                    className="inline-block h-[6px] w-[6px] rounded-full translate-y-[-1px] bg-primary"
-                  />
-                </SheetTitle>
-              </SheetHeader>
-              <nav className="flex flex-col gap-1 p-4">
-                {[...navItems, { href: '/settings', label: '설정', icon: Settings }].map((item) => {
-                  const isActive = pathname.startsWith(item.href);
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={cn(
-                        // 사이드바와 동일 언어: 활성 = pill + 3px 키컬러 레일 + 키컬러 아이콘.
-                        'relative flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                        isActive
-                          ? 'bg-sidebar-accent text-foreground font-semibold'
-                          : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground'
-                      )}
-                    >
-                      {isActive && (
-                        <span aria-hidden className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full bg-primary" />
-                      )}
-                      <item.icon className={cn('h-4 w-4', isActive && 'text-primary')} />
-                      {item.label}
-                    </Link>
-                  );
-                })}
-                {/* 모바일에서도 전역 수동 동기화 — 사이드바와 동일 시각 언어. */}
-                <div className="mt-2 pt-2 border-t border-border">
-                  <SyncButton />
-                </div>
-              </nav>
-            </SheetContent>
-          </Sheet>
+          {/* 햄버거 Sheet 제거 — 모바일 내비는 하단 탭바가 대체 (모바일 spec ④). */}
           <h2 className="text-[15px] font-semibold tracking-[-0.012em]">{title}</h2>
         </div>
         <div className="flex items-center gap-2">
@@ -101,6 +42,7 @@ export function Header() {
             onClick={() => broadcastTreeSetAll(false)}
             aria-label="전체 펼치기"
             title="전체 펼치기"
+            className="hidden lg:flex"
           >
             <ChevronsUpDown className="h-4 w-4" />
           </Button>
@@ -110,16 +52,34 @@ export function Header() {
             onClick={() => broadcastTreeSetAll(true)}
             aria-label="전체 접기"
             title="전체 접기"
+            className="hidden lg:flex"
           >
             <ChevronsDownUp className="h-4 w-4" />
           </Button>
           {!pathname.startsWith('/settings') && (
-            <Button size="sm" variant="ghost" onClick={openModal} title="새 task 추가 (Ctrl+N)">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={openModal}
+              title="새 task 추가 (Ctrl+N)"
+              className="hidden lg:inline-flex"
+            >
               <Plus className="h-4 w-4 mr-1" />
               새 task
               <kbd className="ml-2 hidden sm:inline-flex text-[10px] font-mono bg-foreground/10 px-1 rounded border border-foreground/20">⌘N</kbd>
             </Button>
           )}
+          {/* 모바일 우측 — Sheet 삭제로 잃은 동기화·설정 접근 보존. */}
+          <div className="flex items-center gap-1 lg:hidden">
+            <SyncButton collapsed />
+            <Link
+              href="/settings"
+              aria-label="설정"
+              className={cn(buttonVariants({ variant: 'ghost', size: 'icon' }))}
+            >
+              <Settings className="h-5 w-5" />
+            </Link>
+          </div>
         </div>
       </header>
     </>

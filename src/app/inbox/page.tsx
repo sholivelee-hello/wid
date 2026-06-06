@@ -576,7 +576,7 @@ function InboxPageInner() {
           {...handle.listeners}
           aria-label="끌어서 순서 변경"
           onClick={(e) => e.stopPropagation()}
-          className="mt-4 p-1 -m-1 rounded text-muted-foreground/60 opacity-30 group-hover/row:opacity-100 focus-visible:opacity-100 transition-opacity hover:bg-accent/50 cursor-grab active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          className="touch-none pointer-coarse:hidden mt-4 p-1 -m-1 rounded text-muted-foreground/60 opacity-30 group-hover/row:opacity-100 focus-visible:opacity-100 transition-opacity hover:bg-accent/50 cursor-grab active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
         >
           <GripVertical className="h-3.5 w-3.5" />
         </button>

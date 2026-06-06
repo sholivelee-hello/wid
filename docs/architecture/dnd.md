@@ -115,3 +115,9 @@ depth 변경이 필요한 경우는 인라인 에디터의 ISSUE chip 같은 명
 - `src/components/inbox/inbox-tree.tsx` — DndContext, sensors, onDragEnd, mutation 헬퍼들, SortableIssueItem
 - `src/components/tasks/task-branch.tsx` — SortableTaskItem (render-prop), DragHandle, recursive sub-TASK SortableContext
 - `src/components/issues/issue-row.tsx` — `dragHandleSlot` prop로 grip 받음
+
+## 모바일(터치) 정책 (2026-06-06)
+
+- **폰에서 순서 변경은 지원하지 않는다** (사용자 결정 — spec `2026-06-06-mobile-optimization-design.md`). 구현은 grip 숨김 한 가지: 모든 grip 버튼에 `pointer-coarse:hidden`. 드래그는 activator(grip)에서만 시작되므로 센서·DndContext는 건드리지 않는다.
+- **`touchAction: 'none'`을 sortable 행 전체에 걸지 말 것** — 터치 스크롤이 전부 죽는다(2026-06-06 버그). grip 버튼의 `touch-none` 클래스로만 건다. 새 sortable을 추가할 때 이 규칙을 지킬 것.
+- grip 4곳: `task-branch.tsx` DragHandle, `inbox-tree.tsx` issue grip, `inbox/page.tsx` 평면 리스트 grip, `today/page.tsx` status 그룹 grip — 모두 `touch-none pointer-coarse:hidden`.

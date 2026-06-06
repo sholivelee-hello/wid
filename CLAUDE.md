@@ -9,13 +9,13 @@
 - **이름**: WID (work inbox / dashboard)
 - **목적**: 개인이 노션·슬랙·수동 입력으로 들어오는 일들을 한 인박스에서 처리하고, 시각적 타임라인과 히스토리로 회고하는 앱
 - **범위**: 1인 사용자(personal use). 다인용·SaaS 아님
-- **단계**: v2 구현 완료(`a33ce28` → 개인 메일 author 재작성으로 `ec6dafe`). 이후 인박스 UX 대수술(인라인 에디터, 계층 표시, GCal 임베드, today prompt-next) + **디자인 시스템 v3** 마감. 2026-06-03: IA 단순화 + **/inbox 평면 리스트** 전환(드래그 reorder는 이슈 상세로 이동) + **이슈 페이지 신설**(/issues 목록·상세, 묶음 뷰 전담) + **노션 name_locked**(이름 보호) — `feat/issue-task-hierarchy` 브랜치
+- **단계**: v2 구현 완료(`a33ce28` → 개인 메일 author 재작성으로 `ec6dafe`). 이후 인박스 UX 대수술(인라인 에디터, 계층 표시, GCal 임베드, today prompt-next) + **디자인 시스템 v3** 마감. 2026-06-03: IA 단순화 + **/inbox 평면 리스트** 전환(드래그 reorder는 이슈 상세로 이동) + **이슈 페이지 신설**(/issues 목록·상세, 묶음 뷰 전담) + **노션 name_locked**(이름 보호) — `feat/issue-task-hierarchy` 브랜치. 2026-06-06~07: 모바일 최적화 1·2단계(UX 38→74)
 - **상세 컨텍스트**: `docs/architecture/` (도메인별 invariant·계약·패턴), `docs/superpowers/specs/`, `docs/superpowers/plans/`
 
 ## 기술 스택
 
 - **프론트/백**: Next.js 16+ App Router, TypeScript, Tailwind CSS v4
-- **UI**: shadcn/ui v4 (base-ui 기반)
+- **UI**: shadcn/ui v4 (base-ui 기반) + vaul(모바일 바텀시트 Drawer)
 - **상태관리**: Zustand (타이머), localStorage (캘린더 가시성, 사용자 뷰 등)
 - **데이터**: Supabase 실연결 완료 (2026-04-29). mock 파일 전부 삭제됨. 마이그레이션: `supabase/migrations/001_initial_schema.sql` + `002_hierarchy_and_issues.sql`
 - **외부 연동**: Slack 실연동 완료 (reaction_added → task 생성). Notion (2개 DB 동기화 — env `NOTION_DATABASE_ID_1`/`_2`, name_locked 이름 보호, title 조각 전체 join — 첫 조각만 읽으면 긴 이름 잘림). JIRA 웹훅 실연동 (알림 5종 → task, `/api/jira/webhook?token=` — `docs/architecture/jira.md`). Google Calendar — 서버 OAuth(Authorization Code flow, refresh_token 서버 보관)로 한 번 로그인하면 자동 유지 (env `GOOGLE_CLIENT_SECRET` 필요 — `docs/architecture/calendar-embed.md`)
@@ -30,8 +30,8 @@
 - **컬러**: 단일 키컬러 `#7D74F8` (oklch light `0.63 0.191 282.6` / dark `0.73 0.17 282`). 한 화면 액센트 1개 원칙 — amber/emerald/mustard 잔재 없음. `destructive`(빨강)만 의미적 예외. chart-2~5는 chroma 0.04~0.06 무채색. **다크 배경 = `#161621`** (2026-06-05 사용자 결정 — 기존 0.155보다 한 단계 밝고 보라끼 있는 네이비, ≈oklch 0.206 0.022 285). 표면 위계는 bg 기준 동반 상승(card 0.25 / popover 0.26 / muted 0.29 / sidebar 0.196), 텍스트는 fg 0.97 / muted-fg 0.82로 상향(0.74도 어둡다는 피드백으로 재상향 2026-06-05). manifest splash도 `#161621`.
 - **출처 브랜드 아이콘 예외** (2026-06-03): TASK 출처 식별용 브랜드 아이콘(슬랙 4색 로고, 노션 흰색 단색 N, WID 직접입력 키컬러 점, jira 공식 로고 #2684FF 단색)은 "한 화면 액센트 1개" 원칙의 의도된 예외다. 브랜드 컬러는 `SourceIcon`(`src/components/tasks/source-icon.tsx`) SVG 내부에만, 표시 전용(클릭 동작 없음 — 원본 열기는 우클릭 메뉴 맨 위). 상세 → `docs/architecture/issues.md`.
 - **표면**: 그림자 거의 0. border + `bg-card` / `bg-muted/40`로 위계. `card-hover-lift`는 bg 전환만, transform 없음.
-- **레이아웃**: 페이지 hero h1 안 씀. 콘텐츠 컬럼은 `max-width 860px` 중앙 정렬(`ContentColumn` client 래퍼가 경로별 결정) — 오늘/전체/이슈 공통, **돌아보기(/history)는 전폭 예외**(캘린더+패널 2단 레이아웃). 시작 화면은 `/today`(루트 `/`는 redirect). `/today`는 미세 progress bar 한 줄, `/inbox`(전체)는 상단 보기 칩(진행 중·보류·완료·휴지통) + 인라인 한 줄 요약 + 기본 접힘 도구바 + **평면 리스트**(2026-06-04: grip 드래그 수동 정렬 부활 + 오늘로 보낸 task 숨김 — `docs/architecture/hierarchy.md`), `/issues`는 묶음 뷰(목록·상세), `/history`(돌아보기)는 월 네비게이터만. `/today`는 그룹·개별 TASK 모두 grip 드래그 reorder(`docs/architecture/today.md`). 사이드바는 메뉴 4개(오늘·전체·이슈·돌아보기, 이슈 아이콘 lucide `Folder`) + 하단 설정 톱니바퀴. 큰 숫자는 그 페이지의 단 하나의 핵심 지표에만.
-- **사이드바 = 무채색 면 + 로고 dot** (2026-06-03 갱신, 보라 기둥 폐기): 사용자 결정 — 앱을 100% 다크모드로 사용하며 보라 통판 사이드바가 "옛날 ERP 느낌"이라 폐기. 사이드바는 본문과 거의 같은 어두운 무채색 표면(`bg-sidebar`) + 오른쪽 `border-sidebar-border` hairline으로만 본문과 구분(그림자 0). 브랜드 식별("미션 컨트롤에서 창 구분")은 통판이 아니라 로고 옆 **키컬러 dot 한 점**(`bg-primary`)이 담당. 위계: 활성 = `bg-sidebar-accent` pill + 흰 글자 + **3px 키컬러 레일** + 키컬러 아이콘, 비활성 = `text-muted-foreground` + hover 시 `bg-sidebar-accent/60`. 컬러는 "현재 위치"를 가리키는 레일/아이콘에만 최소량. 카운트 뱃지 = `bg-primary/15 text-primary`. 모바일 헤더 Sheet nav도 동일 언어. 모든 색은 기존 토큰(`--sidebar*`, `primary`, `muted`, `border`)만 사용 — 새 색 없음, 라이트는 토큰으로 자동 따라옴.
+- **레이아웃**: 페이지 hero h1 안 씀. 콘텐츠 컬럼은 `max-width 860px` 중앙 정렬(`ContentColumn` client 래퍼가 경로별 결정) — 오늘/전체/이슈 공통, **돌아보기(/history)는 전폭 예외**(캘린더+패널 2단 레이아웃). 시작 화면은 `/today`(루트 `/`는 redirect). `/today`는 미세 progress bar 한 줄, `/inbox`(전체)는 상단 보기 칩(진행 중·보류·완료·휴지통) + 인라인 한 줄 요약 + 기본 접힘 도구바 + **평면 리스트**(2026-06-04: grip 드래그 수동 정렬 부활 + 오늘로 보낸 task 숨김 — `docs/architecture/hierarchy.md`), `/issues`는 묶음 뷰(목록·상세), `/history`(돌아보기)는 월 네비게이터만. `/today`는 그룹·개별 TASK 모두 grip 드래그 reorder(`docs/architecture/today.md`). 사이드바는 메뉴 4개(오늘·전체·이슈·돌아보기, 이슈 아이콘 lucide `Folder`) + 하단 설정 톱니바퀴. 큰 숫자는 그 페이지의 단 하나의 핵심 지표에만. 모바일(lg 미만)은 하단 탭바 4개+FAB(새 task)가 내비를 담당(햄버거 제거), task 상세는 sm 미만 바텀시트, 폰 reorder 미지원 — 상세는 `docs/architecture/mobile.md`.
+- **사이드바 = 무채색 면 + 로고 dot** (2026-06-03 갱신, 보라 기둥 폐기): 사용자 결정 — 앱을 100% 다크모드로 사용하며 보라 통판 사이드바가 "옛날 ERP 느낌"이라 폐기. 사이드바는 본문과 거의 같은 어두운 무채색 표면(`bg-sidebar`) + 오른쪽 `border-sidebar-border` hairline으로만 본문과 구분(그림자 0). 브랜드 식별("미션 컨트롤에서 창 구분")은 통판이 아니라 로고 옆 **키컬러 dot 한 점**(`bg-primary`)이 담당. 위계: 활성 = `bg-sidebar-accent` pill + 흰 글자 + **3px 키컬러 레일** + 키컬러 아이콘, 비활성 = `text-muted-foreground` + hover 시 `bg-sidebar-accent/60`. 컬러는 "현재 위치"를 가리키는 레일/아이콘에만 최소량. 카운트 뱃지 = `bg-primary/15 text-primary`. (모바일 헤더 Sheet nav는 2026-06-07 하단 탭바로 대체 — `docs/architecture/mobile.md`.) 모든 색은 기존 토큰(`--sidebar*`, `primary`, `muted`, `border`)만 사용 — 새 색 없음, 라이트는 토큰으로 자동 따라옴.
 - **다크 전용** (2026-06-03): 사용자는 100% 다크모드로 사용 — `layout.tsx` ThemeProvider `forcedTheme="dark"`로 라이트 전환 경로 자체를 제거(헤더 테마 토글 삭제). 라이트 토큰은 globals.css에 남아 있으나 도달 불가(dead). 디자인 평가·수정은 다크 기준.
 - **미션 컨트롤 창 식별 = "WID" 제목 + 키컬러 워드마크 + theme-color** (2026-06-03 개정): 창 제목은 군더더기 없이 `"WID"`만 — 🟣 마커와 "What I Do" 꼬리표는 사용자 결정으로 제거. 3px top bar는 "브라우저와 분리돼 보인다"는 피드백으로 같은 날 폐기. 대신 사이드바 좌상단 **"WID" 워드마크 자체를 `text-primary`(키컬러)로** — 화면 콘텐츠에 자연스럽게 통합된 식별 앵커로, 어두운 썸네일에서 좌상단 보라 글자로 창을 구분한다. `viewport.themeColor`는 단일 `#7D74F8`(설치형 웹앱 타이틀바 틴트). 새 색 없음.
 - **참고**: 디자인 결정 변경 시 이 섹션을 같이 갱신. 단순 색·자간 미세조정은 갱신 불필요.
@@ -102,6 +102,7 @@ DB 마이그레이션이 포함된 배포는 마이그레이션을 **먼저** Su
 | `docs/architecture/pending.md` | 보류함 pending_at soft-flag invariant, pend/unpend 전파 규칙, 무게 인박스(getTaskWeight) 기준. |
 | `docs/architecture/jira.md` | JIRA 웹훅 연동 — 알림 5종(할당·멘션·내 이슈 댓글·내 이슈 상태 변경·내가 담당하는 묶음 하위 상태 변경)→TASK 매핑, token 인증, jira_events dedup, 댓글 body wiki/ADF 처리, EPIC 하위 판정(isMyEpicChild + JIRA_EMAIL/JIRA_API_TOKEN), JIRA 쪽 웹훅 등록 절차. |
 | `docs/architecture/realtime.md` | 웹훅/sync→열린 화면 자동 갱신. Supabase Realtime Broadcast 채널 `wid-tasks`(데이터 미포함, 신호만), 송신 3곳(`broadcastTasksChanged`), 수신 bridge→`task-created` 이벤트, RLS 전제(anon 전면 차단·broadcast만 공개), service role 전환 보안 결정. |
+| `docs/architecture/mobile.md` | 모바일 분기 정책(뷰포트/포인터), 탭바·FAB, 바텀시트, 스와이프, touch-hitarea 규칙, 남은 갭. |
 
 새로운 아키텍처 결정이나 invariant이 생기면 위 문서 중 하나에 추가하거나 새 파일 만들고 이 표에 한 줄로 색인.
 

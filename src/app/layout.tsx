@@ -9,6 +9,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { QuickCaptureProvider } from "@/components/tasks/quick-capture-provider";
 import { ContentColumn } from "@/components/layout/content-column";
 import { RealtimeBridge } from "@/components/layout/realtime-bridge";
+import { MobileTabBar } from "@/components/layout/mobile-tab-bar";
 
 // Mono — code-shaped UI (kbd, source-id snippets).
 const geistMono = Geist_Mono({
@@ -72,13 +73,15 @@ export default function RootLayout({
               </div>
               <div className="flex-1 flex flex-col overflow-hidden">
                 <Header />
-                <main id="main-content" className="flex-1 overflow-y-auto">
+                <main id="main-content" className="flex-1 overflow-y-auto pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-0">
                   {/* 콘텐츠 컬럼 폭은 ContentColumn이 경로별로 결정 — 기본 860px 중앙
                     * 정렬, 돌아보기(/history)만 전폭 예외 (캘린더+패널 2단 레이아웃). */}
                   <ContentColumn>{children}</ContentColumn>
                 </main>
               </div>
             </div>
+            {/* 모바일 하단 탭바 + FAB (모바일 spec ④) — 햄버거 Sheet 대체. */}
+            <MobileTabBar />
             <Toaster richColors closeButton position="bottom-right" />
             <RealtimeBridge />
           </QuickCaptureProvider>
