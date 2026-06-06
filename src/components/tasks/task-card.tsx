@@ -466,12 +466,12 @@ export function TaskCard({
           <div className="flex-1 min-w-0 space-y-1.5">
             {breadcrumb && (breadcrumb.issueName || breadcrumb.parentTaskTitle) && (
               // ISSUE 이름은 길어도 잘리지 않고 끝까지 보여준다 (사용자 요청) — wrap 허용
-              <div className="text-[11px] text-muted-foreground flex flex-wrap items-center gap-1.5">
+              <div className="text-[11px] max-sm:text-xs text-muted-foreground flex flex-wrap items-center gap-1.5">
                 {/* When this row is a sub-TASK shown out of its tree (e.g.
                   * Today flat list), prefix the breadcrumb with a clear
                   * "하위" label so the type is identifiable without indent. */}
                 {isSubtask && (
-                  <span className="inline-flex items-center text-[10px] font-semibold tracking-wide px-1.5 h-[16px] rounded bg-primary/12 text-primary dark:bg-primary/20 dark:text-primary">
+                  <span className="inline-flex items-center text-[10px] max-sm:text-[11px] font-semibold tracking-wide px-1.5 h-[16px] rounded bg-primary/12 text-primary dark:bg-primary/20 dark:text-primary">
                     하위
                   </span>
                 )}
@@ -507,7 +507,7 @@ export function TaskCard({
               <SourceIcon source={task.source} className="flex-shrink-0 mt-[2px]" />
               {reasonBadge === 'deadline' && !isDone && (
                 <span
-                  className="inline-flex items-center flex-shrink-0 mt-[1px] text-[10px] font-semibold tracking-wide px-1.5 h-[16px] rounded bg-primary/12 text-primary dark:bg-primary/20"
+                  className="inline-flex items-center flex-shrink-0 mt-[1px] text-[10px] max-sm:text-[11px] font-semibold tracking-wide px-1.5 h-[16px] rounded bg-primary/12 text-primary dark:bg-primary/20"
                   title="마감일이 오늘이거나 지나서 자동으로 오늘에 포함됐어요"
                 >
                   마감
@@ -538,7 +538,7 @@ export function TaskCard({
             </div>
 
             {(issueChip || task.deadline || task.requester || (subCount > 0 && onToggleSubs)) && (
-              <div className="flex items-center gap-x-2.5 gap-y-1 text-[13px] flex-wrap text-muted-foreground">
+              <div className="flex items-center gap-x-2.5 gap-y-1 max-sm:gap-y-1.5 text-[13px] max-sm:text-sm flex-wrap text-muted-foreground">
                 {issueChip && (
                   <Link
                     href={`/issues/${issueChip.id}`}

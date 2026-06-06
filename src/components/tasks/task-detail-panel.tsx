@@ -400,7 +400,7 @@ export function TaskDetailPanel({
               </div>
 
               {/* ── 칩 줄: 상태 / 마감(D-n) / 요청자 / 오늘 — 전부 그 자리 수정 ── */}
-              <div className="flex items-center gap-1.5 flex-wrap">
+              <div className="flex items-center gap-1.5 max-sm:gap-2 flex-wrap">
                 <Popover open={statusOpen} onOpenChange={setStatusOpen}>
                   {/* 칩 줄은 가로로 인접 — 옆 칩 탭을 가로채지 않게 세로 전용 히트영역. */}
                   <PopoverTrigger render={<TaskChipButton active className="touch-hitarea-y">{status}</TaskChipButton>} />
@@ -434,7 +434,7 @@ export function TaskDetailPanel({
                 />
                 {deadline && dDayLabel(deadline) && (
                   <span className={cn(
-                    'text-[11px] font-semibold tabular-nums -ml-0.5 mr-0.5',
+                    'text-[11px] max-sm:text-xs font-semibold tabular-nums -ml-0.5 mr-0.5',
                     dDayLabel(deadline) === 'D-DAY' || dDayLabel(deadline)!.startsWith('D+')
                       ? 'text-primary' : 'text-muted-foreground',
                   )}>
