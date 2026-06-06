@@ -570,7 +570,7 @@ export default function TodayPage() {
                                 {...handle.listeners}
                                 aria-label={`${status} 그룹 순서 변경`}
                                 onClick={(e) => e.stopPropagation()}
-                                className="cursor-grab active:cursor-grabbing p-1 -m-1 rounded text-muted-foreground/50 opacity-0 group-hover/section:opacity-100 focus-visible:opacity-100 hover:bg-accent/40 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                className="touch-none pointer-coarse:hidden cursor-grab active:cursor-grabbing p-1 -m-1 rounded text-muted-foreground/50 opacity-0 group-hover/section:opacity-100 focus-visible:opacity-100 hover:bg-accent/40 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                               >
                                 <GripVertical className="h-4 w-4" />
                               </button>

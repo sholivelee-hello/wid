@@ -80,7 +80,10 @@ function DragHandle({ ariaLabel, listeners, attributes, setActivatorNodeRef }: D
       {...listeners}
       aria-label={ariaLabel}
       onClick={(e) => e.stopPropagation()}
-      className="mt-3 p-1 -m-1 rounded text-muted-foreground/60 opacity-30 group-hover/row:opacity-100 focus-visible:opacity-100 transition-opacity hover:bg-accent/50 cursor-grab active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      // touch-none: 하이브리드(터치+마우스) 기기에서 grip 위 손가락 드래그가
+      // 스크롤로 새지 않게. coarse 포인터 전용 기기에선 grip을 숨겨 reorder 미지원
+      // (spec 결정 — 폰에서 순서 변경 포기).
+      className="touch-none pointer-coarse:hidden mt-3 p-1 -m-1 rounded text-muted-foreground/60 opacity-30 group-hover/row:opacity-100 focus-visible:opacity-100 transition-opacity hover:bg-accent/50 cursor-grab active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
     >
       <GripVertical className="h-3.5 w-3.5" />
     </button>
@@ -104,11 +107,12 @@ export function SortableTaskItem({
 }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
     useSortable({ id: taskSortId(id) });
+  // touchAction은 행이 아니라 DragHandle(activator)에만 (모바일 spec ①).
+  // 행 전체에 걸면 터치 스크롤이 전부 죽는다 (2026-06-06 사용자 보고 버그).
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.4 : 1,
-    touchAction: 'none',
   };
   return (
     <div ref={setNodeRef} style={style}>

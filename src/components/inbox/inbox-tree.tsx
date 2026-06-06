@@ -147,11 +147,12 @@ function SortableIssueItem({
     sortable.setNodeRef(node);
     droppable.setNodeRef(node);
   };
+  // touchAction은 행이 아니라 grip(activator)에만 (모바일 spec ①).
+  // 행 전체에 걸면 터치 스크롤이 전부 죽는다 (2026-06-06 사용자 보고 버그).
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(sortable.transform),
     transition: sortable.transition,
     opacity: sortable.isDragging ? 0.4 : 1,
-    touchAction: 'none',
   };
   const dragHandleSlot = (
     <button
@@ -161,7 +162,7 @@ function SortableIssueItem({
       {...sortable.listeners}
       aria-label="ISSUE 순서 변경"
       onClick={(e) => e.stopPropagation()}
-      className="p-1 -m-1 rounded text-muted-foreground/60 opacity-30 group-hover/issue-row:opacity-100 focus-visible:opacity-100 transition-opacity hover:bg-accent/50 cursor-grab active:cursor-grabbing flex-shrink-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      className="touch-none pointer-coarse:hidden p-1 -m-1 rounded text-muted-foreground/60 opacity-30 group-hover/issue-row:opacity-100 focus-visible:opacity-100 transition-opacity hover:bg-accent/50 cursor-grab active:cursor-grabbing flex-shrink-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
     >
       <GripVertical className="h-3.5 w-3.5" />
     </button>
