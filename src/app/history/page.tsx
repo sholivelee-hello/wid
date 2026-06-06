@@ -6,6 +6,7 @@ import { ko } from 'date-fns/locale';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { EventMonthGrid } from '@/components/dashboard/event-month-grid';
+import { MiniMonthGrid } from '@/components/dashboard/mini-month-grid';
 import { DayDetailPanel } from '@/components/history/day-detail-panel';
 import { WeekDetailPanel } from '@/components/history/week-detail-panel';
 import { SearchResults } from '@/components/history/search-results';
@@ -149,6 +150,17 @@ export default function HistoryPage() {
     }
     return map;
   }, [tasks]);
+
+  // 모바일 미니 달력 밀도용: 완료 task + 보이는 이벤트 합 (날짜별).
+  // visibleEvents를 써서 일별 패널의 카운트와 같은 기준으로 집계 — 새 fetch 없이 기존 상태 재사용.
+  const densityCountByDate = useMemo(() => {
+    const map = new Map<string, number>(completedCountByDate);
+    for (const e of visibleEvents) {
+      if (!e.date) continue;
+      map.set(e.date, (map.get(e.date) ?? 0) + 1);
+    }
+    return map;
+  }, [completedCountByDate, visibleEvents]);
 
   // Search runs against globalTasks when active so other-month matches surface.
   const searchPool = debouncedSearch ? globalTasks : tasks;
@@ -309,7 +321,7 @@ export default function HistoryPage() {
           </button>
         </div>
 
-        <div className="inline-flex h-9 items-center rounded-md border bg-muted/30 p-0.5 shrink-0" role="group" aria-label="보기 모드">
+        <div className="hidden lg:inline-flex h-9 items-center rounded-md border bg-muted/30 p-0.5 shrink-0" role="group" aria-label="보기 모드">
           <Button
             type="button"
             variant={viewMode === 'day' ? 'secondary' : 'ghost'}
@@ -340,7 +352,7 @@ export default function HistoryPage() {
           </Button>
         </div>
 
-        <div className="relative flex-1 min-w-[220px] max-w-md">
+        <div className="relative flex-1 min-w-[220px] max-w-md hidden lg:block">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" aria-hidden="true" />
           <Input
             value={search}
@@ -367,7 +379,7 @@ export default function HistoryPage() {
           )}
         </div>
 
-        <div className="flex flex-wrap gap-1.5 shrink-0">
+        <div className="hidden lg:flex flex-wrap gap-1.5 shrink-0">
           {([
             { id: 'this-week' as const, label: '이번 주' },
             { id: 'last-week' as const, label: '지난 주' },
@@ -398,7 +410,32 @@ export default function HistoryPage() {
         <p className="text-sm text-muted-foreground -mt-2">{subtitle}</p>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_400px] items-start">
+      {/* 모바일 전용: 미니 달력 + 선택일 상세 세로 스택 (일별 기준 단순화). 데스크톱은 아래 2단 레이아웃이 담당. */}
+      <div className="lg:hidden space-y-4">
+        <div className="border rounded-lg p-3 bg-card">
+          <MiniMonthGrid
+            monthCursor={monthCursor}
+            selected={selectedDate}
+            onSelect={(d) => {
+              setSelectedDate(d);
+              setViewMode('day');
+            }}
+            countByDate={densityCountByDate}
+            today={todayStr}
+          />
+        </div>
+        <div className="border rounded-lg p-4 bg-card min-h-[300px]">
+          <DayDetailPanel
+            date={selectedDate}
+            tasks={tasks}
+            events={events}
+            subscriptions={subs}
+            onTaskClick={setSelectedTaskId}
+          />
+        </div>
+      </div>
+
+      <div className="hidden lg:grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_400px] items-start">
         <div className="space-y-4">
           <EventMonthGrid
             selectedDate={gridSelectedDate}
