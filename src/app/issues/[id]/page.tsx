@@ -253,23 +253,27 @@ export default function IssueDetailPage({ params }: { params: Promise<{ id: stri
         />
       ) : (
         <div className="space-y-3">
-          <div className="flex items-start gap-3">
-            <h1 className="text-2xl font-bold leading-tight tracking-[-0.03em] flex-1 min-w-0">
+          {/* 좁은 화면: 제목 아래로 버튼 그룹 줄바꿈 → 긴 이슈명이 짓눌리지 않음.
+              lg 이상은 flex-row 한 줄(데스크톱 시각 불변). */}
+          <div className="flex flex-col lg:flex-row lg:items-start gap-2 lg:gap-3">
+            <h1 className="text-2xl font-bold leading-tight tracking-[-0.03em] flex-1 min-w-0 break-words">
               {issue.name}
             </h1>
-            <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
-              <Pencil className="h-3.5 w-3.5 mr-1.5" />
-              편집
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="text-muted-foreground hover:text-destructive"
-              onClick={() => setDeleting(true)}
-            >
-              <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-              삭제
-            </Button>
+            <div className="flex items-center gap-1 shrink-0">
+              <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
+                <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                편집
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-muted-foreground hover:text-destructive"
+                onClick={() => setDeleting(true)}
+              >
+                <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                삭제
+              </Button>
+            </div>
           </div>
 
           {/* n/m 완료 + 큰 진행바 */}
@@ -353,12 +357,12 @@ export default function IssueDetailPage({ params }: { params: Promise<{ id: stri
                 else if (e.key === 'Escape') { e.preventDefault(); setAdding(false); setNewTitle(''); }
               }}
               placeholder="새 TASK 제목"
-              className="h-8 text-sm"
+              className="h-8 text-sm pointer-coarse:min-h-11"
             />
-            <Button type="button" size="sm" onClick={createTask} disabled={!newTitle.trim() || creatingTask} className="h-8">
+            <Button type="button" size="sm" onClick={createTask} disabled={!newTitle.trim() || creatingTask} className="h-8 pointer-coarse:min-h-11">
               추가
             </Button>
-            <Button type="button" size="sm" variant="ghost" onClick={() => { setAdding(false); setNewTitle(''); }} className="h-8">
+            <Button type="button" size="sm" variant="ghost" onClick={() => { setAdding(false); setNewTitle(''); }} className="h-8 pointer-coarse:min-h-11">
               취소
             </Button>
           </div>

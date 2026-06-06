@@ -234,7 +234,10 @@ function Section({ label, children }: { label: string; children: React.ReactNode
 }
 
 function ChipRow({ children }: { children: React.ReactNode }) {
-  return <div className="flex flex-wrap gap-1.5">{children}</div>;
+  // 칩은 가로로 빽빽하게 wrap된다. 터치에서만 세로 간격을 벌려 칩별 세로
+  // 히트 오버레이(touch-hitarea-y)가 wrap 줄 사이에서 서로 겹쳐 옆 줄 탭을
+  // 가로채는 것을 막는다. 데스크톱 시각은 gap-1.5 그대로.
+  return <div className="flex flex-wrap gap-1.5 pointer-coarse:gap-y-2">{children}</div>;
 }
 
 function Chip({
@@ -254,7 +257,9 @@ function Chip({
       onClick={onClick}
       aria-pressed={ariaPressed ? active : undefined}
       className={cn(
-        'h-7 px-2.5 rounded-full border text-[12px] transition-colors',
+        // touch-hitarea-y: 세로 전용 히트 확장(높이만 44px) — 가로로 다닥다닥
+        // 붙은 칩이라 옆 칩 탭을 가로채지 않게 세로만 키운다.
+        'touch-hitarea-y h-7 px-2.5 rounded-full border text-[12px] transition-colors',
         active
           ? 'bg-foreground/10 border-foreground/30 text-foreground'
           : 'border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground',
