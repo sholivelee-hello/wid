@@ -336,7 +336,14 @@
  * 주의: 인접한 인터랙티브 요소 위로 겹치면 DOM 뒤쪽 요소가 탭을 가져간다 —
  * 가로로 빽빽한 컨트롤(칩 등)에는 touch-hitarea-y(세로 전용)를 쓸 것.
  * overflow-hidden 조상 안에서는 오버레이가 잘려 보장이 줄어드는 한계 있음.
- * (모바일 최적화 spec 2026-06-06 ②) */
+ * (모바일 최적화 spec 2026-06-06 ②)
+ * 2026-06-07 감사(4라운드 C'): 전 적용 지점(Button base / TabsTrigger / 인박스
+ *   필터 칩 / 상세 패널 칩)의 조상 체인을 전수 점검. 실제 클리핑으로 44px가
+ *   깎이는 인터랙티브 컨트롤은 없음 — overflow-hidden 조상(shadcn Card)은 항상
+ *   p-4/py-4(16px) 이상 패딩으로 컨트롤을 감싸 ≤8px 오버레이 bleed를 충분히
+ *   수용하고, 상세 패널의 overflow-y-auto는 스크롤 뷰포트라 가운데 칩은 인접
+ *   콘텐츠 간격 덕에 잘리지 않음. task-card.tsx에는 overflow-hidden 조상 없음.
+ *   따라서 무보정 수용(제거 시 라운드 코너/스크롤 회귀 위험이 더 큼). */
 @utility touch-hitarea {
   @media (pointer: coarse) {
     position: relative;
