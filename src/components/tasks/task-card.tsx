@@ -584,48 +584,29 @@ export function TaskCard({
             )}
           </div>
 
-          {/* ⋯ 더보기 — 같은 액션의 보이는 입구.
-            * fine(데스크톱): hover DropdownMenu(기존 그대로).
-            * coarse(터치): 우클릭이 없으므로 탭하면 롱프레스와 같은 바텀 시트를 연다.
+          {/* ⋯ 더보기 — 데스크톱(fine) 전용 hover 입구.
+            * 터치(coarse)에서는 롱프레스 → 바텀 시트가 유일한 입구 — ⋯ 버튼은
+            * 롱프레스 도입 후 군더더기라 제거 (사용자 결정 2026-06-07).
             * 인라인 에디터 중에는 우클릭 메뉴와 동일하게 숨긴다. */}
-          {!editing && (
-            isCoarse ? (
-              <button
-                type="button"
+          {!editing && !isCoarse && (
+            <DropdownMenu>
+              <DropdownMenuTrigger
                 aria-label="task 액션 메뉴"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSheetOpen(true);
-                }}
+                onClick={(e) => e.stopPropagation()}
                 onKeyDown={(e) => e.stopPropagation()}
                 className={cn(
-                  'touch-hitarea flex-shrink-0 -m-1 p-1 mt-[1px] rounded text-muted-foreground/60 opacity-60',
+                  'touch-hitarea flex-shrink-0 -m-1 p-1 mt-[1px] rounded text-muted-foreground/60',
+                  'opacity-0 group-hover/card:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100',
                   'hover:bg-muted hover:text-foreground transition-opacity',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                 )}
               >
                 <MoreHorizontal className="h-4 w-4" />
-              </button>
-            ) : (
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  aria-label="task 액션 메뉴"
-                  onClick={(e) => e.stopPropagation()}
-                  onKeyDown={(e) => e.stopPropagation()}
-                  className={cn(
-                    'touch-hitarea flex-shrink-0 -m-1 p-1 mt-[1px] rounded text-muted-foreground/60',
-                    'opacity-0 group-hover/card:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100',
-                    'hover:bg-muted hover:text-foreground transition-opacity',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                  )}
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  {renderActionItems(DD_KIT)}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {renderActionItems(DD_KIT)}
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </div>
         {editing && (
