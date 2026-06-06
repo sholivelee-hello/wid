@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
+import { useMediaQuery } from '@/lib/use-media-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -310,18 +312,14 @@ export function TaskDetailPanel({
     </button>
   );
 
-  return (
-    <>
-      <Dialog open={!!taskId} onOpenChange={(open) => { if (!open) onClose(); }}>
-        {/* 닫기 X 없음 (사용자 결정 2026-06-05) — 바깥 클릭·ESC로만 닫는다.
-          * X를 두면 제목 첫 줄이 X를 피해 좁아져 어색했음. */}
-        <DialogContent showCloseButton={false} className="!max-w-xl w-full max-h-[85vh] overflow-y-auto p-6 gap-0">
-          {/* 접근성용 제목 — 시각적 헤더는 본문의 로고+제목이 담당. */}
-          <DialogHeader className="sr-only">
-            <DialogTitle>{task ? task.title : 'TASK 상세'}</DialogTitle>
-          </DialogHeader>
+  // 레이아웃 분기 = 뷰포트 폭 (sm 미만 = 바텀시트). 인터랙션이 아니라
+  // 컨테이너만 교체 — 내용 JSX·상태·핸들러는 데스크톱과 100% 동일.
+  const isMobile = useMediaQuery('(max-width: 639px)');
 
-          {!task ? (
+  // 본문(스켈레톤 또는 상세 내용)은 한 번만 정의하고 컨테이너만 분기한다.
+  const body = (
+    <>
+      {!task ? (
             <div className="space-y-4">
               <Skeleton className="h-8 w-3/4" />
               <Skeleton className="h-7 w-1/2" />
@@ -681,8 +679,48 @@ export function TaskDetailPanel({
               </div>
             </div>
           )}
-        </DialogContent>
-      </Dialog>
+    </>
+  );
+
+  // 모바일 키보드 대응 — 입력에 포커스가 들어가면 250ms(키보드 등장 대기) 뒤
+  // 그 입력을 화면 중앙으로 스크롤. 스크롤 컨테이너에 위임 핸들러 1개.
+  const handleFocusScroll = (e: React.FocusEvent<HTMLDivElement>) => {
+    if (e.target instanceof HTMLElement && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) {
+      const el = e.target;
+      setTimeout(() => el.scrollIntoView({ block: 'center', behavior: 'smooth' }), 250);
+    }
+  };
+
+  return (
+    <>
+      {isMobile ? (
+        <Drawer open={!!taskId} onOpenChange={(open) => { if (!open) onClose(); }}>
+          <DrawerContent className="h-[92dvh]">
+            {/* 접근성용 제목 — 시각적 헤더는 본문의 로고+제목이 담당. */}
+            <DrawerHeader className="sr-only">
+              <DrawerTitle>{task ? task.title : 'TASK 상세'}</DrawerTitle>
+            </DrawerHeader>
+            <div
+              className="flex-1 overflow-y-auto px-6 pb-[env(safe-area-inset-bottom)] scroll-pb-24"
+              onFocusCapture={handleFocusScroll}
+            >
+              {body}
+            </div>
+          </DrawerContent>
+        </Drawer>
+      ) : (
+        <Dialog open={!!taskId} onOpenChange={(open) => { if (!open) onClose(); }}>
+          {/* 닫기 X 없음 (사용자 결정 2026-06-05) — 바깥 클릭·ESC로만 닫는다.
+            * X를 두면 제목 첫 줄이 X를 피해 좁아져 어색했음. */}
+          <DialogContent showCloseButton={false} className="!max-w-xl w-full max-h-[85vh] overflow-y-auto p-6 gap-0">
+            {/* 접근성용 제목 — 시각적 헤더는 본문의 로고+제목이 담당. */}
+            <DialogHeader className="sr-only">
+              <DialogTitle>{task ? task.title : 'TASK 상세'}</DialogTitle>
+            </DialogHeader>
+            {body}
+          </DialogContent>
+        </Dialog>
+      )}
 
       <ConfirmDialog
         open={confirmDelete}
