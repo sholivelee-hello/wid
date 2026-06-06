@@ -30,7 +30,11 @@ export function MobileTabBar() {
                 href={item.href}
                 aria-current={isActive ? 'page' : undefined}
                 className={cn(
-                  'flex h-14 flex-1 flex-col items-center justify-center gap-1 transition-colors',
+                  // h-16 + 위쪽 정렬(pt-2.5): 아이폰은 화면 맨 아래 가장자리 탭이
+                  // Siri/홈 제스처로 새는 일이 있어, 콘텐츠를 위로 붙이고 하단
+                  // ~20px를 의도적 여백(데드존)으로 비워 오발을 막는다
+                  // (사용자 실기기 피드백 2026-06-07).
+                  'flex h-16 flex-1 flex-col items-center justify-start gap-1 pt-2.5 transition-colors',
                   isActive ? 'text-primary' : 'text-muted-foreground',
                 )}
               >
@@ -47,7 +51,7 @@ export function MobileTabBar() {
           type="button"
           onClick={openModal}
           aria-label="새 task 추가"
-          className="lg:hidden fixed right-4 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-40 flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg"
+          className="lg:hidden fixed right-4 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-40 flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg"
         >
           <Plus className="h-6 w-6" />
         </button>

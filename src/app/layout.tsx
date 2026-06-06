@@ -73,7 +73,8 @@ export default function RootLayout({
               </div>
               <div className="flex-1 flex flex-col overflow-hidden">
                 <Header />
-                <main id="main-content" className="flex-1 overflow-y-auto pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-0">
+                {/* 모바일 하단 패딩 = 탭바 높이(h-16=4rem) + safe area — 탭바가 콘텐츠를 가리지 않게. */}
+                <main id="main-content" className="flex-1 overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom))] lg:pb-0">
                   {/* 콘텐츠 컬럼 폭은 ContentColumn이 경로별로 결정 — 기본 860px 중앙
                     * 정렬, 돌아보기(/history)만 전폭 예외 (캘린더+패널 2단 레이아웃). */}
                   <ContentColumn>{children}</ContentColumn>
