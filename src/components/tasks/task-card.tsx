@@ -304,7 +304,7 @@ export function TaskCard({
                 disabled={blocked}
                 className={cn(
                   // 제목 여러 줄 시 첫 줄에 동그라미가 정렬되도록 미세 하향 보정.
-                  'flex-shrink-0 -m-1.5 mt-[1px] p-1.5 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  'touch-hitarea flex-shrink-0 -m-1.5 mt-[1px] p-1.5 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                   blocked
                     ? 'cursor-not-allowed opacity-50'
                     : 'hover:bg-muted',
@@ -472,7 +472,7 @@ export function TaskCard({
                     onClick={(e) => { e.stopPropagation(); onToggleSubs(); }}
                     onPointerDown={(e) => e.stopPropagation()}
                     aria-expanded={subsExpanded}
-                    className="inline-flex items-center gap-1 text-muted-foreground/80 hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded"
+                    className="touch-hitarea inline-flex items-center gap-1 text-muted-foreground/80 hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded"
                   >
                     <span aria-hidden>↳</span> sub {subCount}
                     <span className="text-muted-foreground/60">{subsExpanded ? '· 접기' : '· 펼치기'}</span>

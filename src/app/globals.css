@@ -327,3 +327,23 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* 터치 히트 영역 확장 — 시각 크기는 그대로, pointer:coarse(터치)에서만
+ * ::before 투명 오버레이로 누를 수 있는 영역을 최소 44×44px 보장.
+ * ::after가 아닌 이유: TabsTrigger가 ::after를 활성 밑줄로 이미 사용.
+ * (모바일 최적화 spec 2026-06-06 ②) */
+@utility touch-hitarea {
+  @media (pointer: coarse) {
+    position: relative;
+
+    &::before {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: max(100%, 44px);
+      height: max(100%, 44px);
+      transform: translate(-50%, -50%);
+    }
+  }
+}
