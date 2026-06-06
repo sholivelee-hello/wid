@@ -32,6 +32,9 @@ import { TaskInlineEditor } from '@/components/tasks/task-inline-editor';
 import { getTaskWeight } from '@/lib/task-weight';
 import { SourceIcon, sourceOpenUrl } from '@/components/tasks/source-icon';
 import { AddSubTaskRow } from '@/components/tasks/add-sub-task-row';
+import { SwipeActionRow } from '@/components/tasks/swipe-action-row';
+import { useMediaQuery } from '@/lib/use-media-query';
+import { toast } from 'sonner';
 import {
   Circle,
   CheckCircle2,
@@ -149,6 +152,8 @@ export function TaskCard({
     if (onSelect) onSelect(task.id);
     else window.location.href = `/tasks/${task.id}`;
   };
+  // 인터랙션 분기 = 포인터 능력. 터치 기기에서만 스와이프 활성(데스크톱 비용 0).
+  const isCoarse = useMediaQuery('(pointer: coarse)');
   // page.tsx의 todayStr 고정 패턴과 동일 — 자정 넘김 시 렌더마다 무게가 바뀌지 않게.
   const [weightNow] = useState(() => new Date());
   const isDone = isTaskDone(task.status);
@@ -565,14 +570,43 @@ export function TaskCard({
     </div>
   );
 
-  // 인라인 에디터가 열려 있으면 우클릭 메뉴를 끼우지 않는다 — 텍스트 필드에서
-  // 브라우저 기본 우클릭(맞춤법/복사 등)이 자연스럽게 뜨도록.
-  if (editing) return card;
+  // ContextMenuTrigger의 render prop은 대상 엘리먼트에 props/ref를 주입하므로
+  // 반드시 DOM 노드를 직접 렌더하는 card를 받아야 한다. 따라서 스와이프 래퍼는
+  // ContextMenu '바깥'에 둔다 (SwipeActionRow > ContextMenu > card 순서).
+  // enabled=false면 SwipeActionRow가 children을 그대로 반환 — 데스크톱 회귀 0.
+  const withMenu =
+    editing ? (
+      // 인라인 에디터 중에는 우클릭 메뉴를 끼우지 않는다 — 텍스트 필드에서
+      // 브라우저 기본 우클릭(맞춤법/복사 등)이 자연스럽게 뜨도록.
+      card
+    ) : (
+      <ContextMenu>
+        <ContextMenuTrigger render={card} />
+        {contextMenuContent}
+      </ContextMenu>
+    );
 
+  // 터치 기기에서만 스와이프(왼쪽=완료, 오른쪽=보류). isDone·editing이면 비활성.
   return (
-    <ContextMenu>
-      <ContextMenuTrigger render={card} />
-      {contextMenuContent}
-    </ContextMenu>
+    <SwipeActionRow
+      enabled={isCoarse && !isDone && !editing}
+      onSwipeComplete={
+        onComplete && !completeBlocked
+          ? () => {
+              setCompletePulse((p) => p + 1);
+              onComplete(task.id);
+              toast('완료 처리됨', {
+                action: {
+                  label: '되돌리기',
+                  onClick: () => onComplete(task.id),
+                },
+              });
+            }
+          : undefined
+      }
+      onSwipePend={onPend ? () => onPend(task.id) : undefined}
+    >
+      {withMenu}
+    </SwipeActionRow>
   );
 }
