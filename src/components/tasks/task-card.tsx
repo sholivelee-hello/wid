@@ -1,5 +1,6 @@
 'use client';
 
+import * as React from 'react';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
@@ -12,6 +13,16 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { STATUS_ICONS } from '@/lib/constants';
 import { TASK_STATUSES, type TaskStatus, isTaskDone } from '@/lib/types';
 import { Task } from '@/lib/types';
@@ -34,7 +45,41 @@ import {
   PauseCircle,
   ListChecks,
   Plus,
+  MoreHorizontal,
 } from 'lucide-react';
+
+/** 우클릭(ContextMenu)과 ⋯ 버튼(DropdownMenu)이 같은 액션 목록을 렌더하기
+ *  위한 프리미티브 주입 킷. 항목 정의는 renderActionItems 한 곳에만 둔다 —
+ *  모바일엔 우클릭이 없어 ⋯ 입구가 필요 (모바일 spec ③, 2026-06-06). */
+interface MenuKit {
+  Item: React.ComponentType<{
+    disabled?: boolean;
+    variant?: 'destructive';
+    onClick?: () => void;
+    children: React.ReactNode;
+  }>;
+  Separator: React.ComponentType;
+  Sub: React.ComponentType<{ children: React.ReactNode }>;
+  SubTrigger: React.ComponentType<{ children: React.ReactNode }>;
+  SubContent: React.ComponentType<{ className?: string; children: React.ReactNode }>;
+}
+
+// 실제 컴포넌트들은 MenuKit보다 넓은 props를 받으므로 구조적으로 호환 — cast로 고정.
+const CTX_KIT = {
+  Item: ContextMenuItem,
+  Separator: ContextMenuSeparator,
+  Sub: ContextMenuSub,
+  SubTrigger: ContextMenuSubTrigger,
+  SubContent: ContextMenuSubContent,
+} as unknown as MenuKit;
+
+const DD_KIT = {
+  Item: DropdownMenuItem,
+  Separator: DropdownMenuSeparator,
+  Sub: DropdownMenuSub,
+  SubTrigger: DropdownMenuSubTrigger,
+  SubContent: DropdownMenuSubContent,
+} as unknown as MenuKit;
 
 interface TaskCardProps {
   task: Task;
@@ -139,18 +184,18 @@ export function TaskCard({
   // 인라인 에디터가 열려 있을 때는 렌더하지 않아 텍스트 입력 중 브라우저 기본
   // 우클릭(맞춤법 등)이 그대로 동작한다.
   const openUrl = sourceOpenUrl(task);
-  const contextMenuContent = (
-    <ContextMenuContent>
+  const renderActionItems = (M: MenuKit) => (
+    <>
       {openUrl && (
         <>
-          <ContextMenuItem onClick={() => window.open(openUrl, '_blank', 'noopener,noreferrer')}>
+          <M.Item onClick={() => window.open(openUrl, '_blank', 'noopener,noreferrer')}>
             <ExternalLink />
             원본 열기
-          </ContextMenuItem>
-          <ContextMenuSeparator />
+          </M.Item>
+          <M.Separator />
         </>
       )}
-      <ContextMenuItem
+      <M.Item
         disabled={completeBlocked}
         onClick={() => {
           if (completeBlocked) return;
@@ -164,106 +209,95 @@ export function TaskCard({
           <CheckCircle2 className="text-primary" />
         )}
         {isDone ? '완료 취소' : '완료'}
-      </ContextMenuItem>
-      <ContextMenuItem
-        onClick={() => {
-          toggleTodayTask(task.id);
-        }}
-      >
+      </M.Item>
+      <M.Item onClick={() => { toggleTodayTask(task.id); }}>
         <Sun className={cn(isTodayTask && 'fill-primary text-primary')} />
         {isTodayTask ? '오늘에서 빼기' : '오늘로 보내기'}
-      </ContextMenuItem>
+      </M.Item>
 
-      {/* 하위 task 추가 — 3-level invariant상 top-level TASK에서만 허용
-        * (sub-TASK에 또 하위를 달면 MAX_DEPTH로 400). */}
+      {/* 하위 task 추가 — 3-level invariant상 top-level TASK에서만 (기존 동일) */}
       {!task.parent_task_id && (
-        <ContextMenuItem onClick={() => setAddingSub(true)}>
+        <M.Item onClick={() => setAddingSub(true)}>
           <Plus />
           하위 task 추가
-        </ContextMenuItem>
+        </M.Item>
       )}
 
       {onStatusChange && (
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>
+        <M.Sub>
+          <M.SubTrigger>
             <ListChecks />
             상태 변경
-          </ContextMenuSubTrigger>
-          <ContextMenuSubContent>
+          </M.SubTrigger>
+          <M.SubContent>
             {TASK_STATUSES.map((s) => {
               const Icon = STATUS_ICONS[s];
               return (
-                <ContextMenuItem
-                  key={s}
-                  onClick={() => onStatusChange?.(task.id, s)}
-                >
+                <M.Item key={s} onClick={() => onStatusChange?.(task.id, s)}>
                   {Icon && <Icon className="text-muted-foreground" />}
                   {s}
-                </ContextMenuItem>
+                </M.Item>
               );
             })}
-          </ContextMenuSubContent>
-        </ContextMenuSub>
+          </M.SubContent>
+        </M.Sub>
       )}
 
-      {/* ISSUE에 연결 — top-level TASK만 (sub-TASK는 부모를 통해 연결되는
-        * hierarchy invariant). linkableIssues + onLinkIssue 둘 다 있을 때만. */}
       {linkableIssues && onLinkIssue && !isSubtask && !task.parent_task_id && (
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>
+        <M.Sub>
+          <M.SubTrigger>
             <FolderOpen />
             ISSUE에 연결
-          </ContextMenuSubTrigger>
-          <ContextMenuSubContent className="max-h-[320px] overflow-y-auto">
+          </M.SubTrigger>
+          <M.SubContent className="max-h-[320px] overflow-y-auto">
             {linkableIssues.length === 0 ? (
-              <ContextMenuItem disabled>활성 ISSUE가 없어요</ContextMenuItem>
+              <M.Item disabled>활성 ISSUE가 없어요</M.Item>
             ) : (
               linkableIssues.map((iss) => {
                 const linked = task.issue_id === iss.id;
                 return (
-                  <ContextMenuItem
-                    key={iss.id}
-                    onClick={() => onLinkIssue(task.id, iss.id)}
-                  >
+                  <M.Item key={iss.id} onClick={() => onLinkIssue(task.id, iss.id)}>
                     {linked ? (
                       <Check className="text-primary" />
                     ) : (
                       <FolderOpen className="text-muted-foreground" />
                     )}
                     <span className="whitespace-normal break-words">{iss.name}</span>
-                  </ContextMenuItem>
+                  </M.Item>
                 );
               })
             )}
             {task.issue_id && (
               <>
-                <ContextMenuSeparator />
-                <ContextMenuItem onClick={() => onLinkIssue(task.id, null)}>
-                  연결 해제
-                </ContextMenuItem>
+                <M.Separator />
+                <M.Item onClick={() => onLinkIssue(task.id, null)}>연결 해제</M.Item>
               </>
             )}
-          </ContextMenuSubContent>
-        </ContextMenuSub>
+          </M.SubContent>
+        </M.Sub>
       )}
 
       {onPend && (
-        <ContextMenuItem onClick={() => onPend(task.id)}>
+        <M.Item onClick={() => onPend(task.id)}>
           <PauseCircle />
           보류
-        </ContextMenuItem>
+        </M.Item>
       )}
 
       {onDelete && (
         <>
-          <ContextMenuSeparator />
-          <ContextMenuItem variant="destructive" onClick={() => onDelete(task.id)}>
+          <M.Separator />
+          <M.Item variant="destructive" onClick={() => onDelete(task.id)}>
             <Trash2 />
             휴지통으로 이동
-          </ContextMenuItem>
+          </M.Item>
         </>
       )}
-    </ContextMenuContent>
+    </>
+  );
+
+  const contextMenuContent = (
+    <ContextMenuContent>{renderActionItems(CTX_KIT)}</ContextMenuContent>
   );
 
   const card = (
@@ -481,6 +515,30 @@ export function TaskCard({
               </div>
             )}
           </div>
+
+          {/* ⋯ 더보기 — 터치엔 우클릭이 없으므로 같은 액션의 보이는 입구.
+            * 마우스: hover 시 노출(기존 hover 언어), 터치: 상시 저채도.
+            * 인라인 에디터 중에는 우클릭 메뉴와 동일하게 숨긴다. */}
+          {!editing && (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                aria-label="task 액션 메뉴"
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+                className={cn(
+                  'touch-hitarea flex-shrink-0 -m-1 p-1 mt-[1px] rounded text-muted-foreground/60',
+                  'opacity-0 group-hover/card:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100 pointer-coarse:opacity-60',
+                  'hover:bg-muted hover:text-foreground transition-opacity',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                )}
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {renderActionItems(DD_KIT)}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
         {editing && (
           <div className="mt-3 pt-3 border-t border-border/40">
