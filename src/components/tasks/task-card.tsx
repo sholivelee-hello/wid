@@ -33,6 +33,7 @@ import { getTaskWeight } from '@/lib/task-weight';
 import { SourceIcon, sourceOpenUrl } from '@/components/tasks/source-icon';
 import { AddSubTaskRow } from '@/components/tasks/add-sub-task-row';
 import { SwipeActionRow } from '@/components/tasks/swipe-action-row';
+import { TaskActionSheet, SHEET_KIT } from '@/components/tasks/task-action-sheet';
 import { useMediaQuery } from '@/lib/use-media-query';
 import { toast } from 'sonner';
 import {
@@ -162,6 +163,14 @@ export function TaskCard({
 
   const [isTodayTask, setIsTodayTask] = useState(() => getTodayTaskIds().has(task.id));
   const [completePulse, setCompletePulse] = useState(0);
+  // 모바일 바텀 액션 시트 열림 상태 — 롱프레스·⋯ 둘 다 같은 시트를 연다.
+  const [sheetOpen, setSheetOpen] = useState(false);
+  // 롱프레스 감지용 — touchstart 후 500ms 유지 + 이동 10px 미만이면 시트 발동.
+  // SwipeActionRow의 가로 스와이프와 충돌하지 않게 카드 div의 터치 이벤트에만 단다.
+  const longPressTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressStartRef = React.useRef<{ x: number; y: number } | null>(null);
+  // 롱프레스 발동 직후 손가락을 떼면 따라오는 합성 click을 1회 무시(상세 오발 방지).
+  const suppressClickRef = React.useRef(false);
   // 우클릭 "하위 task 추가" → 카드 아래 인라인 입력. 생성은 AddSubTaskRow가
   // 처리하고 task-created 이벤트로 모든 페이지가 새로고침되므로 부모 wiring 불필요.
   const [addingSub, setAddingSub] = useState(false);
@@ -171,6 +180,48 @@ export function TaskCard({
     window.addEventListener('today-tasks-changed', handler);
     return () => window.removeEventListener('today-tasks-changed', handler);
   }, [task.id]);
+
+  // unmount 시 롱프레스 타이머 정리(리크 방지).
+  useEffect(() => {
+    return () => {
+      if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    };
+  }, []);
+
+  const clearLongPress = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    longPressStartRef.current = null;
+  };
+
+  // 롱프레스 핸들러 — coarse(터치) + 비편집 + 미완료가 아닌 일반 상태에서만 단다.
+  // SwipeActionRow가 카드 바깥을 감싸므로(가로 스와이프 전담) 여기 카드 div의
+  // 터치는 충돌 없이 공존한다. 단, 손가락이 10px 이상 움직이면(스크롤·스와이프
+  // 시작) 타이머를 취소해 롱프레스가 오발하지 않게 한다.
+  const handleTouchStartLP = (e: React.TouchEvent) => {
+    if (e.touches.length !== 1 || editing) return;
+    const t = e.touches[0];
+    clearLongPress();
+    longPressStartRef.current = { x: t.clientX, y: t.clientY };
+    longPressTimerRef.current = setTimeout(() => {
+      navigator.vibrate?.(10);
+      suppressClickRef.current = true;
+      setSheetOpen(true);
+      longPressTimerRef.current = null;
+      longPressStartRef.current = null;
+    }, 500);
+  };
+
+  const handleTouchMoveLP = (e: React.TouchEvent) => {
+    const start = longPressStartRef.current;
+    if (!start || !longPressTimerRef.current) return;
+    const t = e.touches[0];
+    if (Math.abs(t.clientX - start.x) >= 10 || Math.abs(t.clientY - start.y) >= 10) {
+      clearLongPress();
+    }
+  };
 
   let deadlineSuffix = '';
   if (task.deadline) {
@@ -320,13 +371,25 @@ export function TaskCard({
         isDone && 'opacity-55',
         editing && 'bg-accent/60 dark:bg-accent/40',
       )}
-      onClick={openDetail}
+      onClick={() => {
+        // 롱프레스로 시트를 띄운 직후 따라오는 합성 click 1회는 무시(상세 오발 방지).
+        if (suppressClickRef.current) {
+          suppressClickRef.current = false;
+          return;
+        }
+        openDetail();
+      }}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           openDetail();
         }
       }}
+      // 롱프레스 감지 — coarse(터치)에서만 단다. fine(데스크톱)엔 핸들러 없음(회귀 0).
+      onTouchStart={isCoarse ? handleTouchStartLP : undefined}
+      onTouchMove={isCoarse ? handleTouchMoveLP : undefined}
+      onTouchEnd={isCoarse ? clearLongPress : undefined}
+      onTouchCancel={isCoarse ? clearLongPress : undefined}
     >
       {(editing || (weight === 'heavy' && !isSubtask)) && (
         <span aria-hidden className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full bg-primary" />
@@ -521,28 +584,48 @@ export function TaskCard({
             )}
           </div>
 
-          {/* ⋯ 더보기 — 터치엔 우클릭이 없으므로 같은 액션의 보이는 입구.
-            * 마우스: hover 시 노출(기존 hover 언어), 터치: 상시 저채도.
+          {/* ⋯ 더보기 — 같은 액션의 보이는 입구.
+            * fine(데스크톱): hover DropdownMenu(기존 그대로).
+            * coarse(터치): 우클릭이 없으므로 탭하면 롱프레스와 같은 바텀 시트를 연다.
             * 인라인 에디터 중에는 우클릭 메뉴와 동일하게 숨긴다. */}
           {!editing && (
-            <DropdownMenu>
-              <DropdownMenuTrigger
+            isCoarse ? (
+              <button
+                type="button"
                 aria-label="task 액션 메뉴"
-                onClick={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSheetOpen(true);
+                }}
                 onKeyDown={(e) => e.stopPropagation()}
                 className={cn(
-                  'touch-hitarea flex-shrink-0 -m-1 p-1 mt-[1px] rounded text-muted-foreground/60',
-                  'opacity-0 group-hover/card:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100 pointer-coarse:opacity-60',
+                  'touch-hitarea flex-shrink-0 -m-1 p-1 mt-[1px] rounded text-muted-foreground/60 opacity-60',
                   'hover:bg-muted hover:text-foreground transition-opacity',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                 )}
               >
                 <MoreHorizontal className="h-4 w-4" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {renderActionItems(DD_KIT)}
-              </DropdownMenuContent>
-            </DropdownMenu>
+              </button>
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  aria-label="task 액션 메뉴"
+                  onClick={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => e.stopPropagation()}
+                  className={cn(
+                    'touch-hitarea flex-shrink-0 -m-1 p-1 mt-[1px] rounded text-muted-foreground/60',
+                    'opacity-0 group-hover/card:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100',
+                    'hover:bg-muted hover:text-foreground transition-opacity',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  )}
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {renderActionItems(DD_KIT)}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )
           )}
         </div>
         {editing && (
@@ -575,9 +658,11 @@ export function TaskCard({
   // ContextMenu '바깥'에 둔다 (SwipeActionRow > ContextMenu > card 순서).
   // enabled=false면 SwipeActionRow가 children을 그대로 반환 — 데스크톱 회귀 0.
   const withMenu =
-    editing ? (
+    editing || isCoarse ? (
       // 인라인 에디터 중에는 우클릭 메뉴를 끼우지 않는다 — 텍스트 필드에서
       // 브라우저 기본 우클릭(맞춤법/복사 등)이 자연스럽게 뜨도록.
+      // coarse(터치)에서도 base-ui ContextMenu를 끼우지 않는다 — 롱프레스를
+      // 가로채지 않게 하고, 대신 카드 div의 자체 롱프레스 + 바텀 시트로 대체.
       card
     ) : (
       <ContextMenu>
@@ -588,25 +673,36 @@ export function TaskCard({
 
   // 터치 기기에서만 스와이프(왼쪽=완료, 오른쪽=보류). isDone·editing이면 비활성.
   return (
-    <SwipeActionRow
-      enabled={isCoarse && !isDone && !editing}
-      onSwipeComplete={
-        onComplete && !completeBlocked
-          ? () => {
-              setCompletePulse((p) => p + 1);
-              onComplete(task.id);
-              toast('완료 처리됨', {
-                action: {
-                  label: '되돌리기',
-                  onClick: () => onComplete(task.id),
-                },
-              });
-            }
-          : undefined
-      }
-      onSwipePend={onPend ? () => onPend(task.id) : undefined}
-    >
-      {withMenu}
-    </SwipeActionRow>
+    <>
+      <SwipeActionRow
+        enabled={isCoarse && !isDone && !editing}
+        onSwipeComplete={
+          onComplete && !completeBlocked
+            ? () => {
+                setCompletePulse((p) => p + 1);
+                onComplete(task.id);
+                toast('완료 처리됨', {
+                  action: {
+                    label: '되돌리기',
+                    onClick: () => onComplete(task.id),
+                  },
+                });
+              }
+            : undefined
+        }
+        onSwipePend={onPend ? () => onPend(task.id) : undefined}
+      >
+        {withMenu}
+      </SwipeActionRow>
+
+      {/* 모바일 바텀 액션 시트 — 롱프레스·⋯ 둘 다 여기로 모인다. 항목 정의는
+        * renderActionItems(SHEET_KIT) 한 곳뿐(데스크톱과 동일 정의). coarse·
+        * 비편집일 때만 마운트. */}
+      {isCoarse && !editing && (
+        <TaskActionSheet open={sheetOpen} onOpenChange={setSheetOpen}>
+          {renderActionItems(SHEET_KIT)}
+        </TaskActionSheet>
+      )}
+    </>
   );
 }
