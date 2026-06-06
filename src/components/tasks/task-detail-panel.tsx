@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
 import { useMediaQuery } from '@/lib/use-media-query';
+import { useVisualViewportHeight } from '@/lib/use-visual-viewport';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -316,6 +317,16 @@ export function TaskDetailPanel({
   // 컨테이너만 교체 — 내용 JSX·상태·핸들러는 데스크톱과 100% 동일.
   const isMobile = useMediaQuery('(max-width: 639px)');
 
+  // 모바일 키보드 정밀 보정 — visualViewport가 줄어든 만큼(=키보드 높이)을
+  // 스크롤 영역 하단 패딩으로 더해, 키보드가 떠 있는 동안 하단 입력칸(설명·
+  // 후속 메모·완료일시)이 가려지지 않게 한다. 키보드가 내려가면 0으로 복귀.
+  // (visualViewport 미지원·SSR이면 null → 0, 데스크톱 Dialog 경로는 불변.)
+  const visualViewportHeight = useVisualViewportHeight();
+  const keyboardInset =
+    isMobile && visualViewportHeight !== null
+      ? Math.max(0, window.innerHeight - visualViewportHeight)
+      : 0;
+
   // 본문(스켈레톤 또는 상세 내용)은 한 번만 정의하고 컨테이너만 분기한다.
   const body = (
     <>
@@ -391,7 +402,8 @@ export function TaskDetailPanel({
               {/* ── 칩 줄: 상태 / 마감(D-n) / 요청자 / 오늘 — 전부 그 자리 수정 ── */}
               <div className="flex items-center gap-1.5 flex-wrap">
                 <Popover open={statusOpen} onOpenChange={setStatusOpen}>
-                  <PopoverTrigger render={<TaskChipButton active>{status}</TaskChipButton>} />
+                  {/* 칩 줄은 가로로 인접 — 옆 칩 탭을 가로채지 않게 세로 전용 히트영역. */}
+                  <PopoverTrigger render={<TaskChipButton active className="touch-hitarea-y">{status}</TaskChipButton>} />
                   <PopoverContent className="w-36 p-1" align="start">
                     <div className="flex flex-col">
                       {TASK_STATUSES.map(s => (
@@ -433,7 +445,7 @@ export function TaskDetailPanel({
                 <Popover open={requesterOpen} onOpenChange={setRequesterOpen}>
                   <PopoverTrigger
                     render={
-                      <TaskChipButton active={!!requester} icon={<User className="h-3 w-3" />} caret={!requester}>
+                      <TaskChipButton active={!!requester} icon={<User className="h-3 w-3" />} caret={!requester} className="touch-hitarea-y">
                         {requester || '요청자'}
                       </TaskChipButton>
                     }
@@ -460,6 +472,7 @@ export function TaskDetailPanel({
                   active={isTodayTask}
                   icon={<Sun className={cn('h-3 w-3', isTodayTask && 'fill-primary text-primary')} />}
                   caret={false}
+                  className="touch-hitarea-y"
                   onClick={() => { if (taskId) toggleTodayTask(taskId); }}
                 >
                   {isTodayTask ? '오늘에 있음' : '오늘로 보내기'}
@@ -702,6 +715,9 @@ export function TaskDetailPanel({
             </DrawerHeader>
             <div
               className="flex-1 overflow-y-auto px-6 pb-[env(safe-area-inset-bottom)] scroll-pb-24"
+              // 키보드 높이만큼 하단 패딩을 동적으로 더한다 (정밀 보정). scroll-pb-24·
+              // onFocusCapture scrollIntoView는 보완재로 그대로 유지.
+              style={keyboardInset > 0 ? { paddingBottom: keyboardInset } : undefined}
               onFocusCapture={handleFocusScroll}
             >
               {body}
