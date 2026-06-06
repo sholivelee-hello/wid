@@ -331,6 +331,11 @@
 /* 터치 히트 영역 확장 — 시각 크기는 그대로, pointer:coarse(터치)에서만
  * ::before 투명 오버레이로 누를 수 있는 영역을 최소 44×44px 보장.
  * ::after가 아닌 이유: TabsTrigger가 ::after를 활성 밑줄로 이미 사용.
+ * 오버레이는 의도적으로 hit-testable(이 요소의 탭으로 잡힘) — 카드 위에 홀로
+ * 있는 컨트롤(완료 토글 등)에서 "빗나간 탭이 카드를 여는" 문제를 막는 게 목적.
+ * 주의: 인접한 인터랙티브 요소 위로 겹치면 DOM 뒤쪽 요소가 탭을 가져간다 —
+ * 가로로 빽빽한 컨트롤(칩 등)에는 touch-hitarea-y(세로 전용)를 쓸 것.
+ * overflow-hidden 조상 안에서는 오버레이가 잘려 보장이 줄어드는 한계 있음.
  * (모바일 최적화 spec 2026-06-06 ②) */
 @utility touch-hitarea {
   @media (pointer: coarse) {
@@ -344,6 +349,23 @@
       width: max(100%, 44px);
       height: max(100%, 44px);
       transform: translate(-50%, -50%);
+    }
+  }
+}
+
+/* 세로 전용 변형 — 가로로 다닥다닥 붙은 컨트롤(보기 칩 등)이 옆 컨트롤의
+ * 탭을 가로채지 않게 높이만 44px 보장. */
+@utility touch-hitarea-y {
+  @media (pointer: coarse) {
+    position: relative;
+
+    &::before {
+      content: '';
+      position: absolute;
+      inset-inline: 0;
+      top: 50%;
+      height: max(100%, 44px);
+      transform: translateY(-50%);
     }
   }
 }
