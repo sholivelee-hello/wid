@@ -120,6 +120,53 @@ export default function TodayPage() {
   // Stable today string — captured once on mount so it never drifts mid-session.
   const [todayStr] = useState(() => new Date().toISOString().slice(0, 10));
 
+  // 완료 직후 3초 머무름 (사용자 요청 2026-06-10, /inbox와 동일 동작). 완료로
+  // 전이해도 즉시 "완료" 그룹으로 점프하지 않고, 3초간 원래 상태 그룹의 그 자리에
+  // 완료 표시로 남는다 — 그 사이 다시 누르면(완료 취소) 되돌릴 수 있다. id→원래
+  // 상태를 들고 있다가 머무는 동안 그 상태로 그룹핑한다.
+  const LINGER_MS = 3000;
+  const [lingeringDoneIds, setLingeringDoneIds] = useState<Map<string, TaskStatus>>(new Map());
+  const lingerTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const startLinger = useCallback((taskId: string, origStatus: TaskStatus) => {
+    const existing = lingerTimers.current.get(taskId);
+    if (existing) clearTimeout(existing);
+    setLingeringDoneIds(prev => {
+      const next = new Map(prev);
+      next.set(taskId, origStatus);
+      return next;
+    });
+    lingerTimers.current.set(taskId, setTimeout(() => {
+      lingerTimers.current.delete(taskId);
+      setLingeringDoneIds(prev => {
+        if (!prev.has(taskId)) return prev;
+        const next = new Map(prev);
+        next.delete(taskId);
+        return next;
+      });
+    }, LINGER_MS));
+  }, []);
+  const clearLinger = useCallback((taskId: string) => {
+    const existing = lingerTimers.current.get(taskId);
+    if (existing) {
+      clearTimeout(existing);
+      lingerTimers.current.delete(taskId);
+    }
+    setLingeringDoneIds(prev => {
+      if (!prev.has(taskId)) return prev;
+      const next = new Map(prev);
+      next.delete(taskId);
+      return next;
+    });
+  }, []);
+  // unmount 시 머무름 타이머 정리(리크 방지).
+  useEffect(() => {
+    const timers = lingerTimers.current;
+    return () => {
+      for (const t of timers.values()) clearTimeout(t);
+      timers.clear();
+    };
+  }, []);
+
   // Cross-tab + same-tab sync of the saved order.
   useEffect(() => {
     const refresh = () => setStatusOrder(loadStatusOrder());
@@ -308,17 +355,20 @@ export default function TodayPage() {
   }, [todayTasks]);
 
   // Group ROOTS by status (children inside a tree keep their own status pill).
+  // 머무름 중인 root는 완료로 전이됐어도 원래 상태 그룹에 둔다 (3초 후 점프).
   const statusGroups = useMemo(() => {
+    const groupStatus = (t: Task): TaskStatus => lingeringDoneIds.get(t.id) ?? t.status;
     const groups = new Map<string, TaskNode[]>();
     for (const status of TASK_STATUSES) {
-      const g = todayForest.filter(n => n.task.status === status);
+      const g = todayForest.filter(n => groupStatus(n.task) === status);
       if (g.length > 0) groups.set(status, g);
     }
     for (const root of todayForest) {
-      if (!groups.has(root.task.status)) groups.set(root.task.status, [root]);
+      const s = groupStatus(root.task);
+      if (!groups.has(s)) groups.set(s, [root]);
     }
     return groups;
-  }, [todayForest]);
+  }, [todayForest, lingeringDoneIds]);
 
   // 그룹 안 root 순서에 수동 정렬 overlay 적용 (모르는 항목은 base 순서로 맨 위).
   const orderRoots = (nodes: TaskNode[]): TaskNode[] => {
@@ -350,6 +400,12 @@ export default function TodayPage() {
 
   const handleStatusChange = async (taskId: string, newStatus: TaskStatus) => {
     const before = tasks.find(t => t.id === taskId);
+    // 처리됨(완료/취소)으로 전이하면 3초간 원래 상태 그룹에 머무름. 되돌리면 즉시 해제.
+    if (isTaskDone(newStatus) && before && !isTaskDone(before.status)) {
+      startLinger(taskId, before.status);
+    } else if (!isTaskDone(newStatus)) {
+      clearLinger(taskId);
+    }
     setTasks(prev => prev.map(t =>
       t.id === taskId
         ? { ...t, status: newStatus, completed_at: newStatus === '완료' ? new Date().toISOString() : t.completed_at }

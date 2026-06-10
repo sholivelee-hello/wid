@@ -139,6 +139,52 @@ function InboxPageInner() {
     return () => window.removeEventListener('today-tasks-changed', handler);
   }, []);
 
+  // 완료 직후 3초 머무름 (사용자 요청 2026-06-10). 등록 뷰에서 완료로 전이하면
+  // 즉시 사라지지 않고 완료 상태로 그 자리에 남아, 그 사이 다시 눌러(완료 취소)
+  // 되돌릴 수 있다. 3초 후 타이머가 머무름을 풀면 그제야 등록 목록에서 빠진다.
+  const LINGER_MS = 3000;
+  const [lingeringDoneIds, setLingeringDoneIds] = useState<Set<string>>(new Set());
+  const lingerTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const startLinger = useCallback((taskId: string) => {
+    const existing = lingerTimers.current.get(taskId);
+    if (existing) clearTimeout(existing);
+    setLingeringDoneIds(prev => {
+      const next = new Set(prev);
+      next.add(taskId);
+      return next;
+    });
+    lingerTimers.current.set(taskId, setTimeout(() => {
+      lingerTimers.current.delete(taskId);
+      setLingeringDoneIds(prev => {
+        if (!prev.has(taskId)) return prev;
+        const next = new Set(prev);
+        next.delete(taskId);
+        return next;
+      });
+    }, LINGER_MS));
+  }, []);
+  const clearLinger = useCallback((taskId: string) => {
+    const existing = lingerTimers.current.get(taskId);
+    if (existing) {
+      clearTimeout(existing);
+      lingerTimers.current.delete(taskId);
+    }
+    setLingeringDoneIds(prev => {
+      if (!prev.has(taskId)) return prev;
+      const next = new Set(prev);
+      next.delete(taskId);
+      return next;
+    });
+  }, []);
+  // unmount 시 머무름 타이머 정리(리크 방지).
+  useEffect(() => {
+    const timers = lingerTimers.current;
+    return () => {
+      for (const t of timers.values()) clearTimeout(t);
+      timers.clear();
+    };
+  }, []);
+
   // 드래그 수동 정렬 overlay (localStorage). 등록 뷰 + 필터 없음일 때만 적용.
   const [manualOrder, setManualOrder] = useState<string[]>(() => loadManualOrder(INBOX_ORDER_KEY));
   const dndSensors = useSensors(
@@ -224,6 +270,15 @@ function InboxPageInner() {
 
   const handleStatusChange = async (taskId: string, newStatus: TaskStatus) => {
     const before = tasks.find(t => t.id === taskId);
+    // 등록 뷰에서 처리됨(완료/취소)으로 전이하면 3초간 그 자리에 머무름.
+    // 되돌리면(등록 등 미처리 전이) 머무름을 즉시 풀어 등록 목록에 정상 표시.
+    if (!showCompleted) {
+      if (isTaskDone(newStatus) && before && !isTaskDone(before.status)) {
+        startLinger(taskId);
+      } else if (!isTaskDone(newStatus)) {
+        clearLinger(taskId);
+      }
+    }
     setTasks(prev => prev.map(t =>
       t.id === taskId ? { ...t, status: newStatus, completed_at: newStatus === '완료' ? new Date().toISOString() : t.completed_at } : t
     ));
@@ -396,7 +451,8 @@ function InboxPageInner() {
   const flatTopTasks = useMemo(() => {
     const base = applyBaseFilter(treeFilteredTasks)
       .filter(t => !t.parent_task_id && !t.is_deleted)
-      .filter(t => isTaskDone(t.status) === showCompleted)
+      // 등록 뷰: 미처리 task + 방금 완료해 머무름 중인 task(3초). 완료 뷰: 처리됨만.
+      .filter(t => isTaskDone(t.status) === showCompleted || (!showCompleted && lingeringDoneIds.has(t.id)))
       // 오늘로 보낸(explicit today) task는 등록 뷰에서 숨김 — 오늘 탭 담당.
       .filter(t => showCompleted || !todaySet.has(t.id));
     // 등록 뷰: created_at desc + 수동 정렬 overlay. 완료 뷰: completed_at desc
@@ -407,7 +463,7 @@ function InboxPageInner() {
       (a, b) => key(b).localeCompare(key(a)) || b.id.localeCompare(a.id),
     );
     return showCompleted ? sorted : applyManualOrder(sorted, manualOrder);
-  }, [applyBaseFilter, treeFilteredTasks, showCompleted, todaySet, manualOrder]);
+  }, [applyBaseFilter, treeFilteredTasks, showCompleted, todaySet, manualOrder, lingeringDoneIds]);
 
   // 등록 뷰에서 숨겨진 "오늘로 보낸" 미완료 top-level 수 — 리스트 아래 안내용.
   const hiddenTodayCount = useMemo(() => {
