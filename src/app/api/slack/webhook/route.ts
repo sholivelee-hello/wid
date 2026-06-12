@@ -8,12 +8,17 @@ async function verifySlackSignature(request: NextRequest, body: string): Promise
   const timestamp = request.headers.get('x-slack-request-timestamp') ?? '';
   const slackSignature = request.headers.get('x-slack-signature') ?? '';
 
-  if (Math.abs(Date.now() / 1000 - parseInt(timestamp)) > 300) return false;
+  const ts = parseInt(timestamp);
+  if (!Number.isFinite(ts) || Math.abs(Date.now() / 1000 - ts) > 300) return false;
 
   const baseString = `v0:${timestamp}:${body}`;
   const mySignature = 'v0=' + crypto.createHmac('sha256', signingSecret).update(baseString).digest('hex');
 
-  return crypto.timingSafeEqual(Buffer.from(mySignature), Buffer.from(slackSignature));
+  // timingSafeEqual은 길이가 다르면 throw — 길이 불일치는 명백한 불일치이므로 false.
+  const a = Buffer.from(mySignature);
+  const b = Buffer.from(slackSignature);
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
 }
 
 // Module-level cache: 같은 유저를 반복 조회하지 않도록 ID→이름 매핑을 보관.
@@ -100,7 +105,13 @@ async function resolveSlackText(text: string, botToken: string): Promise<string>
 
 export async function POST(request: NextRequest) {
   const body = await request.text();
-  const payload = JSON.parse(body);
+  // 공개 엔드포인트 — 비 JSON body로 500이 나지 않게 방어.
+  let payload;
+  try {
+    payload = JSON.parse(body);
+  } catch {
+    return NextResponse.json({ error: 'invalid json' }, { status: 400 });
+  }
 
   // url_verification은 서명 검증 전에 먼저 처리 — Slack이 URL 등록 시
   // 서명 없이 challenge를 보내는 경우에도 응답할 수 있어야 한다.
@@ -131,7 +142,13 @@ export async function POST(request: NextRequest) {
       .eq('event_id', eventId)
       .maybeSingle();
     if (existing) return NextResponse.json({ ok: true });
-    await supabase.from('slack_events').insert({ event_id: eventId });
+    const { error: relayDedupErr } = await supabase
+      .from('slack_events')
+      .insert({ event_id: eventId });
+    if (relayDedupErr) {
+      console.error('[slack/webhook] relay dedup insert failed', eventId, relayDedupErr);
+      return NextResponse.json({ ok: true });
+    }
 
     const rawText: string = event.text || event.attachments?.[0]?.text || event.attachments?.[0]?.fallback || '(Jira 알림)';
     const botToken = process.env.SLACK_BOT_TOKEN;
@@ -159,8 +176,14 @@ export async function POST(request: NextRequest) {
   // The bot sits in shared team channels, so without this guard ANY teammate's
   // :send-away:/:완료: reaction would inject (or complete) a task in the
   // owner's inbox. event.user is the person who ADDED the reaction.
+  // fail-closed: env 미설정이면 아무 반응도 처리하지 않는다 — 미설정 배포에서
+  // 팀원 전원의 이모지가 내 인박스로 흘러드는 사고 방지.
   const ownerUserId = process.env.SLACK_OWNER_USER_ID;
-  if (ownerUserId && event.user && event.user !== ownerUserId) {
+  if (!ownerUserId) {
+    console.error('[slack/webhook] SLACK_OWNER_USER_ID not set — ignoring reaction');
+    return NextResponse.json({ ok: true });
+  }
+  if (event.user && event.user !== ownerUserId) {
     return NextResponse.json({ ok: true });
   }
 
@@ -186,7 +209,10 @@ export async function POST(request: NextRequest) {
     .from('slack_events')
     .insert({ event_id: eventId });
   if (dedupErr) {
+    // unique 위반 = 동시 재전송이 이미 처리 중 — task 중복 생성 방지를 위해 중단.
+    // 그 외 오류도 row가 없으니 Slack 재시도에서 다시 처리된다.
     console.error('[slack/webhook] dedup insert failed', eventId, dedupErr);
+    return NextResponse.json({ ok: true });
   }
 
   // Handle completion emoji

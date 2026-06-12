@@ -6,6 +6,7 @@ import { ko } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { X } from 'lucide-react';
 import { useCalendarViewState, EMPTY_CALENDAR_SUBS } from '@/lib/calendar-view-state';
+import { getGCalConfig, getCalendarLabel, GCAL_EMBED_EVENT, DEFAULT_GCAL_CONFIG, type GCalConfig } from '@/lib/gcal-embed';
 
 import type { GCalEvent } from '@/lib/types';
 
@@ -95,6 +96,16 @@ interface TooltipInfo {
 export function WeekView({ weekStart, events }: WeekTimeGridProps) {
   const viewState = useCalendarViewState(EMPTY_CALENDAR_SUBS);
   const [clickedEvent, setClickedEvent] = useState<TooltipInfo | null>(null);
+  // 캘린더 표시 이름용 config. lazy init이 hydration-safe한 이유: gcalConfig는
+  // 클릭 핸들러(팝오버 calName)에서만 읽혀 SSR 마크업에 영향이 없다.
+  const [gcalConfig, setGcalConfigState] = useState<GCalConfig>(() =>
+    typeof window === 'undefined' ? DEFAULT_GCAL_CONFIG : getGCalConfig(),
+  );
+  useEffect(() => {
+    const handler = () => setGcalConfigState(getGCalConfig());
+    window.addEventListener(GCAL_EMBED_EVENT, handler);
+    return () => window.removeEventListener(GCAL_EMBED_EVENT, handler);
+  }, []);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -244,7 +255,6 @@ export function WeekView({ weekStart, events }: WeekTimeGridProps) {
                 const widthPct = (1 / layout.totalLanes) * 100;
 
                 const color = viewState[ev.calendarId]?.color ?? '#6366F1';
-                const cal = ([] as import('@/lib/types').CalendarSubscription[]).find(c => c.id === ev.calendarId);
 
                 return (
                   <div
@@ -263,7 +273,7 @@ export function WeekView({ weekStart, events }: WeekTimeGridProps) {
                       const rect = e.currentTarget.getBoundingClientRect();
                       setClickedEvent({
                         event: ev,
-                        calName: cal?.name ?? ev.calendarId,
+                        calName: getCalendarLabel(ev.calendarId, gcalConfig),
                         color,
                         x: rect.right + 8,
                         y: rect.top,

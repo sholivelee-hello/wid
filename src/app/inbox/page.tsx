@@ -306,6 +306,8 @@ function InboxPageInner() {
   };
 
   const handleDelete = async (taskId: string) => {
+    // 머무름 중 삭제되면 타이머·머무름 상태를 같이 해제 (유령 entry 방지).
+    clearLinger(taskId);
     setTasks(prev => prev.filter(t => t.id !== taskId));
     try {
       await apiFetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
@@ -316,6 +318,8 @@ function InboxPageInner() {
   };
 
   const handlePend = async (taskId: string) => {
+    // 머무름 중 보류되면 타이머·머무름 상태를 같이 해제 (유령 entry 방지).
+    clearLinger(taskId);
     // 낙관적 제거: 본인 + 직계 sub-task. 실패 시 fetchTasks로 원복.
     setTasks(prev => prev.filter(t => t.id !== taskId && t.parent_task_id !== taskId));
     // 보류한 task는 오늘에서도 빼낸다 — 안 그러면 복귀(unpend) 후에도 인박스가
@@ -505,7 +509,11 @@ function InboxPageInner() {
   }, [tasks]);
 
   const getViewTasks = useCallback((view: CustomTaskView) => {
-    let list = applyBaseFilter(treeFilteredTasks);
+    // 메인 평면 리스트와 같은 계약: top-level TASK만 (sub-TASK는 부모 토글 경유,
+    // docs/architecture/hierarchy.md).
+    let list = applyBaseFilter(treeFilteredTasks).filter(
+      t => !t.parent_task_id && !t.is_deleted,
+    );
     if (view.statuses.length > 0) {
       list = list.filter(t => view.statuses.includes(t.status));
     }
@@ -530,7 +538,7 @@ function InboxPageInner() {
       if (sort === 'source') return compareStr(a.source, b.source);
       return b.created_at.localeCompare(a.created_at);
     });
-  }, [tasks, applyBaseFilter]);
+  }, [treeFilteredTasks, applyBaseFilter]);
 
   // Capture wall-clock once on mount so today doesn't drift between renders.
   // Must be declared before the early-return below to satisfy rules-of-hooks.

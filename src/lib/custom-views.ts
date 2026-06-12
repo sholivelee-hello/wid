@@ -61,7 +61,10 @@ export function saveViews(page: 'inbox' | 'today', views: CustomTaskView[]) {
 export function loadInboxFilter(): string[] {
   if (typeof window === 'undefined') return [];
   try {
-    return JSON.parse(localStorage.getItem(INBOX_FILTER_KEY) ?? '[]');
+    const parsed = JSON.parse(localStorage.getItem(INBOX_FILTER_KEY) ?? '[]');
+    return Array.isArray(parsed)
+      ? parsed.filter((v): v is string => typeof v === 'string')
+      : [];
   } catch {
     return [];
   }

@@ -317,8 +317,12 @@ export default function TodayPage() {
   );
   const todayTasks = useMemo(() => {
     const effective = getEffectiveTodayTaskIds(todayIds, tasks, todayStr);
-    return tasks.filter(t => effective.has(t.id) && !t.is_deleted);
-  }, [tasks, todayIds, todayStr]);
+    // 머무름 중인 task는 effective 계산에서 빠져도(예: deadline-auto 항목을
+    // 취소 처리) 3초간 리스트에 남겨 되돌리기 창을 보장한다.
+    return tasks.filter(
+      t => (effective.has(t.id) || lingeringDoneIds.has(t.id)) && !t.is_deleted,
+    );
+  }, [tasks, todayIds, todayStr, lingeringDoneIds]);
 
   const tasksById = useMemo(() => {
     const m = new Map<string, Task>();
@@ -430,6 +434,8 @@ export default function TodayPage() {
   };
 
   const handleDelete = async (taskId: string) => {
+    // 머무름 중 삭제되면 타이머·머무름 상태를 같이 해제 (유령 entry 방지).
+    clearLinger(taskId);
     setTasks(prev => prev.filter(t => t.id !== taskId));
     try {
       await apiFetch(`/api/tasks/${taskId}`, { method: 'DELETE' });

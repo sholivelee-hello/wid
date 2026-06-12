@@ -1,6 +1,11 @@
-# Mock backend 컨벤션
+# Mock backend 컨벤션 (역사 문서 — 현재는 Supabase)
 
-`isMockMode()` 분기 안에서 동작하는 in-memory dev backend. dev 서버 수명 동안 state 유지, 재시작하면 시드로 리셋.
+> ⚠️ 2026-04-29 Supabase 실연결로 mock 백엔드는 삭제됐다. 이 문서는 당시 규칙의
+> 기록이며, 아래 "PATCH 가드 카탈로그"와 "허용 PATCH 필드"는 2026-06-12 Supabase
+> 라우트에 재구현된 현행 계약으로 갱신됨. 나머지 섹션(공유 refs, normalizeDepth)은
+> 더 이상 코드에 없다.
+
+`isMockMode()` 분기 안에서 동작하던 in-memory dev backend. dev 서버 수명 동안 state 유지, 재시작하면 시드로 리셋.
 
 ## 공유 mutable refs
 
@@ -33,29 +38,33 @@ return NextResponse.json(newTask, { status: 201 });
 
 `src/app/api/tasks/route.ts` 의 `normalizeDepth(tasks)` 가 모듈 init 시 1회 실행. depth ≥ 2 행을 최상위 TASK 조상의 자식으로 평탄화. 일회성 마이그레이션이 아니라 부팅 시 방어적 자가치유 패턴.
 
-## PATCH `/api/tasks/[id]` 가드 카탈로그
+## PATCH `/api/tasks/[id]` 가드 카탈로그 (현행 — Supabase 라우트, 2026-06-12 재구현)
 
 | 코드 | HTTP | 트리거 |
 |---|---|---|
-| `DUAL_PARENT` | 400 | `issue_id` 와 `parent_task_id` 둘 다 set 시도 |
-| `INCOMPLETE_CHILDREN` | 409 | sub-TASK 미완료 상태에서 부모를 완료 처리 |
-| `CYCLE` | 400 | `parent_task_id` 후보가 자기 자신의 자손 |
-| `MAX_DEPTH` | 400 | `parent_task_id` 가 다른 sub-TASK를 가리킴 (3-level 위반) |
+| `DUAL_PARENT` | 400 | `issue_id` 와 `parent_task_id` 둘 다 set 시도 (POST에도 동일) |
+| `CYCLE` | 400 | `parent_task_id` 후보가 자기 자신 (깊은 cycle은 `MAX_DEPTH`가 차단) |
+| `MAX_DEPTH` | 400 | `parent_task_id` 가 다른 sub-TASK를 가리킴 (3-level 위반, POST에도 동일) |
 | `WOULD_DEEPEN` | 400 | 자식 있는 TASK를 sub-TASK로 옮기려 함 |
+| `PARENT_NOT_FOUND` | 400 | `parent_task_id` 가 없는/삭제된 task |
 
-## 허용 PATCH 필드
+mock 시절 있던 `INCOMPLETE_CHILDREN`(409)과 `DEPTH_FLIP`은 현행 서버에 없음 — `hierarchy.md` 참고.
+
+## 허용 PATCH 필드 (현행)
 
 ```ts
-// tasks
-['title', 'description', 'priority', 'status', 'source',
+// tasks — src/app/api/tasks/[id]/route.ts ALLOWED_PATCH_FIELDS
+['title', 'description', 'status',
  'requester', 'requested_at', 'deadline', 'completed_at',
- 'notion_task_id', 'slack_url', 'slack_channel', 'slack_sender',
  'delegate_to', 'follow_up_note',
- 'issue_id', 'parent_task_id', 'sort_mode', 'position']
+ 'issue_id', 'parent_task_id', 'sort_mode', 'position', 'name_locked']
 
-// issues
+// issues — src/app/api/issues/[id]/route.ts allowed
 ['name', 'deadline', 'sort_mode', 'position', 'notion_issue_id']
 ```
+
+`source`·`notion_task_id`·`slack_*` 등 출처 식별자는 PATCH 불가 — 출처 스푸핑 방지.
+`is_deleted`/`pending_at` 도 전용 라우트(DELETE, pend/unpend)만 만진다.
 
 `color` 는 issue 타입에서 제거됨 (UI에서 색상 모두 제거됨, `inline-editing.md` / 인박스 UX 변경 참고).
 

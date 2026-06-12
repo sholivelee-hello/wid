@@ -131,7 +131,12 @@ export async function POST(request: NextRequest) {
       );
       statusItem =
         items.find((it) => it.fieldId === 'status' || it.field === 'status') ?? null;
-      changeId = String(payload?.changelog?.id ?? payload?.timestamp ?? '');
+      // changelog.id가 없는 payload도 있다 — 빈 문자열 fallback은 서로 다른
+      // 변경이 같은 dedup key로 충돌하므로, timestamp + 변경 내용으로 구분.
+      changeId =
+        payload?.changelog?.id != null
+          ? String(payload.changelog.id)
+          : `${payload?.timestamp ?? ''}:${statusItem?.to ?? ''}`;
     }
 
     if (assignedToMe) {
@@ -168,7 +173,12 @@ export async function POST(request: NextRequest) {
   const { error: dedupErr } = await supabase
     .from('jira_events')
     .insert({ event_key: eventKey });
-  if (dedupErr) console.error('[jira/webhook] dedup insert failed', eventKey, dedupErr);
+  if (dedupErr) {
+    // unique 위반 = 동시 재전송이 이미 처리 중 — task 중복 생성 방지를 위해 중단.
+    // 그 외 오류도 row가 없으니 JIRA 재시도에서 다시 처리된다.
+    console.error('[jira/webhook] dedup insert failed', eventKey, dedupErr);
+    return NextResponse.json({ ok: true });
+  }
 
   const { error: insertErr } = await supabase.from('tasks').insert({
     title: title.slice(0, 200),

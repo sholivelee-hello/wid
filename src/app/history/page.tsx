@@ -41,7 +41,7 @@ export default function HistoryPage() {
   const [events, setEvents] = useState<GCalEvent[]>([]);
   const [subs, setSubs] = useState<CalendarSubscription[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const debounceRef = useRef<NodeJS.Timeout>(undefined);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   // Track previous debounced search to detect first-typed transition for monthCursor auto-jump
   const prevDebouncedRef = useRef('');
   // Latest globalTasks via ref so the debounce callback can read without re-creating itself

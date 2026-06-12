@@ -36,13 +36,19 @@ export async function GET(request: NextRequest) {
   if (parentId) query = query.eq('parent_task_id', parentId);
   if (independent) query = query.is('issue_id', null).is('parent_task_id', null);
 
-  if (dateField === 'either' && from && to) {
+  // 단일 사용자(KST) 앱 — date-only(YYYY-MM-DD) 경계는 KST 자정 기준으로 해석.
+  // 그대로 넘기면 Postgres가 UTC 자정으로 읽어 경계가 9시간 밀린다.
+  const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+  const fromTs = from && DATE_ONLY.test(from) ? `${from}T00:00:00+09:00` : from;
+  const toTs = to && DATE_ONLY.test(to) ? `${to}T23:59:59.999+09:00` : to;
+
+  if (dateField === 'either' && fromTs && toTs) {
     query = query.or(
-      `and(created_at.gte.${from},created_at.lte.${to}T23:59:59.999Z),and(completed_at.gte.${from},completed_at.lte.${to}T23:59:59.999Z)`
+      `and(created_at.gte.${fromTs},created_at.lte.${toTs}),and(completed_at.gte.${fromTs},completed_at.lte.${toTs})`
     );
   } else {
-    if (from) query = query.gte('created_at', from);
-    if (to) query = query.lte('created_at', `${to}T23:59:59.999Z`);
+    if (fromTs) query = query.gte('created_at', fromTs);
+    if (toTs) query = query.lte('created_at', toTs);
   }
 
   query = query.order(sort, { ascending: order === 'asc' });
@@ -55,6 +61,25 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const supabase = createServerSupabaseClient();
   const body = await request.json();
+
+  // 3-level 계층 가드 (docs/architecture/hierarchy.md) — sub-of-sub 생성 금지,
+  // issue_id ↔ parent_task_id 상호배타.
+  if (body.issue_id && body.parent_task_id) {
+    return NextResponse.json({ error: 'DUAL_PARENT' }, { status: 400 });
+  }
+  if (body.parent_task_id) {
+    const { data: parent } = await supabase
+      .from('tasks')
+      .select('id, parent_task_id, is_deleted')
+      .eq('id', body.parent_task_id)
+      .maybeSingle();
+    if (!parent || parent.is_deleted) {
+      return NextResponse.json({ error: 'PARENT_NOT_FOUND' }, { status: 400 });
+    }
+    if (parent.parent_task_id) {
+      return NextResponse.json({ error: 'MAX_DEPTH' }, { status: 400 });
+    }
+  }
 
   const { data, error } = await supabase
     .from('tasks')

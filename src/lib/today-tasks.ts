@@ -14,6 +14,7 @@ export function getTodayTaskIds(): Set<string> {
 }
 
 export function saveTodayTaskIds(ids: Set<string>) {
+  if (typeof window === 'undefined') return;
   localStorage.setItem(KEY, JSON.stringify([...ids]));
   window.dispatchEvent(new CustomEvent('today-tasks-changed'));
 }

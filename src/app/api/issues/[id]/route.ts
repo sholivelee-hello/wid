@@ -40,19 +40,28 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   const cascade = new URL(req.url).searchParams.get('cascade') ?? 'detach';
   const supabase = createServerSupabaseClient();
   if (cascade === 'delete') {
-    const { data: direct } = await supabase
+    const { data: direct, error: fetchErr } = await supabase
       .from('tasks')
       .select('id')
       .eq('issue_id', id)
       .eq('is_deleted', false);
+    if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 });
     if (direct && direct.length > 0) {
       const ids = direct.map((t: { id: string }) => t.id);
-      await supabase.from('tasks').update({ is_deleted: true }).in('parent_task_id', ids);
-      await supabase.from('tasks').update({ is_deleted: true }).in('id', ids);
+      const { error: subErr } = await supabase
+        .from('tasks').update({ is_deleted: true }).in('parent_task_id', ids);
+      if (subErr) return NextResponse.json({ error: subErr.message }, { status: 500 });
+      const { error: taskErr } = await supabase
+        .from('tasks').update({ is_deleted: true }).in('id', ids);
+      if (taskErr) return NextResponse.json({ error: taskErr.message }, { status: 500 });
     }
   } else {
-    await supabase.from('tasks').update({ issue_id: null }).eq('issue_id', id);
+    const { error: detachErr } = await supabase
+      .from('tasks').update({ issue_id: null }).eq('issue_id', id);
+    if (detachErr) return NextResponse.json({ error: detachErr.message }, { status: 500 });
   }
-  await supabase.from('issues').update({ is_deleted: true }).eq('id', id);
+  const { error: issueErr } = await supabase
+    .from('issues').update({ is_deleted: true }).eq('id', id);
+  if (issueErr) return NextResponse.json({ error: issueErr.message }, { status: 500 });
   return NextResponse.json({ ok: true, cascade });
 }

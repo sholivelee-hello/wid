@@ -18,19 +18,15 @@
 
 | 어디서 | 어떻게 |
 |---|---|
-| `POST /api/tasks` | `parent_task_id` 가 다른 sub-TASK면 400 (`MAX_DEPTH`) |
-| `PATCH /api/tasks/[id]` | 위와 동일 + 자식 있는 TASK를 sub-TASK로 옮기려는 경우 400 (`WOULD_DEEPEN`) + `parent_task_id` null↔non-null 변환 거절 (`DEPTH_FLIP`) |
+| `POST /api/tasks` | `issue_id`+`parent_task_id` 동시 set 400 (`DUAL_PARENT`), `parent_task_id` 가 다른 sub-TASK면 400 (`MAX_DEPTH`), 없는/삭제된 부모 400 (`PARENT_NOT_FOUND`) |
+| `PATCH /api/tasks/[id]` | 위와 동일 + 자식 있는 TASK를 sub-TASK로 옮기려는 경우 400 (`WOULD_DEEPEN`) + 자기 자신을 부모로 지정 400 (`CYCLE`) — 부모는 항상 top-level이어야 하므로 더 깊은 cycle은 `MAX_DEPTH`가 같이 차단. 허용 필드 화이트리스트 적용 (`mock-backend.md` 참고) |
 | `TaskBranch` UI | `+ sub-TASK 추가` 버튼은 `depth === 0` 일 때만 렌더 |
 | `InboxTree` DnD | top-level↔sub-TASK 변환 시도는 모두 거절 + toast (`dnd.md` 참고) |
-| 모듈 로드 시 | `normalizeDepth()` 가 depth ≥ 2 행을 최상위 TASK 조상에게 재할당 (자가치유) |
 
-## 핵심 헬퍼 (둘 다 `src/app/api/tasks/route.ts`)
-
-```ts
-isValidTaskParent(taskList, parentId)  // parentId 가 최상위 TASK인가?
-hasChildTasks(taskList, id)            // 이 task에 자식이 있는가?
-normalizeDepth(taskList)               // 모듈 로드 시 한번 깊이 평탄화
-```
+> 2026-06-12: mock → Supabase 전환(`a991a40`) 때 서버 가드가 통째로 사라졌던 것을
+> 재구현. mock 시절의 `DEPTH_FLIP`·`INCOMPLETE_CHILDREN`·`normalizeDepth`(자가치유)는
+> 현재 서버에 **없다** — depth flip은 UI(DnD 가드)에서만 차단, 완료 전파는 클라이언트
+> 책임. 다시 필요해지면 `PATCH /api/tasks/[id]` 가드 블록에 추가.
 
 ## hierarchy 배지는 데이터 기준, render depth 아님
 
@@ -63,8 +59,8 @@ normalizeDepth(taskList)               // 모듈 로드 시 한번 깊이 평탄
 
 ## 관련 파일
 
-- `src/app/api/tasks/route.ts` — POST 가드, 헬퍼들, normalizeDepth
-- `src/app/api/tasks/[id]/route.ts` — PATCH 가드 (DUAL_PARENT, DEPTH_FLIP, INCOMPLETE_CHILDREN, CYCLE, MAX_DEPTH, WOULD_DEEPEN)
+- `src/app/api/tasks/route.ts` — POST 가드 (DUAL_PARENT, MAX_DEPTH, PARENT_NOT_FOUND)
+- `src/app/api/tasks/[id]/route.ts` — PATCH 가드 (DUAL_PARENT, CYCLE, MAX_DEPTH, WOULD_DEEPEN, PARENT_NOT_FOUND) + 필드 화이트리스트
 - `src/components/inbox/inbox-tree.tsx` — DnD onDragEnd, TASK↔sub-TASK 변환 거절 가드
 - `src/components/tasks/task-branch.tsx` — sub-TASK 추가 버튼 depth 0 한정
 - `src/components/tasks/task-card.tsx` — hierarchyLabel 데이터 기준 계산
@@ -74,7 +70,8 @@ normalizeDepth(taskList)               // 모듈 로드 시 한번 깊이 평탄
 한번 top-level TASK이면 영원히 top-level. 한번 sub-TASK이면 영원히 sub-TASK. DnD든 PATCH든 이 불변량을 깨면 안 됨.
 
 - DnD: `inbox-tree.tsx onDragEnd` 안 가드들이 4가지 변환 시도 모두 차단 + toast.
-- API: `PATCH /api/tasks/[id]` 의 `DEPTH_FLIP` 가드가 `parent_task_id` 의 null↔non-null 토글 차단 (defense-in-depth).
+- API: `DEPTH_FLIP` 가드는 Supabase 전환 후 미구현 — 서버는 `MAX_DEPTH`/`WOULD_DEEPEN`/`CYCLE`로
+  3-level 위반만 차단하고, null↔non-null 토글 자체의 차단은 UI 가드가 담당 (2026-06-12 현황).
 - 같은 depth 내 cross-parent 이동(sub-TASK가 다른 parent task로) 또는 cross-issue 이동(top-level이 다른 ISSUE로)은 OK — depth 자체가 바뀌지 않음.
 
 depth 변환이 정말 필요하면 task를 삭제하고 새로 만들어야 함 — 의도된 design.

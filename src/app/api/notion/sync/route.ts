@@ -365,6 +365,9 @@ export async function POST() {
             deadline,
             issue_id: localIssueId,
             requester,
+            // Slack/JIRA와 동일하게 provenance 시각을 남긴다 — 비우면 노션発만
+            // 타임라인에서 요청 시각이 빠진다.
+            requested_at: notionEditedAt ?? new Date().toISOString(),
           });
           if (insertErr) {
             console.error('[notion/sync] insert failed', page.id, insertErr);
