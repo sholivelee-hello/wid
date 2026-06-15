@@ -241,12 +241,19 @@ export async function POST(request: NextRequest) {
 
   const botToken = process.env.SLACK_BOT_TOKEN!;
 
+  // 반응을 단 그 메시지를 정확히 가져온다. conversations.history는 채널 최상위
+  // 타임라인만 반환해서, 스레드 답글에 반응하면 그 답글이 안 잡히고 직전 최상위
+  // 메시지(= 스레드 부모/메인)가 잡혀 버린다. conversations.replies는 ts로 스레드
+  // 부모·답글 어느 쪽이든 식별할 수 있고, oldest=latest=item.ts + inclusive로 핀하면
+  // 부모·답글·일반 메시지 세 경우 모두 그 한 건만 반환된다 (추가 스코프 불필요).
   const msgRes = await fetch(
-    `https://slack.com/api/conversations.history?channel=${event.item.channel}&latest=${event.item.ts}&limit=1&inclusive=true`,
+    `https://slack.com/api/conversations.replies?channel=${event.item.channel}&ts=${event.item.ts}&oldest=${event.item.ts}&latest=${event.item.ts}&inclusive=true&limit=1`,
     { headers: { Authorization: `Bearer ${botToken}` } }
   );
   const msgData = await msgRes.json();
-  const message = msgData.messages?.[0];
+  // 안전장치: 응답에 여러 건이 와도 ts가 정확히 일치하는 메시지를 우선 채택.
+  const message =
+    msgData.messages?.find((m: { ts?: string }) => m.ts === event.item.ts) ?? msgData.messages?.[0];
 
   if (!message) return NextResponse.json({ ok: true });
 
