@@ -3,11 +3,12 @@
 import { useEffect, useImperativeHandle, useRef, useState, forwardRef } from 'react';
 import { Task, Issue } from '@/lib/types';
 import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { IssuePicker } from '@/components/issues/issue-picker';
 import { TaskChipButton } from '@/components/tasks/task-chip-button';
 import { DeadlinePopover } from '@/components/tasks/deadline-popover';
 import { apiFetch } from '@/lib/api';
-import { Loader2, CornerDownLeft, FolderOpen } from 'lucide-react';
+import { Loader2, CornerDownLeft, FolderOpen, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -34,6 +35,8 @@ export const TaskQuickCapture = forwardRef<TaskQuickCaptureHandle, TaskQuickCapt
     const [deadline, setDeadline] = useState<string | null>(null);
     const [issueId, setIssueId] = useState<string | null>(defaultIssueId);
     const [issueName, setIssueName] = useState<string | null>(null);
+    const [requester, setRequester] = useState('');
+    const [requesterOpen, setRequesterOpen] = useState(false);
     const [saving, setSaving] = useState(false);
     const [issuePickerOpen, setIssuePickerOpen] = useState(false);
 
@@ -56,11 +59,12 @@ export const TaskQuickCapture = forwardRef<TaskQuickCaptureHandle, TaskQuickCapt
       return () => { cancel = true; };
     }, [issueId]);
 
-    const chipsTouched = deadline !== null || issueId !== defaultIssueId;
+    const chipsTouched = deadline !== null || issueId !== defaultIssueId || requester.trim() !== '';
 
     const resetChips = () => {
       setDeadline(null);
       setIssueId(defaultIssueId);
+      setRequester('');
     };
 
     const submit = async (opts: { keepOpen: boolean }) => {
@@ -75,6 +79,7 @@ export const TaskQuickCapture = forwardRef<TaskQuickCaptureHandle, TaskQuickCapt
             title: trimmed,
             deadline,
             issue_id: issueId,
+            requester: requester.trim() || null,
             parent_task_id: null,
             status: '등록',
             source: 'manual',
@@ -180,6 +185,32 @@ export const TaskQuickCapture = forwardRef<TaskQuickCaptureHandle, TaskQuickCapt
           >
             {issueLabel}
           </TaskChipButton>
+
+          <Popover open={requesterOpen} onOpenChange={setRequesterOpen}>
+            <PopoverTrigger
+              render={
+                <TaskChipButton active={requester.trim() !== ''} icon={<User className="h-3 w-3" />}>
+                  {requester.trim() || '요청자'}
+                </TaskChipButton>
+              }
+            />
+            <PopoverContent className="w-56 p-2" align="start">
+              <Input
+                autoFocus
+                value={requester}
+                onChange={(e) => setRequester(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    setRequesterOpen(false);
+                  }
+                }}
+                placeholder="요청한 사람 이름"
+                className="h-8 text-sm"
+                aria-label="요청자 이름"
+              />
+            </PopoverContent>
+          </Popover>
 
           {chipsTouched && (
             <button
