@@ -27,6 +27,7 @@ JIRA(mirapartners.atlassian.net)의 **알림 5종**을 WID TASK로 들여온다.
 - **댓글 body**: wiki 문자열(`[~accountid:...]`)과 ADF 객체 둘 다 처리(`commentBodyToText`). 멘션 감지는 직렬화 문자열에 내 accountId 포함 여부로 — 두 포맷 모두 커버.
 - **사이트 주소**: `issue.self`의 origin에서 유도, 실패 시 mirapartners.atlassian.net fallback.
 - **jira_url**: `{site}/browse/{KEY}`, 댓글이면 `?focusedCommentId={id}` 추가. 우클릭 "원본 열기"가 이 URL을 연다(`sourceOpenUrl`).
+- **기본 오늘 포함 (2026-06-23)**: 웹훅 insert가 `is_today: true`로 생성 → TASK가 /today에 바로 뜬다(전체가 아니라 오늘로). 사용자가 "오늘에서 빼기"를 하면 `is_today=false`로 PATCH되어 /inbox(전체)로 내려간다. 모델·토글 동작은 `today.md`의 **Flag-auto** 항목 참조.
 
 ## 환경변수
 
@@ -52,6 +53,7 @@ JIRA(mirapartners.atlassian.net)의 **알림 5종**을 WID TASK로 들여온다.
 - `tasks.jira_url`, `tasks.jira_issue_key` (migration 009)
 - `jira_events` dedup 테이블 (migration 009)
 - `tasks.source` CHECK에 'jira'는 008에서 이미 허용됨
+- `tasks.is_today` boolean (migration 011) — JIRA insert가 true로 설정, 기본 오늘 포함용. `today.md` Flag-auto 참조
 - SourceIcon의 jira 슬롯은 placeholder 회색 점 → 공식 Jira 로고(#2684FF 단색)로 교체 (브랜드 아이콘 예외 — `docs/architecture/issues.md`)
 
 ## 비고: Slack relay 경로와의 관계

@@ -59,6 +59,7 @@ export interface Task {
   position: number;
   pending_at: string | null;
   name_locked: boolean;
+  is_today: boolean;
   is_deleted: boolean;
 }
 

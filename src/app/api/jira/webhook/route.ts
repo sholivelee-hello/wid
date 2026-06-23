@@ -187,6 +187,9 @@ export async function POST(request: NextRequest) {
     jira_issue_key: issueKey,
     requester,
     requested_at: requestedAt,
+    // JIRA에서 온 TASK는 기본적으로 "오늘"로 — 사용자가 빼면 is_today=false로
+    // 내려가 /inbox(전체)에 남는다. (docs/architecture/today.md, jira.md)
+    is_today: true,
   });
   if (insertErr) {
     console.error('[jira/webhook] task insert failed', eventKey, insertErr);

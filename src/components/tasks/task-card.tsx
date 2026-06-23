@@ -27,7 +27,7 @@ import { STATUS_ICONS } from '@/lib/constants';
 import { TASK_STATUSES, type TaskStatus, isTaskDone } from '@/lib/types';
 import { Task } from '@/lib/types';
 import { formatDate, cn } from '@/lib/utils';
-import { toggleTodayTask, getTodayTaskIds } from '@/lib/today-tasks';
+import { toggleTodayMembership, getTodayTaskIds } from '@/lib/today-tasks';
 import { TaskInlineEditor } from '@/components/tasks/task-inline-editor';
 import { getTaskWeight } from '@/lib/task-weight';
 import { SourceIcon, sourceOpenUrl } from '@/components/tasks/source-icon';
@@ -161,7 +161,9 @@ export function TaskCard({
   // 마감일 기반 무게 — 처리된 task는 line-through가 우선이므로 normal 고정.
   const weight = isDone ? 'normal' : getTaskWeight(task.deadline, weightNow);
 
-  const [isTodayTask, setIsTodayTask] = useState(() => getTodayTaskIds().has(task.id));
+  // 오늘 소속 = explicit(localStorage) ∪ 서버 is_today 플래그(JIRA 자동 포함).
+  const [explicitToday, setExplicitToday] = useState(() => getTodayTaskIds().has(task.id));
+  const isTodayTask = explicitToday || !!task.is_today;
   const [completePulse, setCompletePulse] = useState(0);
   // 모바일 바텀 액션 시트 열림 상태 — 롱프레스·⋯ 둘 다 같은 시트를 연다.
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -176,7 +178,7 @@ export function TaskCard({
   const [addingSub, setAddingSub] = useState(false);
 
   useEffect(() => {
-    const handler = () => setIsTodayTask(getTodayTaskIds().has(task.id));
+    const handler = () => setExplicitToday(getTodayTaskIds().has(task.id));
     window.addEventListener('today-tasks-changed', handler);
     return () => window.removeEventListener('today-tasks-changed', handler);
   }, [task.id]);
@@ -266,7 +268,7 @@ export function TaskCard({
         )}
         {isDone ? '완료 취소' : '완료'}
       </M.Item>
-      <M.Item onClick={() => { toggleTodayTask(task.id); }}>
+      <M.Item onClick={() => { toggleTodayMembership(task); }}>
         <Sun className={cn(isTodayTask && 'fill-primary text-primary')} />
         {isTodayTask ? '오늘에서 빼기' : '오늘로 보내기'}
       </M.Item>

@@ -452,13 +452,19 @@ function InboxPageInner() {
     for (const arr of m.values()) arr.sort((a, b) => a.position - b.position);
     return m;
   }, [treeFilteredTasks]);
+  // 오늘 소속 = explicit(localStorage) ∪ 서버 is_today 플래그(JIRA 자동 포함).
+  // 등록 뷰에서 숨겨 오늘 탭과 중복 노출을 막는다.
+  const inTodaySet = useCallback(
+    (t: Task) => todaySet.has(t.id) || (!!t.is_today && !isTaskDone(t.status)),
+    [todaySet],
+  );
   const flatTopTasks = useMemo(() => {
     const base = applyBaseFilter(treeFilteredTasks)
       .filter(t => !t.parent_task_id && !t.is_deleted)
       // 등록 뷰: 미처리 task + 방금 완료해 머무름 중인 task(3초). 완료 뷰: 처리됨만.
       .filter(t => isTaskDone(t.status) === showCompleted || (!showCompleted && lingeringDoneIds.has(t.id)))
-      // 오늘로 보낸(explicit today) task는 등록 뷰에서 숨김 — 오늘 탭 담당.
-      .filter(t => showCompleted || !todaySet.has(t.id));
+      // 오늘로 보낸 task(explicit 또는 JIRA is_today)는 등록 뷰에서 숨김 — 오늘 탭 담당.
+      .filter(t => showCompleted || !inTodaySet(t));
     // 등록 뷰: created_at desc + 수동 정렬 overlay. 완료 뷰: completed_at desc
     // (취소 등 null은 created_at fallback). id를 2차 키로 두어 동시 생성/완료
     // 시 순서가 흔들리지 않게.
@@ -467,15 +473,15 @@ function InboxPageInner() {
       (a, b) => key(b).localeCompare(key(a)) || b.id.localeCompare(a.id),
     );
     return showCompleted ? sorted : applyManualOrder(sorted, manualOrder);
-  }, [applyBaseFilter, treeFilteredTasks, showCompleted, todaySet, manualOrder, lingeringDoneIds]);
+  }, [applyBaseFilter, treeFilteredTasks, showCompleted, inTodaySet, manualOrder, lingeringDoneIds]);
 
   // 등록 뷰에서 숨겨진 "오늘로 보낸" 미완료 top-level 수 — 리스트 아래 안내용.
   const hiddenTodayCount = useMemo(() => {
     if (showCompleted) return 0;
     return applyBaseFilter(treeFilteredTasks).filter(
-      t => !t.parent_task_id && !t.is_deleted && !isTaskDone(t.status) && todaySet.has(t.id),
+      t => !t.parent_task_id && !t.is_deleted && !isTaskDone(t.status) && inTodaySet(t),
     ).length;
-  }, [applyBaseFilter, treeFilteredTasks, showCompleted, todaySet]);
+  }, [applyBaseFilter, treeFilteredTasks, showCompleted, inTodaySet]);
   const issueChipFor = (t: Task) => {
     if (!t.issue_id) return null;
     const i = issuesById.get(t.issue_id);

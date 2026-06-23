@@ -22,7 +22,7 @@ import { Issue, Task, TASK_STATUSES, isTaskDone, isTaskStatus } from '@/lib/type
 import { apiFetch } from '@/lib/api';
 import { formatDate, cn } from '@/lib/utils';
 import {
-  toggleTodayTask, getTodayTaskIds, removeTodayTaskWithDescendants,
+  toggleTodayMembership, getTodayTaskIds, removeTodayTaskWithDescendants,
   promptNextInTodayIfNeeded,
 } from '@/lib/today-tasks';
 import { toast } from 'sonner';
@@ -118,7 +118,9 @@ export function TaskDetailPanel({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [showExtras, setShowExtras] = useState(false);
   const [addingSub, setAddingSub] = useState(false);
-  const [isTodayTask, setIsTodayTask] = useState(false);
+  // 오늘 소속 = explicit(localStorage) ∪ 서버 is_today 플래그(JIRA 자동 포함).
+  const [explicitToday, setExplicitToday] = useState(false);
+  const isTodayTask = explicitToday || !!task?.is_today;
 
   // 저장 인디케이터 — TaskInlineEditor와 동일 라이프사이클.
   const [saving, setSaving] = useState(false);
@@ -166,7 +168,7 @@ export function TaskDetailPanel({
   }, [taskId]);
 
   useEffect(() => {
-    const sync = () => setIsTodayTask(taskId ? getTodayTaskIds().has(taskId) : false);
+    const sync = () => setExplicitToday(taskId ? getTodayTaskIds().has(taskId) : false);
     sync();
     window.addEventListener('today-tasks-changed', sync);
     return () => window.removeEventListener('today-tasks-changed', sync);
@@ -473,7 +475,7 @@ export function TaskDetailPanel({
                   icon={<Sun className={cn('h-3 w-3', isTodayTask && 'fill-primary text-primary')} />}
                   caret={false}
                   className="touch-hitarea-y"
-                  onClick={() => { if (taskId) toggleTodayTask(taskId); }}
+                  onClick={() => { if (task) toggleTodayMembership(task); }}
                 >
                   {isTodayTask ? '오늘에 있음' : '오늘로 보내기'}
                 </TaskChipButton>

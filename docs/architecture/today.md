@@ -7,7 +7,8 @@
 | **Explicit** | 사용자가 직접 "오늘에 추가" 한 task ID들 | `localStorage[wid-today-task-ids]` |
 | **Deadline-auto** | 마감일(due date)이 오늘이거나 지난, 미완료·미보류·미삭제 task | `getDeadlineTodayTaskIds(allTasks, todayStr)` (파생, 저장 안 함) |
 | **Completed-today-auto** | `completed_at`이 오늘(로컬)인 **완료** task (취소 제외) | `getCompletedTodayTaskIds(allTasks)` (파생, 저장 안 함) |
-| **Effective** | (explicit ∪ deadline-auto ∪ completed-today-auto) ∪ 그 자손 전부 | `getEffectiveTodayTaskIds(explicit, allTasks, todayStr)` |
+| **Flag-auto** | 서버 `is_today=true` 플래그가 켜진 미완료·미보류·미삭제 task (JIRA 자동 포함) | `getFlaggedTodayTaskIds(allTasks)` (DB 컬럼에서 파생) |
+| **Effective** | (explicit ∪ flag-auto ∪ deadline-auto ∪ completed-today-auto) ∪ 그 자손 전부 | `getEffectiveTodayTaskIds(explicit, allTasks, todayStr)` |
 
 Explicit set이 단일 진실. Deadline-auto는 task 상태에서 매번 파생 — localStorage에 안 들어감 (마감 지나거나 완료되면 자동으로 빠지고, "사용자가 골랐나?"가 흐려지지 않게). Effective set은 매 렌더마다 계산: explicit + deadline-auto + completed-today-auto를 seed로 자손까지 펼침. 부모 TASK를 추가하면 sub-TASK들이 자동으로 따라오고, 부모를 빼면 같이 빠짐. `todayStr`은 today 페이지가 mount 시점에 고정한 로컬 날짜.
 
@@ -17,6 +18,14 @@ Explicit set이 단일 진실. Deadline-auto는 task 상태에서 매번 파생 
 - **완료만 — '취소'는 제외**. 멘탈모델이 "오늘 완료한 일"이라 취소까지 끌어오지 않음(`status === '완료'` 직접 체크, `isTaskDone` 아님 — 후자는 취소 포함).
 - deadline-auto와 동일하게 **파생 레이어** — explicit set(localStorage)은 불변. 되돌리기(완료 해제)하면 자동으로 빠지고, /inbox 등록 뷰 숨김 규칙(explicit set만 봄)은 영향 없음.
 - "오늘"은 `localDateStr(new Date())`(로컬)로 helper 안에서 자체 계산 — 페이지 `todayStr`(UTC 파생)이 아니라 `completed_at`(로컬)과 local-vs-local 비교. `countCompletedToday`/`pruneStaleTodayIds`와 같은 기준.
+
+### JIRA 자동 오늘 포함 — 서버 is_today 플래그 (2026-06-23)
+
+- JIRA 웹훅으로 들어온 TASK는 `is_today=true`로 생성되어 **기본적으로 /today에** 뜬다. 사용자가 굳이 "오늘로 보내기"를 누르지 않아도 됨. (JIRA는 동기화 버튼과 무관 — 웹훅 push라 자동, `jira.md`)
+- **왜 deadline-auto 대신 새 플래그인가**: 오늘 소속의 explicit 경로는 localStorage라 서버 웹훅이 못 건드린다. 가짜 deadline을 박으면 "마감" 뱃지가 붙는 부작용이 있어, DB에 명시적 today 플래그(`tasks.is_today`, migration 011)를 둔다. deadline-auto와 동급의 **파생 레이어** — `getEffectiveTodayTaskIds`가 날짜 무관하게 항상 seed로 폴딩한다. 탭이 안 열려있는 사이 도착해도, 기기가 바뀌어도 오늘에 들어온다(localStorage 비의존).
+- **해제 = 전체로 내려감**: deadline-auto와 달리 이 플래그는 **토글로 끌 수 있다**. "오늘에서 빼기"(`toggleTodayMembership`)가 explicit 제거 + `is_today=false` PATCH를 함께 수행 → effective에서 빠지고 /inbox(전체)에 남는다. 다시 "오늘로 보내기"를 누르면 explicit set에 추가되어 돌아온다(플래그 재설정 불필요).
+- **소속 판정 일원화**: 카드/상세의 `isTodayTask` = `explicit ∪ task.is_today`, /inbox 등록 뷰 숨김도 같은 기준(`inTodaySet` = explicit ∪ (is_today && !done)). done이면 flag-auto에서 빠지고 completed-today-auto가 회고용으로만 끌어온다.
+- 토글은 async(PATCH 왕복) — 성공 후 `task-updated` 디스패치로 열린 모든 페이지가 재조회. 가드: deleted/pending/done 제외(deadline-auto와 동일).
 
 ### 마감 자동 포함 (spec 결정 4, 2026-06-03)
 
@@ -58,9 +67,11 @@ root top-level TASK에는 `issueChip`(id+name)을 전달해 소속 ISSUE 칩을 
 
 ## 오늘 토글의 키보드 경로 (2026-06-03)
 
-해 아이콘(explicit set 토글)과 별개로, `TaskDetailPanel`에도 "오늘로 보내기/
-오늘에서 빼기" 버튼(`toggleTodayTask`)이 있어 키보드/포커스 경로로도 explicit
-set을 토글할 수 있다. 두 진입점 모두 `today-tasks-changed` 이벤트로 동기화된다.
+해 아이콘과 별개로, `TaskDetailPanel`에도 "오늘로 보내기/오늘에서 빼기"
+버튼이 있어 키보드/포커스 경로로도 오늘 소속을 토글할 수 있다. 두 진입점 모두
+`toggleTodayMembership(task)`를 호출 — explicit set과 서버 `is_today` 플래그를
+함께 다룬다(Flag-auto 항목 참조). explicit 변경은 `today-tasks-changed`,
+플래그 PATCH는 `task-updated` 이벤트로 열린 화면들이 동기화된다.
 
 ## Prompt-next-on-complete + 오늘 누적 (spec 결정 5)
 

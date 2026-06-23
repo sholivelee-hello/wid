@@ -24,6 +24,7 @@ const ALLOWED_PATCH_FIELDS = [
   'title', 'description', 'status', 'requester', 'requested_at',
   'deadline', 'completed_at', 'delegate_to', 'follow_up_note',
   'issue_id', 'parent_task_id', 'sort_mode', 'position', 'name_locked',
+  'is_today',
 ] as const;
 
 export async function PATCH(

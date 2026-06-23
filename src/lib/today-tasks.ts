@@ -19,14 +19,6 @@ export function saveTodayTaskIds(ids: Set<string>) {
   window.dispatchEvent(new CustomEvent('today-tasks-changed'));
 }
 
-export function toggleTodayTask(id: string): boolean {
-  const ids = getTodayTaskIds();
-  const wasIn = ids.has(id);
-  if (wasIn) ids.delete(id); else ids.add(id);
-  saveTodayTaskIds(ids);
-  return !wasIn; // true = 추가됨
-}
-
 /** Idempotent — used by Today-page creation flows to auto-include a freshly
  * captured task in today's list without requiring an extra Sun-icon click. */
 export function addTodayTask(id: string) {
@@ -122,6 +114,69 @@ export function getDeadlineTodayTaskIds(
 }
 
 /**
+ * Flag-based auto-include: a task carrying the server-side `is_today` flag (set
+ * by JIRA ingestion) belongs to 오늘 even though the user never tapped its Sun
+ * icon and it has no deadline. Like deadline-auto this is a *derived* layer —
+ * the flag lives in the DB (not the localStorage explicit set), so it survives
+ * across devices and applies to tasks that arrived while no tab was open.
+ *
+ * Guards mirror deadline-auto: deleted / pending / done tasks drop out (a done
+ * JIRA task is surfaced, if at all, by the completed-today layer instead). The
+ * flag is cleared (→ task falls to /inbox) by `toggleTodayMembership`.
+ */
+export function getFlaggedTodayTaskIds(tasks: Task[]): Set<string> {
+  const out = new Set<string>();
+  for (const t of tasks) {
+    if (t.is_deleted) continue;
+    if (t.pending_at) continue;
+    if (isTaskDone(t.status)) continue;
+    if (t.is_today) out.add(t.id);
+  }
+  return out;
+}
+
+/**
+ * Toggle a task's 오늘 membership from a card / detail-panel action.
+ *
+ * 오늘 membership has two *writable* sources: the localStorage explicit set
+ * (the user's Sun taps) and the server `is_today` flag (JIRA auto-include).
+ * "오늘에서 빼기" must clear whichever one put the task there — for a flagged
+ * JIRA task that means a server PATCH (is_today=false) so it drops to /inbox;
+ * a plain localStorage delete would no-op and leave it stuck in 오늘.
+ *
+ * Returns the new membership (true = now in 오늘). Async: the flag path awaits
+ * the PATCH, then fires `task-updated` so every open page refetches. The
+ * localStorage path resolves synchronously (saveTodayTaskIds dispatches its own
+ * event) so the UI flips immediately.
+ */
+export async function toggleTodayMembership(task: Task): Promise<boolean> {
+  const inToday = getTodayTaskIds().has(task.id) || !!task.is_today;
+  if (!inToday) {
+    addTodayTask(task.id);
+    return true;
+  }
+  // remove: drop from the explicit set (if present) and clear the server flag
+  // (if set). Either or both may apply.
+  const ids = getTodayTaskIds();
+  if (ids.delete(task.id)) saveTodayTaskIds(ids);
+  if (task.is_today) {
+    try {
+      await apiFetch(`/api/tasks/${task.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_today: false }),
+      });
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('task-updated'));
+      }
+    } catch {
+      /* apiFetch surfaces the error toast; leave state for the user to retry */
+    }
+  }
+  return false;
+}
+
+/**
  * Completed-today auto-include: a task whose `completed_at` falls on today
  * (local date) shows up in 오늘 even if it was never added to the explicit set
  * — e.g. completed straight from /inbox. Mirrors the user's mental model of
@@ -169,6 +224,8 @@ export function getEffectiveTodayTaskIds(
   todayStr?: string,
 ): Set<string> {
   const seeds = new Set(explicitIds);
+  // 서버 is_today 플래그(JIRA 자동 포함)는 날짜 무관 — todayStr 없이도 항상 폴딩.
+  for (const id of getFlaggedTodayTaskIds(tasks)) seeds.add(id);
   if (todayStr) {
     for (const id of getDeadlineTodayTaskIds(tasks, todayStr)) seeds.add(id);
     for (const id of getCompletedTodayTaskIds(tasks)) seeds.add(id);
