@@ -59,6 +59,9 @@ interface MenuKit {
   Item: React.ComponentType<{
     disabled?: boolean;
     variant?: 'destructive';
+    /** false면 클릭 후에도 메뉴/시트가 닫히지 않는다 — 2단계 삭제의 1단계용.
+     *  base-ui Menu.Item의 동명 prop과 동일 의미 (기본 true). */
+    closeOnClick?: boolean;
     onClick?: () => void;
     children: React.ReactNode;
   }>;
@@ -176,6 +179,10 @@ export function TaskCard({
   // 우클릭 "하위 task 추가" → 카드 아래 인라인 입력. 생성은 AddSubTaskRow가
   // 처리하고 task-created 이벤트로 모든 페이지가 새로고침되므로 부모 wiring 불필요.
   const [addingSub, setAddingSub] = useState(false);
+  // 2단계 삭제 — 메뉴의 '휴지통으로 이동'을 한 번 누르면 '진짜 삭제'로 무장
+  // (메뉴는 열린 채 유지), 한 번 더 누르면 실제 삭제. 확인 모달 없음
+  // (사용자 결정 2026-07-02). 메뉴/시트가 닫히면 무장 해제.
+  const [deleteArmed, setDeleteArmed] = useState(false);
 
   useEffect(() => {
     const handler = () => setExplicitToday(getTodayTaskIds().has(task.id));
@@ -345,9 +352,20 @@ export function TaskCard({
       {onDelete && (
         <>
           <M.Separator />
-          <M.Item variant="destructive" onClick={() => onDelete(task.id)}>
+          <M.Item
+            variant="destructive"
+            closeOnClick={deleteArmed}
+            onClick={() => {
+              if (deleteArmed) {
+                setDeleteArmed(false);
+                onDelete(task.id);
+              } else {
+                setDeleteArmed(true);
+              }
+            }}
+          >
             <Trash2 />
-            휴지통으로 이동
+            {deleteArmed ? '진짜 삭제' : '휴지통으로 이동'}
           </M.Item>
         </>
       )}
@@ -591,7 +609,7 @@ export function TaskCard({
             * 롱프레스 도입 후 군더더기라 제거 (사용자 결정 2026-06-07).
             * 인라인 에디터 중에는 우클릭 메뉴와 동일하게 숨긴다. */}
           {!editing && !isCoarse && (
-            <DropdownMenu>
+            <DropdownMenu onOpenChange={(open) => { if (!open) setDeleteArmed(false); }}>
               <DropdownMenuTrigger
                 aria-label="task 액션 메뉴"
                 onClick={(e) => e.stopPropagation()}
@@ -648,7 +666,7 @@ export function TaskCard({
       // 가로채지 않게 하고, 대신 카드 div의 자체 롱프레스 + 바텀 시트로 대체.
       card
     ) : (
-      <ContextMenu>
+      <ContextMenu onOpenChange={(open) => { if (!open) setDeleteArmed(false); }}>
         <ContextMenuTrigger render={card} />
         {contextMenuContent}
       </ContextMenu>
@@ -682,7 +700,13 @@ export function TaskCard({
         * renderActionItems(SHEET_KIT) 한 곳뿐(데스크톱과 동일 정의). coarse·
         * 비편집일 때만 마운트. */}
       {isCoarse && !editing && (
-        <TaskActionSheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <TaskActionSheet
+          open={sheetOpen}
+          onOpenChange={(open) => {
+            setSheetOpen(open);
+            if (!open) setDeleteArmed(false);
+          }}
+        >
           {renderActionItems(SHEET_KIT)}
         </TaskActionSheet>
       )}

@@ -107,7 +107,6 @@ function InboxPageInner() {
   const [delegate, setDelegate] = useState('all');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [expandedSubs, setExpandedSubs] = useState<Set<string>>(new Set());
   const toggleSubs = (id: string) =>
@@ -567,7 +566,9 @@ function InboxPageInner() {
   const taskHandlers = {
     onStatusChange: handleStatusChange,
     onComplete: handleComplete,
-    onDelete: (id: string) => setDeleteId(id),
+    // 삭제 확인은 카드 메뉴의 2단계('휴지통으로 이동' → '진짜 삭제')가 담당 —
+    // 페이지 레벨 확인 모달 없음 (사용자 결정 2026-07-02).
+    onDelete: handleDelete,
     // Click semantics unified with Today: opening the full TaskDetailPanel
     // (center modal) gives parent / siblings / children context in one
     // surface. The legacy inline editor still exists in TaskCard but is no
@@ -1059,25 +1060,6 @@ function InboxPageInner() {
           )}
         </div>
       )}
-
-      {(() => {
-        const target = deleteId ? tasks.find(t => t.id === deleteId) : null;
-        const isSub = !!target?.parent_task_id;
-        return (
-          <ConfirmDialog
-            open={!!deleteId}
-            onOpenChange={(open) => !open && setDeleteId(null)}
-            title={isSub ? 'sub-TASK 삭제' : 'TASK 삭제'}
-            description={
-              isSub
-                ? '이 sub-TASK를 휴지통으로 이동합니다.'
-                : '이 TASK를 휴지통으로 이동합니다.'
-            }
-            confirmLabel="삭제"
-            onConfirm={() => { if (deleteId) handleDelete(deleteId); setDeleteId(null); }}
-          />
-        );
-      })()}
 
       <ConfirmDialog
         open={!!deleteViewId}

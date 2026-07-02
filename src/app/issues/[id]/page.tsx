@@ -14,7 +14,6 @@ import { Separator } from '@/components/ui/separator';
 import { TaskBranch, SortableTaskItem, taskSortId } from '@/components/tasks/task-branch';
 import { IssueForm } from '@/components/issues/issue-form';
 import { IssueDeleteDialog } from '@/components/issues/issue-delete-dialog';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { TaskDetailPanel } from '@/components/tasks/task-detail-panel';
 import { ChevronLeft, Pencil, Trash2, Plus } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
@@ -43,7 +42,6 @@ export default function IssueDetailPage({ params }: { params: Promise<{ id: stri
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [confirmTaskDelete, setConfirmTaskDelete] = useState<string | null>(null);
   const [selectedDetailTaskId, setSelectedDetailTaskId] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
 
@@ -161,7 +159,9 @@ export default function IssueDetailPage({ params }: { params: Promise<{ id: stri
   const handlers = {
     onStatusChange: handleStatusChange,
     onComplete: handleComplete,
-    onDelete: (taskId: string) => setConfirmTaskDelete(taskId),
+    // 삭제 확인은 카드 메뉴의 2단계('휴지통으로 이동' → '진짜 삭제')가 담당 —
+    // 페이지 레벨 확인 모달 없음 (사용자 결정 2026-07-02).
+    onDelete: handleDeleteTask,
     onSelect: (taskId: string) => setSelectedDetailTaskId(taskId),
   };
 
@@ -401,24 +401,6 @@ export default function IssueDetailPage({ params }: { params: Promise<{ id: stri
         onClose={() => setDeleting(false)}
         onDeleted={() => { setDeleting(false); router.push('/issues'); }}
       />
-
-      {(() => {
-        const target = confirmTaskDelete ? tasks.find(t => t.id === confirmTaskDelete) : null;
-        const isSub = !!target?.parent_task_id;
-        return (
-          <ConfirmDialog
-            open={!!confirmTaskDelete}
-            onOpenChange={(open) => !open && setConfirmTaskDelete(null)}
-            title={isSub ? 'sub-TASK 삭제' : 'TASK 삭제'}
-            description={isSub ? '이 sub-TASK를 휴지통으로 이동합니다.' : '이 TASK를 휴지통으로 이동합니다.'}
-            confirmLabel="삭제"
-            onConfirm={() => {
-              if (confirmTaskDelete) handleDeleteTask(confirmTaskDelete);
-              setConfirmTaskDelete(null);
-            }}
-          />
-        );
-      })()}
 
       <TaskDetailPanel
         taskId={selectedDetailTaskId}

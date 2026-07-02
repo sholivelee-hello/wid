@@ -42,12 +42,14 @@ const SubContext = React.createContext<SubCtx | null>(null);
 interface ItemProps {
   disabled?: boolean;
   variant?: 'destructive';
+  /** false면 탭 후에도 시트를 닫지 않는다 — 2단계 삭제의 1단계용. */
+  closeOnClick?: boolean;
   onClick?: () => void;
   children: React.ReactNode;
 }
 
 /** 풀폭 52px 행 — 아이콘+라벨. 탭 시 onClick 실행 후 시트 닫힘. */
-function Item({ disabled, variant, onClick, children }: ItemProps) {
+function Item({ disabled, variant, closeOnClick = true, onClick, children }: ItemProps) {
   const ctx = React.useContext(SheetContext);
   return (
     <button
@@ -57,7 +59,7 @@ function Item({ disabled, variant, onClick, children }: ItemProps) {
         if (disabled) return;
         onClick?.();
         // 액션 실행 직후 시트를 닫는다(서브뷰에 있었어도 닫힘).
-        ctx?.closeSheet();
+        if (closeOnClick) ctx?.closeSheet();
       }}
       className={cn(
         // 풀폭 행: 좌측 아이콘(lucide 기본 16px) + 라벨. 터치 타깃 52px.

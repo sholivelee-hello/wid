@@ -18,7 +18,6 @@ import {
   applyManualOrder,
 } from '@/lib/manual-order';
 import { EmptyState } from '@/components/ui/empty-state';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -106,7 +105,6 @@ export default function TodayPage() {
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [todayIds, setTodayIds] = useState<Set<string>>(() => getTodayTaskIds());
   const [statusOrder, setStatusOrder] = useState<TaskStatus[]>(() => loadStatusOrder());
@@ -482,7 +480,9 @@ export default function TodayPage() {
   const taskHandlers = {
     onStatusChange: handleStatusChange,
     onComplete: handleComplete,
-    onDelete: (id: string) => setDeleteId(id),
+    // 삭제 확인은 카드 메뉴의 2단계('휴지통으로 이동' → '진짜 삭제')가 담당 —
+    // 페이지 레벨 확인 모달 없음 (사용자 결정 2026-07-02).
+    onDelete: handleDelete,
     // Today-page click semantics differ from Inbox: opening the full
     // TaskDetailPanel surfaces the parent / siblings / requester at once,
     // which is the answer to "I see a sub-task here, where's the context?".
@@ -702,25 +702,6 @@ export default function TodayPage() {
           );
         })()
       )}
-
-      {(() => {
-        const target = deleteId ? tasks.find(t => t.id === deleteId) : null;
-        const isSub = !!target?.parent_task_id;
-        return (
-          <ConfirmDialog
-            open={!!deleteId}
-            onOpenChange={(open) => !open && setDeleteId(null)}
-            title={isSub ? 'sub-TASK 삭제' : 'TASK 삭제'}
-            description={
-              isSub
-                ? '이 sub-TASK를 휴지통으로 이동합니다.'
-                : '이 TASK를 휴지통으로 이동합니다.'
-            }
-            confirmLabel="삭제"
-            onConfirm={() => { if (deleteId) handleDelete(deleteId); setDeleteId(null); }}
-          />
-        );
-      })()}
 
       {/* Detail drawer — opened by clicking any row. Surfaces parent / siblings
         * / children / requester all at once. `onNavigate` lets the user drill

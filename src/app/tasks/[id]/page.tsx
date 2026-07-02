@@ -4,11 +4,10 @@ import { useEffect, useState, useCallback, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { Task } from '@/lib/types';
 import { TaskForm } from '@/components/tasks/task-form';
-import { Button } from '@/components/ui/button';
 import { TaskDetailSkeleton } from '@/components/loading/page-skeleton';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { TwoStepDeleteButton } from '@/components/ui/two-step-delete-button';
 import { apiFetch } from '@/lib/api';
-import { Trash2, AlertCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 import Link from 'next/link';
 
@@ -16,7 +15,6 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
   const { id } = use(params);
   const router = useRouter();
   const [task, setTask] = useState<Task | null>(null);
-  const [deleteOpen, setDeleteOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -59,22 +57,10 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
           Slack 메시지 보기
         </a>
       )}
-      <ConfirmDialog
-        open={deleteOpen}
-        onOpenChange={setDeleteOpen}
-        title="task 삭제"
-        description="이 task를 휴지통으로 이동합니다. 계속하시겠습니까?"
-        confirmLabel="삭제"
-        onConfirm={handleDelete}
-      />
-
       <TaskForm task={task} />
 
       <div className="pt-4 border-t">
-        <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}>
-          <Trash2 className="h-4 w-4 mr-1" />
-          task 삭제
-        </Button>
+        <TwoStepDeleteButton label="task 삭제" onDelete={handleDelete} />
       </div>
     </div>
   );

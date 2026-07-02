@@ -6,14 +6,14 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { TwoStepDeleteButton } from '@/components/ui/two-step-delete-button';
 import { IssuePicker } from '@/components/issues/issue-picker';
 import { TaskChipButton } from '@/components/tasks/task-chip-button';
 import { DeadlinePopover } from '@/components/tasks/deadline-popover';
 import { Issue, Task, TASK_STATUSES, isTaskDone, isTaskStatus } from '@/lib/types';
 import { apiFetch } from '@/lib/api';
 import { promptNextInTodayIfNeeded } from '@/lib/today-tasks';
-import { Check, Loader2, Trash2, X, FolderOpen, ChevronDown } from 'lucide-react';
+import { Check, Loader2, X, FolderOpen, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -30,7 +30,6 @@ export function TaskInlineEditor({ task, onClose }: Props) {
   const [delegateTo, setDelegateTo] = useState(task.delegate_to ?? '');
   const [issues, setIssues] = useState<Issue[]>([]);
   const [issuePickerOpen, setIssuePickerOpen] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const [linkedIssueId, setLinkedIssueId] = useState<string | null>(task.issue_id);
 
   const [statusOpen, setStatusOpen] = useState(false);
@@ -301,14 +300,7 @@ export function TaskInlineEditor({ task, onClose }: Props) {
           </div>
 
           <div className="flex items-center justify-end pt-1">
-            <Button
-              type="button"
-              variant="destructive"
-              size="sm"
-              onClick={() => setConfirmDelete(true)}
-            >
-              <Trash2 className="h-4 w-4 mr-1" /> 삭제
-            </Button>
+            <TwoStepDeleteButton label="삭제" onDelete={handleDelete} />
           </div>
         </div>
       )}
@@ -321,18 +313,6 @@ export function TaskInlineEditor({ task, onClose }: Props) {
         onCreate={createAndAttach}
       />
 
-      <ConfirmDialog
-        open={confirmDelete}
-        onOpenChange={setConfirmDelete}
-        title={task.parent_task_id ? 'sub-TASK 삭제' : 'TASK 삭제'}
-        description={
-          task.parent_task_id
-            ? '이 sub-TASK를 휴지통으로 이동합니다.'
-            : '이 TASK를 휴지통으로 이동합니다.'
-        }
-        confirmLabel="삭제"
-        onConfirm={handleDelete}
-      />
     </div>
   );
 }
