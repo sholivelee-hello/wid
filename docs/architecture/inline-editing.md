@@ -52,6 +52,24 @@ source가 `notion`인 task의 제목을 인라인 에디터·상세 패널에서
 세팅 지점: `task-inline-editor.tsx` 제목 onBlur, `task-detail-panel.tsx`
 제목 onBlur.
 
+## 삭제 = 2단계 인라인, 확인 모달 없음 (2026-07-02 사용자 결정)
+
+TASK 삭제(휴지통 이동)는 어디서든 확인 모달(`ConfirmDialog`)을 띄우지 않는다.
+"삭제까지 버튼 3번"이 불편하다는 피드백으로 전부 **그 자리 2단계**로 교체:
+
+- **버튼형** (`TwoStepDeleteButton`, `src/components/ui/two-step-delete-button.tsx`):
+  첫 클릭 → 버튼이 그 자리에서 `진짜 삭제`(destructive + ring)로 바뀜, 3초 내
+  재클릭 → 실제 삭제, 3초 경과 → 원복. 사용처: 인라인 에디터 `삭제`, 상세 패널
+  `휴지통`, `/tasks/[id]` `task 삭제`.
+- **메뉴형** (task-card 우클릭·⋯·모바일 바텀시트 공통 `renderActionItems`):
+  `휴지통으로 이동` 첫 탭 → 메뉴가 닫히지 않고(`closeOnClick=false` — base-ui
+  Menu.Item prop, SHEET_KIT Item도 동일 prop 지원) 항목이 `진짜 삭제`로 바뀜,
+  재탭 → 삭제+닫힘. 무장 상태(`deleteArmed`)는 메뉴/시트가 닫히면 해제.
+  이에 따라 페이지들(today/inbox/issues 상세)의 `onDelete`는 확인 없이 바로
+  `handleDelete`를 호출한다.
+
+휴지통(trash-view)의 **영구 삭제**는 복구 불가라 ConfirmDialog를 유지한다.
+
 ## Pill 표시
 
 - **저장 중...** : `Loader2` 스피너 + 텍스트, `saving === true && savedAt === null` 일 때

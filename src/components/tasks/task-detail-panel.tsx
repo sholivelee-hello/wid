@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { TwoStepDeleteButton } from '@/components/ui/two-step-delete-button';
 import { IssuePicker } from '@/components/issues/issue-picker';
 import { TaskChipButton } from '@/components/tasks/task-chip-button';
 import { DeadlinePopover } from '@/components/tasks/deadline-popover';
@@ -28,7 +28,7 @@ import {
 import { toast } from 'sonner';
 import {
   Check, Loader2, CheckCircle2, Circle, CornerLeftUp, ExternalLink,
-  ChevronDown, ChevronRight, PauseCircle, Sun, Trash2, User, X, Plus,
+  ChevronDown, ChevronRight, PauseCircle, Sun, User, X, Plus,
 } from 'lucide-react';
 
 // `<input type="datetime-local">` round-trip — 기존 구현 그대로 유지.
@@ -115,7 +115,6 @@ export function TaskDetailPanel({
   const [statusOpen, setStatusOpen] = useState(false);
   const [requesterOpen, setRequesterOpen] = useState(false);
   const [issuePickerOpen, setIssuePickerOpen] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const [showExtras, setShowExtras] = useState(false);
   const [addingSub, setAddingSub] = useState(false);
   // 오늘 소속 = explicit(localStorage) ∪ 서버 is_today 플래그(JIRA 자동 포함).
@@ -683,14 +682,14 @@ export function TaskDetailPanel({
                 >
                   <PauseCircle className="h-4 w-4 mr-1" /> 보류
                 </Button>
-                <Button
-                  type="button" variant="ghost" size="sm"
-                  // -mr-3 = ghost 버튼 안쪽 px-3 보정 — 글자가 본문 우측 라인에 맞게.
-                  className="ml-auto -mr-3 text-muted-foreground hover:text-destructive"
-                  onClick={() => setConfirmDelete(true)}
-                >
-                  <Trash2 className="h-4 w-4 mr-1" /> 휴지통
-                </Button>
+                {/* -mr-3 = ghost 버튼 안쪽 px-3 보정 — 글자가 본문 우측 라인에 맞게. */}
+                <TwoStepDeleteButton
+                  label="휴지통"
+                  idleVariant="ghost"
+                  className="ml-auto -mr-3"
+                  idleClassName="text-muted-foreground hover:text-destructive"
+                  onDelete={handleDelete}
+                />
               </div>
             </div>
           )}
@@ -739,19 +738,6 @@ export function TaskDetailPanel({
           </DialogContent>
         </Dialog>
       )}
-
-      <ConfirmDialog
-        open={confirmDelete}
-        onOpenChange={setConfirmDelete}
-        title={task?.parent_task_id ? 'sub-TASK 삭제' : 'TASK 삭제'}
-        description={
-          task?.parent_task_id
-            ? '이 sub-TASK를 휴지통으로 이동합니다.'
-            : '이 TASK를 휴지통으로 이동합니다.'
-        }
-        confirmLabel="삭제"
-        onConfirm={handleDelete}
-      />
 
       <IssuePicker
         open={issuePickerOpen}
